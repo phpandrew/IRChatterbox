@@ -136,9 +136,10 @@ export function openSettings(startTab) {
   if (startTab) tab = startTab;
   const set = structuredClone(S.cfg.settings);
   const plug = structuredClone(S.cfg.plugins);
+  const shortcuts = structuredClone(S.cfg.shortcuts || []);
   plug.urlCommands ||= [];
   const m = open(`<div class="modal-head"><span class="grow">Settings</span><button class="icon-btn" id="stX">✕</button></div>
-    <div class="tabs">${["general", "appearance", "highlights", "media", "plugins"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save</button></div>`);
   m.querySelector(".tabs").onclick = (e) => {
@@ -155,6 +156,7 @@ export function openSettings(startTab) {
     collect();
     await Go.SaveSettings(set);
     await Go.SavePlugins(plug);
+    await Go.SaveShortcuts(shortcuts.filter((x) => x.trigger.trim() && x.text));
     await reloadConfig();
     closeOverlay();
   };
@@ -189,6 +191,7 @@ export function openSettings(startTab) {
       <div style="margin-top:8px"><button class="btn sm" id="hTest">Send a test notification</button></div>
       <div class="section-title">Ignore list</div>
       ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`;
+    else if (tab === "shortcuts") drawShortcuts();
     else if (tab === "media") body.innerHTML = `
       <div class="section-title">Inline media</div>
       ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF and imgur links)")}
@@ -284,6 +287,31 @@ export function openSettings(startTab) {
     };
     for (const id of ["aMode", "aLight", "aDark"]) $(id).onchange = () => { collect(); applyTheme(resolveTheme(set)); };
     drawVars();
+  }
+
+  function drawShortcuts() {
+    body.innerHTML = `
+      <div class="section-title">Text shortcuts</div>
+      <p class="muted" style="font-size:12.5px;margin-top:0">Type a shortcut in any message and it's replaced with its text, e.g. <code>$whatever</code> → <code>¯\\_(ツ)_/¯</code>. It expands when you press space or send, and typing <code>$</code> shows the list. The text can also be a command like <code>/me waves</code>. You can also manage shortcuts with <code>/shortcut add $name text</code>.</p>
+      <div class="sc-row muted" style="font-size:11.5px;font-weight:700"><span>SHORTCUT</span><span>REPLACED WITH</span><span></span></div>
+      <div id="scList"></div>
+      <button class="btn sm" id="scAdd">+ Add shortcut</button>`;
+    const draw = () => {
+      $("scList").innerHTML = shortcuts.map((sc, i) => `<div class="sc-row" data-i="${i}">
+        <input class="trig" data-f="trigger" value="${esc(sc.trigger)}" placeholder="$name">
+        <input data-f="text" value="${esc(sc.text)}" placeholder="replacement text">
+        <button class="icon-btn" data-rm="${i}" title="Remove">✕</button></div>`).join("");
+    };
+    draw();
+    $("scList").addEventListener("input", (e) => {
+      const row = e.target.closest("[data-i]");
+      if (!row) return;
+      let v = e.target.value;
+      if (e.target.dataset.f === "trigger") v = v.replace(/\s/g, "");
+      shortcuts[+row.dataset.i][e.target.dataset.f] = v;
+    });
+    $("scList").addEventListener("click", (e) => { if (e.target.dataset.rm) { shortcuts.splice(+e.target.dataset.rm, 1); draw(); } });
+    $("scAdd").onclick = () => { shortcuts.push({ trigger: "$", text: "" }); draw(); const ins = $("scList").querySelectorAll(".trig"); ins[ins.length - 1].focus(); };
   }
 
   function drawPlugins() {

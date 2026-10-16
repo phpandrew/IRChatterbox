@@ -76,8 +76,27 @@ type Settings struct {
 	Ignore         []string `json:"ignore"`
 }
 
+// Shortcut replaces a typed word such as "$shrug" with Text when a message is sent.
+type Shortcut struct {
+	Trigger string `json:"trigger"`
+	Text    string `json:"text"`
+}
+
+func defaultShortcuts() []Shortcut {
+	return []Shortcut{
+		{"$whatever", `¯\_(ツ)_/¯`},
+		{"$shrug", `¯\_(ツ)_/¯`},
+		{"$tableflip", "(╯°□°)╯︵ ┻━┻"},
+		{"$unflip", "┬─┬ノ( º _ ºノ)"},
+		{"$lenny", "( ͡° ͜ʖ ͡°)"},
+		{"$disapprove", "ಠ_ಠ"},
+		{"$sparkles", "✨"},
+	}
+}
+
 type Config struct {
 	Servers    []ServerConfig    `json:"servers"`
+	Shortcuts  []Shortcut        `json:"shortcuts"`
 	Settings   Settings          `json:"settings"`
 	NickColors map[string]string `json:"nickColors"`
 	Plugins    PluginSettings    `json:"plugins"`
@@ -118,6 +137,7 @@ func defaultConfig() Config {
 			ShowUserList: true, QuitMessage: "IRChatterbox", Ignore: []string{},
 		},
 		NickColors: map[string]string{},
+		Shortcuts:  defaultShortcuts(),
 		Plugins: PluginSettings{
 			BotPrefix: "[Bot] ", WeatherEnabled: true, WeatherCooldown: 5,
 			WeatherFromMe: true, WeatherFromOthers: true, WeatherChannels: []string{},

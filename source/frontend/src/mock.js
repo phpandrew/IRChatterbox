@@ -10,6 +10,7 @@ const cfg = {
   ],
   settings: { theme: "auto", lightTheme: "Light", darkTheme: "Dark", highlightWords: ["tshirtgang"], notifications: true, notifyPMs: true, inlineImages: true, inlineYouTube: true, showJoinsParts: true, timeFormat: "24h", fontSize: 14, logging: true, historyLines: 200, quitMessage: "IRChatterbox", ignore: [] },
   nickColors: { caleo: "#f2b53c" },
+  shortcuts: [{ trigger: "$whatever", text: "¯\\_(ツ)_/¯" }, { trigger: "$shrug", text: "¯\\_(ツ)_/¯" }, { trigger: "$tableflip", text: "(╯°□°)╯︵ ┻━┻" }],
   plugins: { botPrefix: "[Bot] ", weatherEnabled: true, weatherFromMe: true, weatherFromOthers: true, weatherChannels: [], weatherCooldown: 5, urlCommands: [{ trigger: "!solar", url: "https://example.com/solar", template: "", maxLines: 3, cooldown: 30, enabled: true }], scriptsEnabled: true },
 };
 const users = ["~DaveLegg", "~Neobond", "@Andrew", "@Caleo", "%ammali", "%bemis|back", "%Enigma-Penguin|L", "%LogicalApex", "%The_Decryptor", "Alan-", "binaryzero", "brock_aholic", "Hackerpcs", "Kennyout", "kinghat", "Mike", "peachey|cloud", "Ryoken", "SierraSonic", "zyme"]
@@ -23,6 +24,7 @@ export const api = {
     { id: "neo", status: "connected", nick: "Andrew", network: "Neowin", channels: [{ name: "#neowin", topic: "Welcome to #Neowin | Stats: \x02https://flawlesscowboy.xyz/ircstats\x02 | <Andrew> LTT screwdrivers, UNITE!", modes: "+cCfnstT", users }, { name: "#lounge", topic: "", users: users.slice(0, 6) }] },
   ],
   GetHistory: () => [],
+  SaveShortcuts: (l) => { cfg.shortcuts = l; },
   SendInput: (s, b, t) => { if (!t.startsWith("/")) emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now() }); },
   AutoConnect: () => {
     const base = Date.now() - 3600e3;

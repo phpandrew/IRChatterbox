@@ -16,6 +16,7 @@ var helpText = []string{
 	"User:     /nick name · /whois nick · /whowas nick · /who mask · /away [msg] · /back · /umode modes · /ignore nick|mask · /unignore nick|mask",
 	"Server:   /connect · /reconnect · /disconnect [msg] · /quit [msg] · /server name · /raw LINE (alias /quote) · /motd · /lusers · /version",
 	"Services: /ns /cs /ms /hs /os text → NickServ, ChanServ, MemoServ, HostServ, OperServ",
+	"Shortcut: /shortcut add $name text · /shortcut del $name · /shortcut list   (type $name in a message to insert the text)",
 	"Client:   /color nick #hex|reset · /highlight add|del|list word · /clear · /close · /theme name · /reload (plugins) · /help",
 	"Anything else is sent raw to the server, e.g. /knock #chan or /sajoin nick #chan.",
 }
@@ -414,6 +415,41 @@ func (a *App) runCommand(c *Conn, buffer, line string) {
 			c.info(buffer, "info", "Highlight words: "+strings.Join(a.store.Get().Settings.HighlightWords, ", ")+"  (use /highlight add|del word)")
 		}
 		a.pushConfig()
+	case "shortcut", "shortcuts", "alias":
+		sub := strings.ToLower(arg(0))
+		list := a.store.Get().Shortcuts
+		switch sub {
+		case "add", "set":
+			trig, txt := arg(1), after(2)
+			if trig == "" || txt == "" {
+				c.info(buffer, "help", "Usage: /shortcut add $name replacement text")
+				return
+			}
+			out := []Shortcut{}
+			for _, sc := range list {
+				if !strings.EqualFold(sc.Trigger, trig) {
+					out = append(out, sc)
+				}
+			}
+			a.SaveShortcuts(append(out, Shortcut{Trigger: trig, Text: txt}))
+			c.info(buffer, "info", trig+" → "+txt)
+		case "del", "remove", "rm":
+			out := []Shortcut{}
+			for _, sc := range list {
+				if !strings.EqualFold(sc.Trigger, arg(1)) {
+					out = append(out, sc)
+				}
+			}
+			a.SaveShortcuts(out)
+			c.info(buffer, "info", "Removed shortcut "+arg(1))
+		default:
+			if len(list) == 0 {
+				c.info(buffer, "info", "No shortcuts. Add one with /shortcut add $name text")
+			}
+			for _, sc := range list {
+				c.info(buffer, "help", fmt.Sprintf("%-14s %s", sc.Trigger, sc.Text))
+			}
+		}
 	case "reload":
 		c.info(buffer, "info", a.plugins.LoadScripts())
 
