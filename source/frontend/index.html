@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>IRChatterbox</title>
+  <link rel="stylesheet" href="./src/style.css"/>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="side-top">
+      <div class="brand"><span class="logo">#</span><span>IRChatterbox</span></div>
+      <button class="jump" id="jumpBtn" title="Jump to channel (Ctrl+K)">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span>Jump to…</span><kbd>Ctrl K</kbd>
+      </button>
+    </div>
+    <nav id="tree"></nav>
+    <div class="side-bottom">
+      <button class="add-server" id="addServerBtn"><span>+</span> Add server</button>
+      <div class="me-card">
+        <div class="avatar" id="meAvatar">?</div>
+        <div class="me-text"><div id="meNick">—</div><div id="meStatus" class="muted">Offline</div></div>
+        <button class="icon-btn" id="settingsBtn" title="Settings">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+  <div class="resizer" id="sideResizer"></div>
+
+  <main id="main">
+    <header id="header">
+      <div class="h-title">
+        <div class="h-name" id="hName"></div>
+        <div class="h-sub" id="hSub"></div>
+      </div>
+      <div class="h-topic" id="hTopic"></div>
+      <div class="h-actions">
+        <span class="h-meta" id="hMeta"></span>
+        <button class="icon-btn" id="findBtn" title="Find in buffer (Ctrl+F)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+        <button class="icon-btn" id="usersBtn" title="Toggle user list"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18.5 14.8c1.7.7 2.7 2.4 3 5.2"/></svg></button>
+      </div>
+    </header>
+    <div id="findBar" class="hidden">
+      <input id="findInput" placeholder="Filter lines in this buffer…"/><span id="findCount" class="muted"></span>
+      <button class="icon-btn" id="findClose">✕</button>
+    </div>
+    <div id="chatWrap">
+      <div id="chat" tabindex="-1"></div>
+      <button id="toLatest" class="hidden">Jump to latest ↓</button>
+    </div>
+    <footer id="composer">
+      <div class="input-box">
+        <textarea id="input" rows="1" spellcheck="true" placeholder="Message"></textarea>
+        <button class="icon-btn send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-2.5-6.5z"/><path d="m11.5 13.5 3-3"/></svg></button>
+      </div>
+      <div class="composer-hint"><span id="hint">/ for commands · Tab completes nicks · ↑ history</span><span id="typingTarget"></span></div>
+    </footer>
+  </main>
+
+  <div class="resizer" id="userResizer"></div>
+  <aside id="userlist">
+    <div class="ul-head"><span id="ulTitle">Users</span></div>
+    <div class="ul-filter"><input id="ulFilter" placeholder="Filter users…"/></div>
+    <div id="ulBody"></div>
+  </aside>
+</div>
+<div id="statusbar">
+  <span id="sbConn"><i class="dot"></i><span>Not connected</span></span>
+  <span id="sbLag"></span>
+  <span id="sbModes"></span>
+  <span class="grow"></span>
+  <span id="sbClock"></span>
+</div>
+<div id="overlay" class="hidden"></div>
+<div id="menu" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+<script src="./src/main.js" type="module"></script>
+</body>
+</html>
