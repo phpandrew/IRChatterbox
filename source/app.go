@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -46,7 +45,9 @@ type App struct {
 	closeAsked   time.Time
 	testHook     func(Event) // used by tests only
 
-	logMu sync.Mutex
+	logMu    sync.Mutex
+	logLines map[string]int // path -> line count, for trimming
+	logOpened map[string]bool
 }
 
 func NewApp() *App {
@@ -382,30 +383,6 @@ func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 
 // ---------- logging ----------
 
-func (a *App) logPath(server, buffer string) string {
-	return filepath.Join(a.store.dir, "logs", safeName(server), safeName(lower(buffer))+".jsonl")
-}
-
-func (a *App) logEvent(server string, ev Event) {
-	if !a.store.Get().Settings.Logging {
-		return
-	}
-	if ev.Type == "event" && ev.Kind != "topic" && ev.Kind != "kick" && ev.Kind != "nick" {
-		return // don't log join/part/quit/mode noise
-	}
-	a.logMu.Lock()
-	defer a.logMu.Unlock()
-	p := a.logPath(server, ev.Buffer)
-	os.MkdirAll(filepath.Dir(p), 0o755)
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	b, _ := json.Marshal(ev)
-	f.Write(append(b, '\n'))
-}
-
 // GetHistory returns the last N logged lines for a buffer.
 func (a *App) GetHistory(serverID, buffer string) []Event {
 	sv, ok := a.store.Server(serverID)
@@ -487,6 +464,21 @@ func (a *App) OpenDataFolder() {
 	if runtime.GOOS == "windows" {
 		exec.Command("explorer", a.store.dir).Start()
 	}
+}
+
+// OpenLogFolder opens the folder the .txt logs are written to.
+func (a *App) OpenLogFolder() {
+	dir := a.textLogDir()
+	os.MkdirAll(dir, 0o755)
+	if runtime.GOOS == "windows" {
+		exec.Command("explorer", dir).Start()
+	}
+}
+
+// PickFolder opens a folder chooser and returns the chosen path.
+func (a *App) PickFolder(title string) string {
+	p, _ := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{Title: title, CanCreateDirectories: true})
+	return p
 }
 
 func (a *App) SaveServer(s ServerConfig) ServerConfig {
@@ -578,7 +570,11 @@ func (a *App) Disconnect(id string) {
 }
 
 func (a *App) SaveSettings(s Settings) string {
+	old := a.store.Get().Settings
 	a.store.Update(func(c *Config) { c.Settings = s })
+	if s.LogMaxLines > 0 && (old.LogMaxLines == 0 || s.LogMaxLines < old.LogMaxLines) {
+		go a.TrimAllLogs()
+	}
 	if err := setAutostart(s.StartWithWindows, s.StartMinimized); err != nil {
 		return "Couldn't change Windows startup: " + err.Error()
 	}

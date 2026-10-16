@@ -27,7 +27,7 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Nick colours.** Colours are automatic per nick. Override one with `/color nick #ff8800`, `/color nick orange` or `/color nick reset`, or right-click a nick.
 - **Commands.** Every IRC command works, and `/help` lists the built-in ones. Anything the client doesn't recognise is sent to the server as-is (`/knock #chan` → `KNOCK #chan`).
 - **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes are Dark, Light, Midnight and Classic. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
-- **Logs and history.** Logs are JSON lines, and the last 200 lines reload when you open a channel.
+- **Logs and history.** Recent history reloads when you open a channel. You can also save plain-text `.txt` logs per channel (`[2026-10-16 09:41:22] <@Andrew> hello`) to a folder you choose, with a per-channel line limit (Settings → General).
 - **Remembers the window.** Size, position, monitor, maximised and full-screen state (F11) are restored on launch.
 - **Channel right-click.** "Join on connect" adds a channel to the auto-join list. "Show at startup" opens IRChatterbox on that channel instead of where you left off.
 - **Start with Windows.** Optionally start minimised (Settings → General).

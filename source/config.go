@@ -83,6 +83,9 @@ type Settings struct {
 	FontFamily     string   `json:"fontFamily"`
 	Logging        bool     `json:"logging"`
 	HistoryLines   int      `json:"historyLines"`
+	TextLogs       bool     `json:"textLogs"`    // also write readable .txt logs
+	LogFolder      string   `json:"logFolder"`   // where .txt logs go (default: data folder\\logs)
+	LogMaxLines    int      `json:"logMaxLines"` // keep at most this many lines per log file; 0 = unlimited
 	ShowUserList   bool     `json:"showUserList"`
 	CompactMode    bool     `json:"compactMode"`
 	QuitMessage    string   `json:"quitMessage"`
@@ -166,7 +169,7 @@ func defaultConfig() Config {
 			Theme: "auto", LightTheme: "Light", DarkTheme: "Dark",
 			HighlightWords: []string{}, Notifications: true, NotifyPMs: true,
 			InlineImages: true, InlineYouTube: true, ShowJoinsParts: true,
-			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200,
+			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200, LogMaxLines: 10000,
 			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, Ignore: []string{},
 		},
 		NickColors: map[string]string{},

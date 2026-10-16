@@ -14,6 +14,9 @@ function open(html, cls = "", sticky = false) {
   return ov.firstElementChild;
 }
 
+// a settings group: title, one-line description, then its controls
+const card = (title, desc, inner) =>
+  `<section class="set-card"><div class="set-head"><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ""}</div><div class="set-body">${inner}</div></section>`;
 const field = (label, inner, hint = "", full = false) =>
   `<div class="field${full ? " full" : ""}"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
 const text = (id, v, ph = "", type = "text") => `<input type="${type}" id="${id}" value="${esc(v ?? "")}" placeholder="${esc(ph)}">`;
@@ -198,10 +201,10 @@ export function openSettings(startTab) {
   const shortcuts = structuredClone(S.cfg.shortcuts || []);
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
-  const m = open(`<div class="modal-head"><span class="grow">Settings</span><button class="icon-btn" id="stX">✕</button></div>
+  const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
     <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
-    <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save</button></div>`);
+    <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
     const t = e.target.closest("[data-t]");
     if (!t) return;
@@ -224,66 +227,78 @@ export function openSettings(startTab) {
 
   const body = $("stBody");
   function draw() {
-    if (tab === "general") body.innerHTML = `
-      <div class="section-title">Chat</div>
+    if (tab === "general") body.innerHTML =
+      card("Chat display", "Control how chats look and what information is shown.", `
       <div class="fgrid">
         ${field("Time format", `<select id="gTime"><option value="24h">24-hour</option><option value="12h" ${set.timeFormat === "12h" ? "selected" : ""}>12-hour</option></select>`)}
         <div class="field"><label>&nbsp;</label>${check("gSec", set.showSeconds, "Show seconds")}</div>
         ${field("Font size", text("gFs", set.fontSize, "14", "number"))}
         ${field("Chat font", text("gFont", set.fontFamily, "Segoe UI (default) — e.g. Cascadia Mono, Consolas"))}
-        <div class="full">${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
-        ${check("gMarker", set.markerLine !== false, "Show a divider line between messages I've read and new ones")}
-        ${check("gCompact", set.compactMode, "Compact line spacing")}
-        ${check("gUsers", S.ui.users !== false, "Show the user list")}</div>
       </div>
-      <div class="section-title">History & logging</div>
-      <div class="fgrid">
-        <div class="field">${check("gLog", set.logging, "Save chat logs to disk")}</div>
-        ${field("Lines of history to load when opening a channel", text("gHist", set.historyLines, "200", "number"))}
+      <div class="set-sep"></div>
+      ${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
+      ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
+      ${check("gCompact", set.compactMode, "Compact line spacing")}
+      ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +
+      card("History & logging", "Manage how much chat history is kept and whether to save it to files.", `
+      ${check("gLog", set.logging, "Keep chat history between restarts")}
+      <div class="fgrid" style="margin-top:10px">
+        ${field("History shown when opening a channel", text("gHist", set.historyLines, "200", "number"))}
+        ${field("Maximum saved lines per channel", text("gMax", set.logMaxLines ?? 10000, "10000", "number"), "Older lines are removed from the history and .txt files. 0 = keep everything.")}
       </div>
-      <div class="section-title">Startup</div>
-      ${check("gAuto", set.startWithWindows, "Start IRChatterbox when I sign in to Windows")}
-      <div style="padding-left:24px">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
-      ${check("gConfirm", set.confirmOnClose, "Ask before quitting when I close the window")}
-      <div class="section-title">Other</div>
-      <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`;
+      <div class="set-sep"></div>
+      ${check("gTxt", set.textLogs, "Save each channel to a text log file (.txt)")}
+      <div class="hint indent">Readable logs like <code>[2026-10-16 09:41:22] &lt;@Andrew&gt; hello</code> — one file per channel and private chat.</div>
+      <div class="field" id="gTxtRow" style="margin-top:10px"><label>Log folder</label>
+        <div style="display:flex;gap:8px"><input type="text" id="gFolder" value="${esc(set.logFolder || "")}" placeholder="Default: the IRChatterbox data folder\\logs" style="flex:1">
+        <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div>`) +
+      card("Startup & closing", "Configure how IRChatterbox starts and exits.", `
+      ${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
+      <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
+      ${check("gConfirm", set.confirmOnClose, "Confirm before quitting when I close the window")}`) +
+      card("Messages", "The default message sent when you quit or leave a channel.", `
+      <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`);
     else if (tab === "appearance") drawAppearance();
-    else if (tab === "highlights") body.innerHTML = `
-      <div class="section-title">Highlights</div>
-      ${field("Highlight words", `<textarea id="hWords" placeholder="andrew&#10;tshirtgang">${esc((set.highlightWords || []).join("\n"))}</textarea>`, "One per line. Your current nick is always a highlight. Lines that match get a coloured background, a red badge, and a Windows notification.")}
-      <div class="section-title">Windows notifications</div>
-      ${check("hNotify", set.notifications, "Show a notification when I'm highlighted and the window isn't focused (or I'm in another channel)")}
+    else if (tab === "highlights") body.innerHTML =
+      card("Highlight words", "Lines containing your nick or these words are highlighted, badged in red and trigger a notification.", `
+      ${field("Words", `<textarea id="hWords" placeholder="andrew&#10;tshirtgang">${esc((set.highlightWords || []).join("\n"))}</textarea>`, "One per line. Your current nick is always a highlight.")}`) +
+      card("Windows notifications", "Pop-up alerts when someone needs your attention.", `
+      ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
-      <div style="margin-top:8px"><button class="btn sm" id="hTest">Send a test notification</button></div>
-      <div class="section-title">Ignore list</div>
-      ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`;
+      <div style="margin-top:10px"><button class="btn sm" id="hTest">Send a test notification</button></div>`) +
+      card("Ignore list", "Hide messages from these people entirely.", `
+      ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`);
     else if (tab === "shortcuts") drawShortcuts();
-    else if (tab === "media") body.innerHTML = `
-      <div class="section-title">Inline media</div>
+    else if (tab === "media") body.innerHTML =
+      card("Inline media", "Show pictures and videos right in the chat.", `
       ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF and imgur links)")}
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
-      <p class="muted" style="margin-top:14px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</p>`;
+      <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`);
     else if (tab === "plugins") drawPlugins();
     wire();
   }
 
   function wire() {
+    if ($("gTxt")) {
+      const sync = () => { $("gTxtRow").style.opacity = on("gTxt") ? 1 : 0.5; };
+      $("gTxt").addEventListener("change", sync); sync();
+      $("gBrowse").onclick = async () => { const f = await Go.PickFolder("Choose where to save text logs"); if (f) $("gFolder").value = f; };
+      $("gOpenLogs").onclick = () => Go.OpenLogFolder();
+    }
     if ($("hTest")) $("hTest").onclick = () => Go.Notify("IRChatterbox", "This is what a highlight notification looks like.");
   }
 
   function drawAppearance(selectTheme) {
     const themes = allThemes();
     const opts = (sel) => Object.keys(themes).map((n) => `<option ${n === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
-    body.innerHTML = `
-      <div class="section-title">Theme</div>
+    body.innerHTML = card("Theme", "Pick a theme, or follow Windows light and dark mode automatically.", `
       <div class="fgrid">
         ${field("Mode", `<select id="aMode">
           <option value="auto" ${set.theme === "auto" ? "selected" : ""}>Automatic — follow Windows light/dark</option>
           ${Object.keys(themes).map((n) => `<option value="${esc(n)}" ${set.theme === n ? "selected" : ""}>Always ${esc(n)}</option>`).join("")}</select>`, "", true)}
         ${field("Light theme (used in auto mode)", `<select id="aLight">${opts(set.lightTheme)}</select>`)}
         ${field("Dark theme (used in auto mode)", `<select id="aDark">${opts(set.darkTheme)}</select>`)}
-      </div>
-      <div class="section-title">Theme editor</div>
+      </div>`) + card("Theme editor", "Start from any theme, change its colours and save it as your own. Edits preview live.", `
       <div class="fgrid">
         ${field("Start from", `<select id="tBase">${opts(selectTheme || resolveTheme(set).name)}</select>`)}
         ${field("New theme name", text("tName", "", "My theme"))}
@@ -294,9 +309,8 @@ export function openSettings(startTab) {
         <button class="btn danger sm" id="tDel">Delete selected custom theme</button>
         <span id="tStatus" class="t-status"></span>
       </div>
-      <p class="muted" style="font-size:12px">Edits preview live. Themes are saved as JSON in the themes folder — share them by copying the file.</p>
-      <div class="section-title">Nick colours</div>
-      <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${c}"></span><span style="color:${c}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`;
+      <div class="hint" style="margin-top:10px">Themes are saved as JSON in the themes folder — share them by copying the file.</div>`) + card("Nick colours", "Custom colours you've set. They apply to every variant of a nick (Andrew, Andrew|away…).", `
+      <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${c}"></span><span style="color:${c}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`);
     const drawVars = () => {
       const t = getTheme($("tBase").value) || BUILTIN.Dark;
       if (!$("tName").value || $("tName").dataset.auto) {
@@ -380,12 +394,11 @@ export function openSettings(startTab) {
   }
 
   function drawShortcuts() {
-    body.innerHTML = `
-      <div class="section-title">Text shortcuts</div>
-      <p class="muted" style="font-size:12.5px;margin-top:0">Type a shortcut in any message and it's replaced with its text, e.g. <code>$whatever</code> → <code>¯\\_(ツ)_/¯</code>. It expands when you press space or send, and typing <code>$</code> shows the list. The text can also be a command like <code>/me waves</code>. You can also manage shortcuts with <code>/shortcut add $name text</code>.</p>
+    body.innerHTML = card("Text shortcuts", "Type a shortcut and it's replaced with its text.", `
+      <p class="hint" style="margin:0 0 12px">Type a shortcut in any message and it's replaced with its text, e.g. <code>$whatever</code> → <code>¯\\_(ツ)_/¯</code>. It expands when you press space or send, and typing <code>$</code> shows the list. The text can also be a command like <code>/me waves</code>. You can also manage shortcuts with <code>/shortcut add $name text</code>.</p>
       <div class="sc-row muted" style="font-size:11.5px;font-weight:700"><span>SHORTCUT</span><span>REPLACED WITH</span><span></span></div>
       <div id="scList"></div>
-      <button class="btn sm" id="scAdd">+ Add shortcut</button>`;
+      <button class="btn sm" id="scAdd">+ Add shortcut</button>`);
     const draw = () => {
       $("scList").innerHTML = shortcuts.map((sc, i) => `<div class="sc-row" data-i="${i}">
         <input class="trig" data-f="trigger" value="${esc(sc.trigger)}" placeholder="$name">
@@ -405,13 +418,13 @@ export function openSettings(startTab) {
   }
 
   function drawPlugins() {
-    body.innerHTML = `
+    body.innerHTML = card("Bot replies", "Applies to every automatic reply below.", `
       <div class="fgrid">
         ${field("Bot reply prefix", text("pPrefix", plug.botPrefix, "[Bot] "), "Put in front of every automatic reply. Messages starting with it are never answered (prevents bot loops).")}
       </div>
-      <div class="section-title">Temperature converter</div>
-      ${check("pW", plug.weatherEnabled, "Reply with a °C ⇄ °F conversion when a message mentions a temperature")}
-      <div style="padding-left:24px">
+      </div>`) + card("Temperature converter", "Replies with a °C ⇄ °F conversion when a message mentions a temperature.", `
+      ${check("pW", plug.weatherEnabled, "Enabled")}
+      <div class="indent">
         ${check("pWMe", plug.weatherFromMe, "For my own messages")}
         ${check("pWOthers", plug.weatherFromOthers, "For other people's messages")}
       </div>
@@ -419,10 +432,10 @@ export function openSettings(startTab) {
         ${field("Only in these channels", text("pWChans", (plug.weatherChannels || []).join(" "), "all channels"), "Space separated, e.g. #neowin #lounge. Empty = everywhere.")}
         ${field("Cooldown per channel (seconds)", text("pWCd", plug.weatherCooldown, "5", "number"))}
       </div>
-      <p class="muted" style="font-size:12px">Example: “Today it feels like 20c” → <code>${esc(plug.botPrefix)}20 C = 68 F</code></p>
-      <div class="section-title">Now playing (MusicBee)</div>
-      ${check("muOn", plug.music.enabled, "Reply with the current song when someone types the trigger")}
-      <div style="padding-left:24px">${check("muMe", plug.music.onlyMe, "Only I can trigger it")}</div>
+      <div class="hint">Example: “Today it feels like 20c” → <code>${esc(plug.botPrefix)}20 C = 68 F</code></div>`) +
+      card("Now playing (MusicBee)", "Replies with your current song when someone types the trigger. /np shares it as an action.", `
+      ${check("muOn", plug.music.enabled, "Enabled")}
+      <div class="indent">${check("muMe", plug.music.onlyMe, "Only I can trigger it")}</div>
       <div class="fgrid" style="margin-top:8px">
         ${field("Trigger", text("muTrig", plug.music.trigger, "!music"))}
         ${field("Where to read the song from", `<select id="muSrc">
@@ -435,15 +448,15 @@ export function openSettings(startTab) {
         ${field("Cooldown per channel (seconds)", text("muCd", plug.music.cooldown, "10", "number"))}
         <div class="field" style="align-self:end"><button class="btn sm" id="muTest">Test now</button></div>
       </div>
-      <div class="test-out hidden" id="muOut"></div>
-      <div class="section-title">URL commands</div>
-      <p class="muted" style="font-size:12px;margin-top:0">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
+      <div class="test-out hidden" id="muOut"></div>`) +
+      card("URL commands", "Typing the trigger fetches a web address and posts the result — like !solar.", `
+      <p class="hint" style="margin:0 0 12px">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
-      <button class="btn sm" id="ucAdd">+ Add command</button>
-      <div class="section-title">Script plugins</div>
+      <button class="btn sm" id="ucAdd">+ Add command</button>`) +
+      card("Script plugins", "Your own JavaScript plugins from the plugins folder.", `
       ${check("pScripts", plug.scriptsEnabled, "Run JavaScript plugins from the plugins folder")}
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm" id="pOpen">Open data folder</button><button class="btn sm" id="pReload">Reload plugins</button><span class="muted" id="pReloadOut" style="align-self:center;font-size:12px"></span></div>
-      <p class="muted" style="font-size:12px">See <code>plugins/_example.js</code> for the API (on, reply, say, httpGet…).</p>`;
+      <div class="hint" style="margin-top:10px">See <code>plugins/_example.js</code> for the API (on, reply, say, httpGet…).</div>`);
     const drawUc = () => {
       $("ucList").innerHTML = plug.urlCommands.map((u, i) => `
         <div class="urlcmd" data-i="${i}">
@@ -497,7 +510,8 @@ export function openSettings(startTab) {
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
       set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.markerLine = on("gMarker");
-      set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0; set.quitMessage = val("gQuit");
+      set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
+      set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}

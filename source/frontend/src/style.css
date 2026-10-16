@@ -196,7 +196,7 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 #composer { padding: 8px 16px 10px; }
 .input-box { display: flex; align-items: flex-end; gap: 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 6px 6px 6px 12px; }
 .input-box:focus-within { border-color: var(--accent); }
-#input { flex: 1; resize: none; border: 0; outline: none; background: transparent; font-size: var(--fs); font-family: var(--chat-font); line-height: 1.45; max-height: 160px; padding: 4px 0; user-select: text; }
+#input { --default-contextmenu: show; flex: 1; resize: none; border: 0; outline: none; background: transparent; font-size: var(--fs); font-family: var(--chat-font); line-height: 1.45; max-height: 160px; padding: 4px 0; user-select: text; }
 #input::placeholder { color: var(--text-faint); }
 .send { color: var(--accent); }
 .composer-hint { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); padding: 4px 4px 0; }
@@ -347,3 +347,19 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .em-preview { flex: 1; display: flex; align-items: center; gap: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .em-preview .big { font-size: 22px; }
 .em-hint { color: var(--text-faint); font-size: 11px; }
+
+/* ---------- settings cards ---------- */
+.modal.settings { width: min(820px, 94vw); height: min(860px, 90vh); max-height: 90vh; }
+.modal.settings .modal-body { padding: 16px 20px 20px; background: var(--bg-sidebar); flex: 1; }
+.modal-sub { font-size: 12.5px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+.set-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+.set-card:last-child { margin-bottom: 0; }
+.set-head { padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.set-head h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.set-head p { margin: 3px 0 0; font-size: 12.5px; color: var(--text-muted); }
+.set-sep { height: 1px; background: var(--border); margin: 14px 0 10px; }
+.set-card .indent { padding-left: 44px; }
+.set-card .hint { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
+.set-card .hint.indent { margin-top: -2px; }
+.set-card .urlcmd { background: var(--bg-input); }
+.set-card .check { padding: 5px 0; }

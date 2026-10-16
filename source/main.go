@@ -53,6 +53,10 @@ func main() {
 			WebviewIsTransparent: false,
 			WindowClassName:      windowClass,
 		},
+		// WebView2's own right-click menu: spelling suggestions in the message box and Copy on
+		// selected text. Wails only shows it on inputs/selections (see --default-contextmenu);
+		// the app's own menus (nicks, channels, links) still take priority.
+		EnableDefaultContextMenu: true,
 		Bind: []interface{}{app},
 	})
 	if err != nil {

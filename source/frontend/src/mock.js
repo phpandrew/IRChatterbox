@@ -32,6 +32,8 @@ export const api = {
   SetAutoJoin: (sid, ch, on) => { const sv = cfg.servers.find((x) => x.id === sid); sv.autoJoin = on ? [...sv.autoJoin, ch] : sv.autoJoin.filter((a) => a.toLowerCase() !== ch.toLowerCase()); },
   SetStartView: (s, b) => { cfg.startView = { server: s, buffer: b }; },
   ToggleFullscreen: () => {},
+  PickFolder: () => "D:\\IRC Logs",
+  OpenLogFolder: () => {},
   GetDefaultNick: () => "Andrew",
   SaveServer: (sv) => ({ ...sv, id: sv.id || "new1" }),
   Connect: () => {},
