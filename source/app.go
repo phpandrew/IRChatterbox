@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -39,6 +40,8 @@ type App struct {
 	pendingFocus map[string]bool
 	notifyOK     bool
 	autoDone     bool
+	allowQuit    bool
+	closeAsked   time.Time
 	testHook     func(Event) // used by tests only
 
 	logMu sync.Mutex
@@ -109,6 +112,50 @@ func (a *App) shutdown(ctx context.Context) {
 		go func(c *Conn) { defer wg.Done(); c.Disconnect(msg) }(c)
 	}
 	wg.Wait()
+}
+
+// beforeClose runs when the window's close button is pressed. Returning true keeps the
+// window open while the UI asks for confirmation.
+func (a *App) beforeClose(ctx context.Context) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.allowQuit || !a.store.Get().Settings.ConfirmOnClose {
+		return false
+	}
+	// pressing close again while the question is showing closes for real, so a stuck UI
+	// can never trap you
+	if time.Since(a.closeAsked) < 4*time.Second {
+		return false
+	}
+	a.closeAsked = time.Now()
+	var connected []string
+	for _, s := range a.store.Get().Servers {
+		if c, ok := a.conns[s.ID]; ok && c.Status() != "disconnected" {
+			connected = append(connected, s.Name)
+		}
+	}
+	wruntime.WindowUnminimise(ctx)
+	wruntime.WindowShow(ctx)
+	wruntime.EventsEmit(ctx, "confirmClose", map[string]any{"connected": connected})
+	return true
+}
+
+// Quit closes the app after the user confirmed. dontAsk turns the confirmation off.
+func (a *App) Quit(dontAsk bool) {
+	if dontAsk {
+		a.store.Update(func(c *Config) { c.Settings.ConfirmOnClose = false })
+	}
+	a.mu.Lock()
+	a.allowQuit = true
+	a.mu.Unlock()
+	wruntime.Quit(a.ctx)
+}
+
+// CancelClose is called when the user decides not to quit.
+func (a *App) CancelClose() {
+	a.mu.Lock()
+	a.closeAsked = time.Time{}
+	a.mu.Unlock()
 }
 
 func (a *App) secondInstance() {
@@ -331,6 +378,32 @@ func (a *App) GetHistory(serverID, buffer string) []Event {
 func (a *App) GetVersion() string { return appVersion }
 
 func (a *App) GetConfig() Config { return a.store.Get() }
+
+// GetDefaultNick suggests a nickname from the Windows account name.
+func (a *App) GetDefaultNick() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	name := u.Username
+	if i := strings.LastIndexAny(name, `\/`); i >= 0 {
+		name = name[i+1:]
+	}
+	var b strings.Builder
+	for _, r := range name {
+		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_-[]{}\\`^|", r)) {
+			b.WriteRune(r)
+		}
+	}
+	n := b.String()
+	if len(n) > 16 {
+		n = n[:16]
+	}
+	if n != "" && unicode.IsDigit(rune(n[0])) {
+		n = "_" + n
+	}
+	return n
+}
 
 func (a *App) GetDataDir() string { return a.store.dir }
 
@@ -602,6 +675,37 @@ func (a *App) TestURLCommand(cmd URLCommand) string {
 		return "Error: " + err.Error()
 	}
 	return strings.Join(out, "\n")
+}
+
+// TestMusic reports what each now-playing source returns, for the settings page.
+func (a *App) TestMusic(m MusicSettings) []string {
+	var out []string
+	for _, src := range []struct{ id, name string }{{"smtc", "Windows media controls"}, {"window", "MusicBee window title"}, {"file", "Text file"}} {
+		mm := m
+		mm.Source = src.id
+		if src.id == "file" && m.File == "" {
+			out = append(out, src.name+": not set up")
+			continue
+		}
+		np, err := getNowPlaying(mm)
+		if err != nil {
+			out = append(out, src.name+": ✗ "+err.Error())
+		} else {
+			out = append(out, src.name+": ✓ "+np.Text()+"  ("+np.Player+")")
+		}
+	}
+	np, err := getNowPlaying(m)
+	if err == nil {
+		out = append(out, "", "Reply: "+a.store.Get().Plugins.BotPrefix+np.Format(m.Format))
+	}
+	return out
+}
+
+// PickFile opens a file chooser and returns the chosen path.
+func (a *App) PickFile(title string) string {
+	p, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: title,
+		Filters: []wruntime.FileFilter{{DisplayName: "Text files (*.txt)", Pattern: "*.txt"}, {DisplayName: "All files", Pattern: "*.*"}}})
+	return p
 }
 
 func (a *App) Notify(title, body string) {

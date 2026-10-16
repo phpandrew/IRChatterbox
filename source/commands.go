@@ -16,6 +16,7 @@ var helpText = []string{
 	"User:     /nick name · /whois nick · /whowas nick · /who mask · /away [msg] · /back · /umode modes · /ignore nick|mask · /unignore nick|mask",
 	"Server:   /connect · /reconnect · /disconnect [msg] · /quit [msg] · /server name · /raw LINE (alias /quote) · /motd · /lusers · /version",
 	"Services: /ns /cs /ms /hs /os text → NickServ, ChanServ, MemoServ, HostServ, OperServ",
+	"Music:    /np → \"* you is listening to Artist - Title\" · anyone typing !music gets the current song (Settings → Plugins)",
 	"Shortcut: /shortcut add $name text · /shortcut del $name · /shortcut list   (type $name in a message to insert the text)",
 	"Client:   /color nick #hex|reset · /highlight add|del|list word · /clear · /close · /theme name · /reload (plugins) · /help",
 	"Anything else is sent raw to the server, e.g. /knock #chan or /sajoin nick #chan.",
@@ -450,6 +451,20 @@ func (a *App) runCommand(c *Conn, buffer, line string) {
 				c.info(buffer, "help", fmt.Sprintf("%-14s %s", sc.Trigger, sc.Text))
 			}
 		}
+	case "np", "nowplaying", "music":
+		m := a.store.Get().Plugins.Music
+		go func() {
+			np, err := getNowPlaying(m)
+			if err != nil {
+				c.info(buffer, "error", "Now playing: "+err.Error())
+				return
+			}
+			if buffer == "" || !requireConn() {
+				c.info(buffer, "info", "Now playing: "+np.Text())
+				return
+			}
+			c.Action(buffer, np.Format(m.NPFormat))
+		}()
 	case "reload":
 		c.info(buffer, "info", a.plugins.LoadScripts())
 

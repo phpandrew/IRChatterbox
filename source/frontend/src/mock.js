@@ -24,6 +24,14 @@ export const api = {
     { id: "neo", status: "connected", nick: "Andrew", network: "Neowin", channels: [{ name: "#neowin", topic: "Welcome to #Neowin | Stats: \x02https://flawlesscowboy.xyz/ircstats\x02 | <Andrew> LTT screwdrivers, UNITE!", modes: "+cCfnstT", users }, { name: "#lounge", topic: "", users: users.slice(0, 6) }] },
   ],
   GetHistory: () => [],
+  SetNickColor: (n, c) => { if (c) cfg.nickColors[n.toLowerCase()] = c; else delete cfg.nickColors[n.toLowerCase()]; setTimeout(() => emit("config", structuredClone(cfg))); },
+  Quit: () => console.log("QUIT"),
+  CancelClose: () => console.log("CANCEL"),
+  TestMusic: () => ["Windows media controls: ✓ Daft Punk - One More Time  (MusicBee)", "MusicBee window title: ✓ Daft Punk - One More Time  (MusicBee)", "Text file: not set up", "", "Reply: [Bot] Now playing: Daft Punk - One More Time"],
+  PickFile: () => "C:\\Users\\Andrew\\Documents\\nowplaying.txt",
+  GetDefaultNick: () => "Andrew",
+  SaveServer: (sv) => ({ ...sv, id: sv.id || "new1" }),
+  Connect: () => {},
   SaveSettings: (st) => { cfg.settings = st; return ""; },
   SaveTheme: () => null,
   SaveShortcuts: (l) => { cfg.shortcuts = l; },
@@ -52,4 +60,4 @@ export const api = {
     emit("irc", { type: "info", server: "neo", buffer: "", kind: "motd", text: "- Welcome to the Neowin IRC network", time: Date.now() });
   },
 };
-export function install() {}
+export function install() { window.__mockEmit = emit; }

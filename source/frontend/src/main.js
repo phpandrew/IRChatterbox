@@ -2,7 +2,7 @@ import { Go, on, initApi, setTitle } from "./api.js";
 import { esc, ircToHtml, nickColor, setNickOverrides, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
 import logoUrl from "./assets/logo.png";
-import { openServerEditor, openSettings, openPrompt, openColorPicker } from "./modals.js";
+import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm } from "./modals.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_LINES = 2000;
@@ -40,7 +40,7 @@ function ensureBuffer(srv, name, type) {
   let b = srv.buffers.get(key);
   if (!b) {
     b = { key, name: name || "", type: type || (isChannel(srv, name) ? "channel" : "query"), lines: [], unread: 0, hl: 0,
-      activity: false, topic: "", modes: "", users: [], joined: false, firstUnread: -1, created: Date.now(), history: false };
+      activity: false, topic: "", modes: "", users: [], joined: false, marker: null, markPending: true, created: Date.now(), history: false };
     srv.buffers.set(key, b);
     if (b.type !== "server") loadHistory(srv, b);
     scheduleTree();
@@ -58,7 +58,6 @@ async function loadHistory(srv, b) {
   const old = lines.filter((ev) => ev.time < b.created).map((ev) => ({ ...evToLine(ev), history: true, hl: false }));
   if (!old.length) return;
   b.lines = old.concat(b.lines);
-  if (b.firstUnread >= 0) b.firstUnread += old.length;
   if (isActive(srv, b)) renderChat();
 }
 
@@ -81,13 +80,22 @@ function addLine(srv, b, line) {
   if (b.lines.length > MAX_LINES) {
     const drop = b.lines.length - MAX_LINES;
     b.lines.splice(0, drop);
-    if (b.firstUnread >= 0) b.firstUnread = Math.max(0, b.firstUnread - drop);
   }
   const counts = ["privmsg", "action", "notice"].includes(line.kind) && !line.self;
   const visible = isActive(srv, b) && S.focused;
-  if (isActive(srv, b)) appendLineDom(b, line);
+  // Marker line: the first message that arrives after you stopped looking at this buffer
+  // (switched away or alt-tabbed) gets the divider above it.
+  let moveMarker = false;
+  if (counts && !visible && b.markPending) {
+    b.marker = line;
+    b.markPending = false;
+    moveMarker = true;
+  }
+  if (isActive(srv, b)) {
+    if (moveMarker) $("chat").querySelector(".marker-line")?.remove();
+    appendLineDom(b, line);
+  }
   if (!visible && counts) {
-    if (b.unread === 0) b.firstUnread = b.lines.length - 1;
     b.unread++;
     if (line.hl || (b.type === "query" && line.kind !== "notice")) b.hl++;
     b.activity = true;
@@ -196,7 +204,11 @@ function closeBufferLocal(srv, key) {
 // ---------- selection ----------
 function select(serverId, key) {
   const prev = activeBuffer();
-  if (prev) prev.firstUnread = -1;
+  if (prev && !(S.active.server === serverId && S.active.key === key)) {
+    // leaving a buffer: everything in it now counts as read, so the next message gets the line
+    prev.marker = null;
+    prev.markPending = true;
+  }
   S.active = { server: serverId, key };
   const srv = activeServer();
   const b = activeBuffer();
@@ -205,6 +217,7 @@ function select(serverId, key) {
   saveUi();
   Go.SetActive(serverId, b.name);
   renderAll();
+  b.markPending = false; // you're reading it now
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
   $("input").focus();
@@ -544,24 +557,36 @@ function renderChat() {
     return;
   }
   const frag = document.createDocumentFragment();
-  b.lines.forEach((line, i) => {
-    if (i === b.firstUnread && b.unread > 0) {
-      const m = document.createElement("div"); m.className = "unread-mark"; m.textContent = "New messages"; frag.appendChild(m);
-    }
+  let markerEl = null;
+  b.lines.forEach((line) => {
     const day = new Date(line.t).toDateString();
     if (day !== lastRenderedDay) {
       lastRenderedDay = day;
       const d = document.createElement("div"); d.className = "day"; d.textContent = dayLabel(line.t); frag.appendChild(d);
     }
+    if (line === b.marker && S.cfg.settings.markerLine !== false) frag.appendChild((markerEl = markerLineEl()));
     frag.appendChild(lineEl(srv, b, line));
   });
   chat.appendChild(frag);
   stick = true;
   scrollBottom();
+  // lots unread: start at the marker instead of the bottom
+  if (markerEl && markerEl.offsetTop < chat.scrollTop) {
+    chat.scrollTop = Math.max(0, markerEl.offsetTop - chat.clientHeight / 3);
+    stick = false;
+  }
   applyFind();
   newBelow = 0;
   $("toLatest").classList.add("hidden");
   requestAnimationFrame(positionNickHandle);
+}
+
+function markerLineEl() {
+  const m = document.createElement("div");
+  m.className = "marker-line";
+  m.innerHTML = `<span>New</span>`;
+  m.title = "Messages below arrived while you were away";
+  return m;
 }
 
 function appendLineDom(b, line) {
@@ -573,6 +598,7 @@ function appendLineDom(b, line) {
     const d = document.createElement("div"); d.className = "day"; d.textContent = dayLabel(line.t); chat.appendChild(d);
   }
   const el = lineEl(activeServer(), b, line);
+  if (line === b.marker && S.cfg.settings.markerLine !== false) chat.appendChild(markerLineEl());
   chat.appendChild(el);
   while (chat.childElementCount > MAX_LINES + 50) chat.firstElementChild.remove();
   if (findText) matchLine(el);
@@ -776,7 +802,7 @@ const COMMANDS = [
   ["ping", "nick"], ["names", "[#channel]"], ["list", "[pattern]"], ["cycle", ""], ["close", ""], ["clear", ""], ["ignore", "nick|mask"],
   ["unignore", "nick|mask"], ["color", "nick #hex|reset"], ["highlight", "add|del|list word"], ["theme", "name|auto"], ["raw", "IRC LINE"],
   ["quote", "IRC LINE"], ["connect", ""], ["reconnect", ""], ["disconnect", "[message]"], ["quit", "[message]"], ["server", "name"],
-  ["ns", "NickServ command"], ["cs", "ChanServ command"], ["umode", "modes"], ["reload", "reload plugins"], ["settings", ""], ["shortcut", "add|del|list $name text"], ["help", ""],
+  ["ns", "NickServ command"], ["cs", "ChanServ command"], ["umode", "modes"], ["reload", "reload plugins"], ["np", "share the song you're playing"], ["settings", ""], ["shortcut", "add|del|list $name text"], ["help", ""],
 ];
 
 // Completion popup: "/" commands at the start of the line, "$" text shortcuts anywhere.
@@ -947,7 +973,7 @@ function matchLine(el) {
 function applyFind() {
   let n = 0;
   for (const el of $("chat").querySelectorAll(".line")) if (matchLine(el) && findText) n++;
-  for (const el of $("chat").querySelectorAll(".day,.unread-mark")) el.classList.toggle("hidden", !!findText);
+  for (const el of $("chat").querySelectorAll(".day,.marker-line")) el.classList.toggle("hidden", !!findText);
   $("findCount").textContent = findText ? `${n} match${n === 1 ? "" : "es"}` : "";
   if (!findText) scrollBottom();
 }
@@ -1012,11 +1038,16 @@ document.addEventListener("keydown", (e) => {
 
 // ---------- window focus ----------
 function setFocus(f) {
+  if (S.focused === f) return;
   S.focused = f;
   Go.SetFocus(f);
-  if (f) {
-    const b = activeBuffer();
-    if (b && (b.unread || b.hl)) { b.unread = 0; b.hl = 0; b.activity = false; scheduleTree(); }
+  const b = activeBuffer();
+  if (!b) return;
+  if (!f) {
+    b.markPending = true; // alt-tabbed away: the next message gets the line
+  } else {
+    b.markPending = false;
+    if (b.unread || b.hl) { b.unread = 0; b.hl = 0; b.activity = false; scheduleTree(); }
   }
 }
 window.addEventListener("focus", () => setFocus(true));
@@ -1131,8 +1162,13 @@ export async function reloadConfig() {
 export function editServer(cfg) {
   openServerEditor(cfg, async (saved, connect) => {
     await reloadConfig();
-    if (connect) Go.Connect(saved.id);
-    if (!S.active.server) select(saved.id, "");
+    if (connect) {
+      const srv = S.byId[saved.id];
+      if (srv && srv.status !== "disconnected") await Go.SendInput(saved.id, "", "/reconnect");
+      else await Go.Connect(saved.id);
+      select(saved.id, "");
+    } else if (!S.active.server) select(saved.id, "");
+    toast(connect ? `Saved ${saved.name} — connecting…` : `Saved ${saved.name}`, "ok");
   });
 }
 
@@ -1162,6 +1198,7 @@ async function boot() {
     }
   }
   on("irc", onIrc);
+  on("confirmClose", (d) => openQuitConfirm(d?.connected));
   on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
   on("focusBuffer", ({ server, buffer }) => {
     const srv = S.byId[server];
@@ -1182,8 +1219,8 @@ async function boot() {
   Go.SetFocus(document.hasFocus());
   await Go.AutoConnect();
 
-  const needsSetup = S.servers.find((s) => !s.cfg.nick);
-  if (needsSetup) editServer(needsSetup.cfg);
+  // First run only: open the server editor when there's nothing to connect to yet.
+  if (!S.servers.some((s) => s.cfg.nick && s.cfg.host)) editServer(S.servers[0]?.cfg);
 }
 
 boot();

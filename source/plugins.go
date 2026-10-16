@@ -64,8 +64,26 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 		}
 	}
 
-	// --- URL commands (!solar etc.) ---
 	word, args, _ := strings.Cut(plain, " ")
+
+	// --- now playing (!music) ---
+	if m := cfg.Music; m.Enabled && m.Trigger != "" && strings.EqualFold(word, m.Trigger) && (self || !m.OnlyMe) {
+		if p.ready(c.cfg.ID+"|music|"+lower(replyTo), m.Cooldown) {
+			go func() {
+				np, err := getNowPlaying(m)
+				if err != nil {
+					if self {
+						c.info(replyTo, "error", m.Trigger+": "+err.Error())
+					} else {
+						c.Say(replyTo, cfg.BotPrefix+"Nothing playing right now", true)
+					}
+					return
+				}
+				c.Say(replyTo, cfg.BotPrefix+np.Format(m.Format), true)
+			}()
+		}
+	}
+
 	for _, uc := range cfg.URLCommands {
 		if !uc.Enabled || uc.URL == "" || !strings.EqualFold(word, uc.Trigger) {
 			continue

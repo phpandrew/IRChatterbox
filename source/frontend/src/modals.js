@@ -5,11 +5,12 @@ import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, set
 
 const $ = (id) => document.getElementById(id);
 
-function open(html, cls = "") {
+function open(html, cls = "", sticky = false) {
   const ov = $("overlay");
   ov.innerHTML = `<div class="modal ${cls}">${html}</div>`;
   ov.classList.remove("hidden");
-  ov.onclick = (e) => { if (e.target === ov) closeOverlay(); };
+  // sticky dialogs (forms) don't close when you click outside them, so typed data isn't lost
+  ov.onclick = (e) => { if (e.target === ov && !sticky) closeOverlay(); };
   return ov.firstElementChild;
 }
 
@@ -48,15 +49,50 @@ export function openColorPicker(nick, current, onPick) {
   $("cpHex").oninput = () => { if (/^#[0-9a-f]{6}$/i.test($("cpHex").value)) set($("cpHex").value); };
   $("cpCancel").onclick = closeOverlay;
   $("cpReset").onclick = () => { closeOverlay(); onPick(""); };
-  $("cpOk").onclick = () => { closeOverlay(); onPick($("cpHex").value || $("cpColor").value); };
+  const pick = () => { const c = $("cpHex").value.trim() || $("cpColor").value; closeOverlay(); onPick(c); };
+  $("cpOk").onclick = pick;
+  $("cpHex").addEventListener("keydown", (e) => { if (e.key === "Enter") pick(); });
+}
+
+// ---------- quit confirmation ----------
+let quitKeys = null;
+export function openQuitConfirm(connected) {
+  if (quitKeys) document.removeEventListener("keydown", quitKeys, true);
+  const list = connected || [];
+  const what = list.length === 0 ? "You're not connected to any servers."
+    : list.length === 1 ? `You'll be disconnected from <b>${esc(list[0])}</b>.`
+    : `You'll be disconnected from <b>${list.slice(0, -1).map(esc).join("</b>, <b>")}</b> and <b>${esc(list[list.length - 1])}</b>.`;
+  open(`<div class="modal-head">Quit IRChatterbox?</div>
+    <div class="modal-body"><p style="margin:0 0 14px">${what}</p>${check("qNoAsk", false, "Don't ask me again")}</div>
+    <div class="modal-foot"><button class="btn" id="qCancel">Cancel</button><button class="btn primary" id="qOk">Quit</button></div>`, "sm", true);
+  const done = () => { document.removeEventListener("keydown", quitKeys, true); quitKeys = null; };
+  const cancel = () => { done(); closeOverlay(); Go.CancelClose(); };
+  const quit = () => { const noAsk = on("qNoAsk"); done(); Go.Quit(noAsk); };
+  $("qCancel").onclick = cancel;
+  $("qOk").onclick = quit;
+  quitKeys = (e) => {
+    if (!$("qOk")) return done();
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); quit(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+  };
+  document.addEventListener("keydown", quitKeys, true);
+  $("qOk").focus();
 }
 
 // ---------- server editor ----------
-export function openServerEditor(cfg, onSaved) {
-  const isNew = !cfg;
-  const c = cfg || { name: "", host: "", port: 6697, tls: true, nick: "", authMethod: "none", autoConnect: true, rememberChannels: true, autoJoin: [], perform: [] };
+const PRESETS = [
+  ["Libera.Chat", "irc.libera.chat"], ["OFTC", "irc.oftc.net"], ["EFnet", "irc.efnet.org"],
+  ["Rizon", "irc.rizon.net"], ["Undernet", "irc.undernet.org"], ["IRCnet", "open.ircnet.net"],
+];
+
+export async function openServerEditor(cfg, onSaved) {
+  const isNew = !cfg?.id;
+  const c = { name: "", host: "", port: 6697, tls: true, nick: "", authMethod: "none", autoConnect: true, rememberChannels: true, autoJoin: [], perform: [], ...(cfg || {}) };
+  if (!c.nick) c.nick = S.servers.find((s) => s.cfg.nick)?.cfg.nick || (await Go.GetDefaultNick()) || "";
   open(`<div class="modal-head">${isNew ? "Add server" : "Edit " + esc(c.name)}</div>
     <div class="modal-body">
+      ${isNew ? `<div class="section-title">Popular networks</div>
+      <div class="chips presets">${PRESETS.map(([n, h]) => `<button class="chip preset" data-host="${h}" data-name="${n}">${n}</button>`).join("")}</div>` : ""}
       <div class="section-title">Connection</div>
       <div class="fgrid">
         ${field("Name", text("sName", c.name, "Libera.Chat"))}
@@ -92,10 +128,18 @@ export function openServerEditor(cfg, onSaved) {
     </div>
     <div class="modal-foot">
       ${isNew ? "" : `<button class="btn danger left" id="sDel">Remove</button>`}
+      <span class="form-err ${isNew ? "left" : ""}" id="sErr"></span>
       <button class="btn" id="sCancel">Cancel</button>
       <button class="btn" id="sSave">Save</button>
       <button class="btn primary" id="sSaveC">Save & connect</button>
-    </div>`);
+    </div>`, "", true);
+  document.querySelectorAll(".preset").forEach((b) => (b.onclick = () => {
+    $("sHost").value = b.dataset.host; $("sName").value = b.dataset.name;
+    $("sHost").classList.remove("invalid"); $("sErr").textContent = "";
+    $("sTls").checked = true; $("sPort").value = 6697;
+    document.querySelectorAll(".preset").forEach((x) => x.classList.toggle("on", x === b));
+    $("sNick").focus();
+  }));
   const port = () => {
     if (!$("sPort").dataset.touched) $("sPort").value = on("sTls") ? 6697 : 6667;
   };
@@ -106,7 +150,14 @@ export function openServerEditor(cfg, onSaved) {
   if (!isNew) $("sName").dataset.touched = 1;
   $("sCancel").onclick = closeOverlay;
   const save = async (connect) => {
-    if (!val("sHost") || !val("sNick")) { ($("sHost").value ? $("sNick") : $("sHost")).focus(); return; }
+    const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : null;
+    document.querySelectorAll(".field input.invalid").forEach((x) => x.classList.remove("invalid"));
+    if (missing) {
+      $(missing).classList.add("invalid");
+      $(missing).focus();
+      $("sErr").textContent = missing === "sHost" ? "Enter a server host (or pick a network above)" : "Enter a nickname";
+      return;
+    }
     const out = {
       ...c, name: val("sName") || val("sHost"), host: val("sHost"), port: parseInt(val("sPort")) || 6697, tls: on("sTls"), tlsSkipVerify: on("sSkip"),
       password: $("sPass").value, nick: val("sNick"), altNick: val("sAlt"), username: val("sUser"), realname: val("sReal"),
@@ -114,9 +165,17 @@ export function openServerEditor(cfg, onSaved) {
       rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"),
     };
     const saved = await Go.SaveServer(out);
+    if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }
     closeOverlay();
     onSaved(saved, connect);
   };
+  document.querySelector(".modal").addEventListener("input", (e) => {
+    if (e.target.classList.contains("invalid") && e.target.value.trim()) { e.target.classList.remove("invalid"); $("sErr").textContent = ""; }
+  });
+  // Enter in any single-line field = Save & connect
+  document.querySelector(".modal").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(true); }
+  });
   $("sSave").onclick = () => save(false);
   $("sSaveC").onclick = () => save(true);
   if ($("sDel")) $("sDel").onclick = () => openPrompt(`Remove ${c.name}?`, "", null, async () => { await Go.DeleteServer(c.id); location.reload(); }, "Remove");
@@ -138,6 +197,7 @@ export function openSettings(startTab) {
   const plug = structuredClone(S.cfg.plugins);
   const shortcuts = structuredClone(S.cfg.shortcuts || []);
   plug.urlCommands ||= [];
+  plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
   const m = open(`<div class="modal-head"><span class="grow">Settings</span><button class="icon-btn" id="stX">✕</button></div>
     <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
@@ -172,6 +232,7 @@ export function openSettings(startTab) {
         ${field("Font size", text("gFs", set.fontSize, "14", "number"))}
         ${field("Chat font", text("gFont", set.fontFamily, "Segoe UI (default) — e.g. Cascadia Mono, Consolas"))}
         <div class="full">${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
+        ${check("gMarker", set.markerLine !== false, "Show a divider line between messages I've read and new ones")}
         ${check("gCompact", set.compactMode, "Compact line spacing")}
         ${check("gUsers", S.ui.users !== false, "Show the user list")}</div>
       </div>
@@ -183,6 +244,7 @@ export function openSettings(startTab) {
       <div class="section-title">Startup</div>
       ${check("gAuto", set.startWithWindows, "Start IRChatterbox when I sign in to Windows")}
       <div style="padding-left:24px">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
+      ${check("gConfirm", set.confirmOnClose, "Ask before quitting when I close the window")}
       <div class="section-title">Other</div>
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`;
     else if (tab === "appearance") drawAppearance();
@@ -358,6 +420,22 @@ export function openSettings(startTab) {
         ${field("Cooldown per channel (seconds)", text("pWCd", plug.weatherCooldown, "5", "number"))}
       </div>
       <p class="muted" style="font-size:12px">Example: “Today it feels like 20c” → <code>${esc(plug.botPrefix)}20 C = 68 F</code></p>
+      <div class="section-title">Now playing (MusicBee)</div>
+      ${check("muOn", plug.music.enabled, "Reply with the current song when someone types the trigger")}
+      <div style="padding-left:24px">${check("muMe", plug.music.onlyMe, "Only I can trigger it")}</div>
+      <div class="fgrid" style="margin-top:8px">
+        ${field("Trigger", text("muTrig", plug.music.trigger, "!music"))}
+        ${field("Where to read the song from", `<select id="muSrc">
+          ${[["auto", "Automatic (try each below)"], ["smtc", "Windows media controls"], ["window", "MusicBee window title"], ["file", "Text file (Now Playing plugin)"]]
+            .map(([v, l]) => `<option value="${v}" ${plug.music.source === v ? "selected" : ""}>${l}</option>`).join("")}</select>`)}
+        <div class="field full"><label>Text file</label><div style="display:flex;gap:8px"><input type="text" id="muFile" value="${esc(plug.music.file || "")}" placeholder="e.g. C:\\Users\\Andrew\\Documents\\nowplaying.txt" style="flex:1"><button class="btn sm" id="muBrowse">Browse…</button></div>
+          <div class="hint">Optional. Written by MusicBee's “Now Playing to External Files” plugin.</div></div>
+        ${field("Reply", text("muFmt", plug.music.format, "Now playing: {np}"), "{np} = Artist - Title · also {artist} {title} {album} {player}")}
+        ${field("/np action", text("muNp", plug.music.npFormat, "is listening to {np}"), "Typing /np sends “* you is listening to …”")}
+        ${field("Cooldown per channel (seconds)", text("muCd", plug.music.cooldown, "10", "number"))}
+        <div class="field" style="align-self:end"><button class="btn sm" id="muTest">Test now</button></div>
+      </div>
+      <div class="test-out hidden" id="muOut"></div>
       <div class="section-title">URL commands</div>
       <p class="muted" style="font-size:12px;margin-top:0">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
@@ -401,6 +479,15 @@ export function openSettings(startTab) {
       }
     });
     $("ucAdd").onclick = () => { plug.urlCommands.push({ trigger: "!", url: "", template: "", maxLines: 3, cooldown: 30, enabled: true, onlyMe: true }); drawUc(); };
+    const readMusic = () => ({ ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
+      file: val("muFile"), format: $("muFmt").value, npFormat: $("muNp").value, cooldown: parseInt(val("muCd")) || 0 });
+    $("muBrowse").onclick = async () => { const f = await Go.PickFile("Choose the now-playing text file"); if (f) $("muFile").value = f; };
+    $("muTest").onclick = async () => {
+      const out = $("muOut");
+      out.classList.remove("hidden");
+      out.textContent = "Checking…";
+      out.textContent = ((await Go.TestMusic(readMusic())) || []).join("\n");
+    };
     $("pOpen").onclick = () => Go.OpenDataFolder();
     $("pReload").onclick = async () => ($("pReloadOut").textContent = await Go.ReloadPlugins());
   }
@@ -409,9 +496,9 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0; set.quitMessage = val("gQuit");
-      set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin");
+      set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }
@@ -422,6 +509,8 @@ export function openSettings(startTab) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;
       plug.scriptsEnabled = on("pScripts");
+      plug.music = { ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
+        file: val("muFile"), format: $("muFmt").value, npFormat: $("muNp").value, cooldown: parseInt(val("muCd")) || 0 };
     }
   }
   draw();

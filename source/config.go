@@ -43,7 +43,20 @@ type URLCommand struct {
 	Enabled   bool   `json:"enabled"`
 }
 
+// MusicSettings controls the !music now-playing command.
+type MusicSettings struct {
+	Enabled  bool   `json:"enabled"`
+	Trigger  string `json:"trigger"`
+	Source   string `json:"source"` // auto | smtc | window | file
+	File     string `json:"file"`
+	Format   string `json:"format"`   // reply for the trigger
+	NPFormat string `json:"npFormat"` // /np action text
+	OnlyMe   bool   `json:"onlyMe"`
+	Cooldown int    `json:"cooldown"`
+}
+
 type PluginSettings struct {
+	Music           MusicSettings `json:"music"`
 	BotPrefix       string       `json:"botPrefix"`
 	WeatherEnabled  bool         `json:"weatherEnabled"`
 	WeatherChannels []string     `json:"weatherChannels"` // empty = all channels
@@ -75,6 +88,8 @@ type Settings struct {
 	QuitMessage    string   `json:"quitMessage"`
 	StartWithWindows bool   `json:"startWithWindows"`
 	StartMinimized   bool   `json:"startMinimized"`
+	ConfirmOnClose   bool   `json:"confirmOnClose"`
+	MarkerLine       bool   `json:"markerLine"`
 	Ignore         []string `json:"ignore"`
 }
 
@@ -127,16 +142,13 @@ func newID() string {
 
 func defaultConfig() Config {
 	return Config{
-		Servers: []ServerConfig{{
-			ID: newID(), Name: "Libera.Chat", Host: "irc.libera.chat", Port: 6697, TLS: true,
-			Nick: "", AuthMethod: "none", AutoJoin: []string{}, RememberChans: true, Perform: []string{},
-		}},
+		Servers: []ServerConfig{},
 		Settings: Settings{
 			Theme: "auto", LightTheme: "Light", DarkTheme: "Dark",
 			HighlightWords: []string{}, Notifications: true, NotifyPMs: true,
 			InlineImages: true, InlineYouTube: true, ShowJoinsParts: true,
 			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200,
-			ShowUserList: true, QuitMessage: "IRChatterbox", Ignore: []string{},
+			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, Ignore: []string{},
 		},
 		NickColors: map[string]string{},
 		Shortcuts:  defaultShortcuts(),
@@ -147,6 +159,10 @@ func defaultConfig() Config {
 				Trigger: "!solar", URL: "", MaxLines: 3, Cooldown: 30, Enabled: true, OnlyMe: true,
 			}},
 			ScriptsEnabled: true,
+			Music: MusicSettings{
+				Enabled: true, Trigger: "!music", Source: "auto", Cooldown: 10,
+				Format: "Now playing: {np}", NPFormat: "is listening to {np}",
+			},
 		},
 	}
 }
@@ -171,10 +187,21 @@ func NewStore() *Store {
 	if s.cfg.NickColors == nil {
 		s.cfg.NickColors = map[string]string{}
 	}
-	for i := range s.cfg.Servers {
-		if s.cfg.Servers[i].ID == "" {
-			s.cfg.Servers[i].ID = newID()
+	// Older versions created an empty Libera.Chat placeholder with no nick, which made the
+	// setup popup appear on every launch. Drop it if it was never filled in.
+	kept := []ServerConfig{}
+	for _, sv := range s.cfg.Servers {
+		if sv.Nick == "" && sv.Host == "irc.libera.chat" && sv.AuthPass == "" && len(sv.AutoJoin) == 0 && len(sv.Perform) == 0 {
+			continue
 		}
+		if sv.ID == "" {
+			sv.ID = newID()
+		}
+		kept = append(kept, sv)
+	}
+	if len(kept) != len(s.cfg.Servers) {
+		s.cfg.Servers = kept
+		s.saveLocked()
 	}
 	writeExamplePlugin(filepath.Join(dir, "plugins"))
 	return s
