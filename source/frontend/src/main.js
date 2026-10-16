@@ -1,7 +1,8 @@
 import { Go, on, initApi, setTitle } from "./api.js";
-import { esc, ircToHtml, nickColor, setNickOverrides, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
+import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
 import logoUrl from "./assets/logo.png";
+import { toggleEmojiPicker } from "./emoji.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm } from "./modals.js";
 
 const $ = (id) => document.getElementById(id);
@@ -341,6 +342,22 @@ $("tree").addEventListener("contextmenu", (e) => {
     } else {
       items.push(["Whois", () => Go.SendInput(srv.id, b.name, "/whois " + b.name)]);
     }
+    if (b.type === "channel") {
+      const auto = (srv.cfg.autoJoin || []).some((a) => (a.split(/\s+/)[0] || "").toLowerCase() === b.key);
+      items.push(["Join on connect", async () => {
+        await Go.SetAutoJoin(srv.id, b.name, !auto);
+        await reloadConfig();
+        toast(!auto ? `${b.name} will join automatically` : `${b.name} won't join automatically`, "ok");
+      }, "", auto]);
+    }
+    const sv = S.cfg.startView || {};
+    const isStart = sv.server === srv.id && (sv.buffer || "").toLowerCase() === b.key;
+    items.push(["Show at startup", async () => {
+      await Go.SetStartView(isStart ? "" : srv.id, isStart ? "" : b.name);
+      S.cfg.startView = isStart ? {} : { server: srv.id, buffer: b.name };
+      toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
+    }, "", isStart]);
+    items.push("-");
     items.push(["Mark as read", () => { b.unread = b.hl = 0; b.activity = false; scheduleTree(); }]);
     items.push(["Clear buffer", () => { b.lines = []; if (isActive(srv, b)) renderChat(); }]);
     items.push("-");
@@ -738,8 +755,9 @@ function userMenu(nick, e) {
     items.push(["Kick + ban…", () => openPrompt(`Kick and ban ${nick}`, "Reason", "", (r) => send(`/kb ${nick} ${r || "Banned"}`), "Kick + ban")], "danger");
   }
   items.push("-");
-  items.push(["Set nick colour…", () => openColorPicker(nick, S.cfg.nickColors?.[nick.toLowerCase()] || "", (c) => Go.SetNickColor(nick, c))]);
-  if (S.cfg.nickColors?.[nick.toLowerCase()]) items.push(["Reset nick colour", () => Go.SetNickColor(nick, "")]);
+  const custom = S.cfg.nickColors?.[nick.toLowerCase()] || S.cfg.nickColors?.[baseNick(nick)] || "";
+  items.push(["Set nick colour…", () => openColorPicker(nick, custom, (c) => Go.SetNickColor(nick, c))]);
+  if (custom) items.push(["Reset nick colour", () => Go.SetNickColor(nick, "")]);
   items.push(["Ignore", () => send("/ignore " + nick), "danger"]);
   showMenu(e.clientX, e.clientY, items.filter((x) => x !== "danger"), nick);
 }
@@ -770,7 +788,7 @@ export function toast(msg, kind = "ok") {
 export function showMenu(x, y, items, header) {
   const m = $("menu");
   m.innerHTML = (header ? `<div class="mh">${esc(header)}</div>` : "") + items.map((it, i) =>
-    it === "-" ? `<div class="sep"></div>` : `<button class="mi ${it[2] || ""}" data-i="${i}">${esc(it[0])}</button>`).join("");
+    it === "-" ? `<div class="sep"></div>` : `<button class="mi ${it[2] || ""}${it.length > 3 ? " chk" : ""}${it[3] ? " on" : ""}" data-i="${i}">${esc(it[0])}</button>`).join("");
   m.classList.remove("hidden");
   const r = m.getBoundingClientRect();
   m.style.left = Math.min(x, innerWidth - r.width - 8) + "px";
@@ -921,6 +939,15 @@ input.addEventListener("keydown", (e) => {
   }
 });
 $("sendBtn").onclick = send;
+function openEmoji() {
+  toggleEmojiPicker($("emojiBtn"), input, (em) => {
+    const s = input.selectionStart ?? input.value.length, e = input.selectionEnd ?? s;
+    input.setRangeText(em, s, e, "end");
+    autosize();
+    input.focus();
+  });
+}
+$("emojiBtn").onclick = openEmoji;
 
 function send() {
   const text = input.value;
@@ -1033,6 +1060,8 @@ document.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === "End") { e.preventDefault(); scrollBottom(); }
   else if (e.key === "PageUp" || e.key === "PageDown") { const c = $("chat"); c.scrollTop += (e.key === "PageUp" ? -1 : 1) * c.clientHeight * 0.9; }
   else if (e.ctrlKey && e.key === ",") { e.preventDefault(); openSettings(); }
+  else if (e.ctrlKey && e.key.toLowerCase() === "e") { e.preventDefault(); openEmoji(); }
+  else if (e.key === "F11") { e.preventDefault(); Go.ToggleFullscreen(); }
   else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1 && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") input.focus();
 });
 
@@ -1207,8 +1236,9 @@ async function boot() {
     select(server, b.key);
   });
 
-  // restore last buffer
-  const last = S.ui.last;
+  // open the channel chosen with "Show at startup", otherwise where you left off
+  const sv = S.cfg.startView;
+  const last = sv?.server && S.byId[sv.server] ? { server: sv.server, name: sv.buffer || "" } : S.ui.last;
   if (last && S.byId[last.server]) {
     const srv = S.byId[last.server];
     const b = last.name ? ensureBuffer(srv, last.name) : srv.buffers.get("");

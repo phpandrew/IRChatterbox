@@ -40,6 +40,8 @@ type App struct {
 	pendingFocus map[string]bool
 	notifyOK     bool
 	autoDone     bool
+	startMinimized bool
+	windowShown  bool
 	allowQuit    bool
 	closeAsked   time.Time
 	testHook     func(Event) // used by tests only
@@ -79,7 +81,78 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
-func (a *App) domReady(ctx context.Context) {}
+func (a *App) domReady(ctx context.Context) {
+	a.mu.Lock()
+	if a.windowShown {
+		a.mu.Unlock()
+		return
+	}
+	a.windowShown = true
+	a.mu.Unlock()
+	ws := a.store.Get().Window
+	if ws.Saved {
+		restoreWindow(ws, a.startMinimized)
+		if !a.startMinimized {
+			wruntime.WindowShow(ctx)
+			if ws.Fullscreen {
+				wruntime.WindowFullscreen(ctx)
+			}
+		}
+	}
+	// keep the saved window state fresh in case of a crash or power loss
+	go func() {
+		for range time.Tick(30 * time.Second) {
+			a.saveWindow()
+		}
+	}()
+}
+
+// saveWindow stores the window's size, position, maximised and full-screen state.
+func (a *App) saveWindow() {
+	if a.ctx == nil {
+		return
+	}
+	ws, ok := captureWindow()
+	if !ok {
+		return
+	}
+	if wruntime.WindowIsMinimised(a.ctx) {
+		// keep the last known good state, but don't record "minimised"
+		ws.Maximized = a.store.Get().Window.Maximized
+	}
+	ws.Fullscreen = wruntime.WindowIsFullscreen(a.ctx)
+	if ws.Fullscreen {
+		// in full screen the "normal" rect is the screen; keep the earlier restore size
+		prev := a.store.Get().Window
+		ws.X, ws.Y, ws.Width, ws.Height, ws.Maximized = prev.X, prev.Y, prev.Width, prev.Height, prev.Maximized
+		ws.Saved = prev.Saved || ws.Saved
+	}
+	if a.store.Get().Window == ws {
+		return
+	}
+	a.store.Update(func(c *Config) { c.Window = ws })
+}
+
+// ToggleFullscreen switches full-screen mode (F11).
+func (a *App) ToggleFullscreen() {
+	if wruntime.WindowIsFullscreen(a.ctx) {
+		wruntime.WindowUnfullscreen(a.ctx)
+	} else {
+		a.saveWindow()
+		wruntime.WindowFullscreen(a.ctx)
+	}
+	go func() { time.Sleep(300 * time.Millisecond); a.saveWindow() }()
+}
+
+// SetAutoJoin makes a channel join automatically whenever the server connects.
+func (a *App) SetAutoJoin(server, channel string, on bool) {
+	a.store.setAutoJoin(server, channel, on)
+}
+
+// SetStartView sets (or clears, with empty values) the channel shown at launch.
+func (a *App) SetStartView(server, buffer string) {
+	a.store.Update(func(c *Config) { c.StartView = StartBuffer{Server: server, Buffer: buffer} })
+}
 
 // AutoConnect connects all servers marked auto-connect. Called by the UI once its
 // event listeners are registered, so no early messages are lost. Safe to call repeatedly.
@@ -120,11 +193,13 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.allowQuit || !a.store.Get().Settings.ConfirmOnClose {
+		a.saveWindow()
 		return false
 	}
 	// pressing close again while the question is showing closes for real, so a stuck UI
 	// can never trap you
 	if time.Since(a.closeAsked) < 4*time.Second {
+		a.saveWindow()
 		return false
 	}
 	a.closeAsked = time.Now()
@@ -145,6 +220,7 @@ func (a *App) Quit(dontAsk bool) {
 	if dontAsk {
 		a.store.Update(func(c *Config) { c.Settings.ConfirmOnClose = false })
 	}
+	a.saveWindow()
 	a.mu.Lock()
 	a.allowQuit = true
 	a.mu.Unlock()
@@ -513,12 +589,34 @@ func (a *App) SavePlugins(p PluginSettings) {
 	a.store.Update(func(c *Config) { c.Plugins = p })
 }
 
+// baseNick is the person behind a nick, ignoring away/alt suffixes
+// (Andrew|Slop, Andrew_, Andrew^, Andrew[afk] → andrew). Must match baseNick in format.js.
+func baseNick(nick string) string {
+	n := lower(nick)
+	if i := strings.IndexByte(n, '|'); i >= 0 {
+		n = n[:i]
+	}
+	if strings.HasSuffix(n, "]") {
+		if i := strings.LastIndexByte(n, '['); i >= 0 {
+			n = n[:i]
+		}
+	}
+	n = strings.TrimRight(n, "_`^-")
+	if n == "" {
+		return lower(nick)
+	}
+	return n
+}
+
+// SetNickColor sets a colour for a person — it applies to all their nick variants.
 func (a *App) SetNickColor(nick, color string) {
 	a.store.Update(func(c *Config) {
+		// clear any colour stored for this exact variant so the shared one applies
+		delete(c.NickColors, lower(nick))
 		if color == "" {
-			delete(c.NickColors, lower(nick))
+			delete(c.NickColors, baseNick(nick))
 		} else {
-			c.NickColors[lower(nick)] = color
+			c.NickColors[baseNick(nick)] = color
 		}
 	})
 	if a.ctx != nil {

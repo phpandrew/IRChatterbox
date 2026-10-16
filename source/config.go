@@ -111,7 +111,26 @@ func defaultShortcuts() []Shortcut {
 	}
 }
 
+// WindowState is the main window's last size/position, restored on launch.
+type WindowState struct {
+	X          int  `json:"x"`
+	Y          int  `json:"y"`
+	Width      int  `json:"width"`
+	Height     int  `json:"height"`
+	Maximized  bool `json:"maximized"`
+	Fullscreen bool `json:"fullscreen"`
+	Saved      bool `json:"saved"`
+}
+
+// StartBuffer is the channel shown when IRChatterbox opens.
+type StartBuffer struct {
+	Server string `json:"server"`
+	Buffer string `json:"buffer"`
+}
+
 type Config struct {
+	Window     WindowState       `json:"window"`
+	StartView  StartBuffer       `json:"startView"`
 	Servers    []ServerConfig    `json:"servers"`
 	Shortcuts  []Shortcut        `json:"shortcuts"`
 	Settings   Settings          `json:"settings"`
@@ -241,6 +260,30 @@ func (s *Store) Server(id string) (ServerConfig, bool) {
 		}
 	}
 	return ServerConfig{}, false
+}
+
+// setAutoJoin adds or removes a channel from a server's auto-join list (regardless of
+// the "remember channels" option).
+func (s *Store) setAutoJoin(id, channel string, on bool) {
+	s.Update(func(c *Config) {
+		for i := range c.Servers {
+			sv := &c.Servers[i]
+			if sv.ID != id {
+				continue
+			}
+			idx := -1
+			for j, a := range sv.AutoJoin {
+				if f := strings.Fields(a); len(f) > 0 && strings.EqualFold(f[0], channel) {
+					idx = j
+				}
+			}
+			if on && idx < 0 {
+				sv.AutoJoin = append(sv.AutoJoin, channel)
+			} else if !on && idx >= 0 {
+				sv.AutoJoin = append(sv.AutoJoin[:idx], sv.AutoJoin[idx+1:]...)
+			}
+		}
+	})
 }
 
 // rememberChannel adds/removes a channel in a server's autojoin list.

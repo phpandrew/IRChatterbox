@@ -19,13 +19,20 @@ func main() {
 	for _, a := range os.Args[1:] {
 		if a == "--minimized" || a == "/minimized" {
 			startState = options.Minimised
+			app.startMinimized = true
 		}
+	}
+	// open at the last saved size; the exact position/monitor is restored once the window exists
+	w, h := 1400, 880
+	if ws := app.store.Get().Window; ws.Saved && ws.Width >= 720 && ws.Height >= 480 {
+		w, h = ws.Width, ws.Height
 	}
 
 	err := wails.Run(&options.App{
 		Title:     "IRChatterbox",
-		Width:     1400,
-		Height:    880,
+		Width:     w,
+		Height:    h,
+		StartHidden: app.store.Get().Window.Saved, // shown after being moved into place, so it doesn't jump
 		MinWidth:  720,
 		MinHeight: 480,
 		WindowStartState: startState,
@@ -44,6 +51,7 @@ func main() {
 		Windows: &windows.Options{
 			Theme:                windows.SystemDefault, // title bar follows Windows light/dark
 			WebviewIsTransparent: false,
+			WindowClassName:      windowClass,
 		},
 		Bind: []interface{}{app},
 	})

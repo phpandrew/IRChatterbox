@@ -137,11 +137,21 @@ function hash(s) {
 }
 // 18 distinct hues, skipping muddy ranges
 const HUES = [0, 18, 32, 45, 88, 130, 155, 172, 188, 200, 212, 228, 258, 275, 292, 310, 325, 342];
+// The "person" behind a nick, ignoring away/alt suffixes, so these all share a colour:
+// Andrew, Andrew|Slop, Andrew|away, Andrew_, Andrew__, Andrew^, Andrew`, Andrew-, Andrew[afk]
+export function baseNick(nick) {
+  let n = String(nick || "").toLowerCase();
+  n = n.split("|")[0];
+  n = n.replace(/\[[^\]]*\]$/, "");
+  n = n.replace(/[_`^\-]+$/, "");
+  return n || String(nick || "").toLowerCase();
+}
+
 export function nickColor(nick) {
   if (!nick) return "var(--text)";
-  const o = overrides[nick.toLowerCase()];
+  const o = overrides[nick.toLowerCase()] || overrides[baseNick(nick)];
   if (o) return o;
-  const h = HUES[hash(nick.toLowerCase().replace(/[_|`^]+$/, "")) % HUES.length];
+  const h = HUES[hash(baseNick(nick)) % HUES.length];
   return `hsl(${h} var(--nick-s) var(--nick-l))`;
 }
 
