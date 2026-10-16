@@ -1,4 +1,9 @@
-# IRChatterbox
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+    <img alt="IRChatterbox" src="assets/logo-light.png" width="520">
+  </picture>
+</p>
 
 A modern IRC client for Windows. The backend is Go and the UI is built with Wails (WebView2).
 
@@ -15,6 +20,8 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Commands.** Every IRC command works, and `/help` lists the built-in ones. Anything the client doesn't recognise is sent to the server as-is (`/knock #chan` → `KNOCK #chan`).
 - **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes are Dark, Light, Midnight and Classic. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
 - **Logs and history.** Logs are JSON lines, and the last 200 lines reload when you open a channel.
+- **Text shortcuts.** Type `$whatever` and it becomes `¯\_(ツ)_/¯`. Shortcuts expand when you press space or send, and typing `$` lists them. Edit them in Settings → Shortcuts or with `/shortcut add $name text`. The replacement can also be a command, such as `/me waves`.
+- **Resizable nick column.** Drag the line between nicks and messages, or double-click it to fit the longest nick.
 - **Keyboard.** Ctrl+K jumps to a channel. Ctrl+F filters the buffer. Alt+↑/↓ and Ctrl+Tab switch buffers, and Alt+A goes to the next unread. Tab completes nicks, ↑/↓ recall input history, and Ctrl+B/I/U add bold, italic and underline.
 
 ## Plugins
@@ -28,18 +35,24 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 
 **JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. `_example.js` documents the API: `on("message", fn)`, `reply()`, `say()`, `httpGet()`, `me()`, `log()`, `prefix`.
 
+## Download
+Get the latest `IRChatterbox.exe` from the [Releases](../../releases) page. Publishing a GitHub release builds the exe automatically and attaches it to that release.
+
 ## Build from source
-Requires Go 1.26+, Node 18+ and `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.
+The project is in `source/`. Requires Go 1.26+, Node 18+ and `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.
 
     wails build                 # on Windows
     wails build -platform windows/amd64   # cross-compile from Linux/macOS
     wails dev                   # live-reload development
 
-`frontend/src/mock.js` provides a fake backend, so the UI also runs in a normal browser (`cd frontend && npx vite`).
+`source/frontend/src/mock.js` provides a fake backend, so the UI also runs in a normal browser (`cd source/frontend && npx vite`).
 
 ## Layout
+Paths are relative to `source/`.
+
 | File | What |
 |---|---|
+| `../.github/workflows/release.yml` | Builds the Windows exe when a release is published |
 | `irc.go` | Connection, CAP/SASL, numerics, channel and user state |
 | `commands.go` | `/command` handling |
 | `plugins.go` | Temperature converter, URL commands, JS plugin runtime |

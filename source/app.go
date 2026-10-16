@@ -12,15 +12,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const appVersion = "0.1.0"
+// appVersion is overridden at build time: -ldflags "-X main.appVersion=1.2.3"
+var appVersion = "0.1.1"
 
 type App struct {
 	ctx     context.Context
@@ -511,8 +514,64 @@ func (a *App) SendInput(server, buffer, text string) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+		if !strings.HasPrefix(strings.ToLower(line), "/shortcut") {
+			line = a.expandShortcuts(line)
+		}
 		a.runCommand(c, buffer, line)
 	}
+}
+
+func (a *App) SaveShortcuts(list []Shortcut) {
+	clean := []Shortcut{}
+	for _, sc := range list {
+		sc.Trigger = strings.TrimSpace(sc.Trigger)
+		if sc.Trigger != "" && sc.Text != "" {
+			clean = append(clean, sc)
+		}
+	}
+	a.store.Update(func(c *Config) { c.Shortcuts = clean })
+	a.pushConfig()
+}
+
+// expandShortcuts replaces whole-word shortcut triggers ("$shrug") with their text.
+// A trigger must start the line or follow whitespace, and must not be followed by a
+// letter, digit or underscore — so "$shrug!" expands but "$shrugging" does not.
+func (a *App) expandShortcuts(line string) string {
+	list := append([]Shortcut(nil), a.store.Get().Shortcuts...)
+	if len(list) == 0 {
+		return line
+	}
+	sort.Slice(list, func(i, j int) bool { return len(list[i].Trigger) > len(list[j].Trigger) })
+	var out strings.Builder
+	low := strings.ToLower(line)
+	for i := 0; i < len(line); {
+		if i == 0 || line[i-1] == ' ' || line[i-1] == '\t' {
+			matched := false
+			for _, sc := range list {
+				t := strings.ToLower(sc.Trigger)
+				if t == "" || !strings.HasPrefix(low[i:], t) {
+					continue
+				}
+				end := i + len(t)
+				if end < len(line) {
+					r, _ := utf8.DecodeRuneInString(line[end:])
+					if isWordChar(r) {
+						continue
+					}
+				}
+				out.WriteString(sc.Text)
+				i = end
+				matched = true
+				break
+			}
+			if matched {
+				continue
+			}
+		}
+		out.WriteByte(line[i])
+		i++
+	}
+	return out.String()
 }
 
 func (a *App) GetThemes() []Theme       { return a.store.Themes() }

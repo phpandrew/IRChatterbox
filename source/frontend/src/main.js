@@ -1,6 +1,7 @@
 import { Go, on, initApi, setTitle } from "./api.js";
 import { esc, ircToHtml, nickColor, setNickOverrides, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
+import logoUrl from "./assets/logo.png";
 import { openServerEditor, openSettings, openPrompt, openColorPicker } from "./modals.js";
 
 const $ = (id) => document.getElementById(id);
@@ -534,7 +535,7 @@ function renderChat() {
   lastRenderedDay = "";
   chat.classList.toggle("compact", !!S.cfg.settings.compactMode);
   if (!srv || !b) {
-    chat.innerHTML = `<div class="empty"><h2>Welcome to IRChatterbox</h2><p>Add a server to get started.</p><p><button class="btn primary" id="emptyAdd">Add server</button></p></div>`;
+    chat.innerHTML = `<div class="empty"><img src="${logoUrl}" width="96" alt="" style="margin-bottom:12px"><h2>Welcome to IRChatterbox</h2><p>Add a server to get started.</p><p><button class="btn primary" id="emptyAdd">Add server</button></p></div>`;
     $("emptyAdd").onclick = () => editServer();
     return;
   }
@@ -555,6 +556,7 @@ function renderChat() {
   scrollBottom();
   applyFind();
   $("toLatest").classList.add("hidden");
+  requestAnimationFrame(positionNickHandle);
 }
 
 function appendLineDom(b, line) {
@@ -569,6 +571,7 @@ function appendLineDom(b, line) {
   chat.appendChild(el);
   while (chat.childElementCount > MAX_LINES + 50) chat.firstElementChild.remove();
   if (findText) matchLine(el);
+  if (chat.childElementCount < 4) requestAnimationFrame(positionNickHandle);
   if (atBottom || line.self) { stick = true; scrollBottom(); }
   else $("toLatest").classList.remove("hidden");
 }
@@ -737,28 +740,55 @@ const COMMANDS = [
   ["ping", "nick"], ["names", "[#channel]"], ["list", "[pattern]"], ["cycle", ""], ["close", ""], ["clear", ""], ["ignore", "nick|mask"],
   ["unignore", "nick|mask"], ["color", "nick #hex|reset"], ["highlight", "add|del|list word"], ["theme", "name|auto"], ["raw", "IRC LINE"],
   ["quote", "IRC LINE"], ["connect", ""], ["reconnect", ""], ["disconnect", "[message]"], ["quit", "[message]"], ["server", "name"],
-  ["ns", "NickServ command"], ["cs", "ChanServ command"], ["umode", "modes"], ["reload", "reload plugins"], ["settings", ""], ["help", ""],
+  ["ns", "NickServ command"], ["cs", "ChanServ command"], ["umode", "modes"], ["reload", "reload plugins"], ["settings", ""], ["shortcut", "add|del|list $name text"], ["help", ""],
 ];
 
-let compSel = 0, compItems = [];
+// Completion popup: "/" commands at the start of the line, "$" text shortcuts anywhere.
+let compSel = 0, compItems = [], compTyped = "";
+function shortcutWordBeforeCaret() {
+  const before = input.value.slice(0, input.selectionStart);
+  const m = /(^|\s)(\$[^\s$]*)$/.exec(before);
+  return m ? { word: m[2], start: before.length - m[2].length } : null;
+}
+function findShortcut(word) {
+  return (S.cfg.shortcuts || []).find((sc) => sc.trigger.toLowerCase() === word.toLowerCase());
+}
+function replaceRange(start, end, text) {
+  input.setRangeText(text, start, end, "end");
+  autosize();
+}
 function updateCompletions() {
   const v = input.value;
   const box = document.getElementById("completeBox");
-  if (!v.startsWith("/") || v.includes(" ") || v.includes("\n")) { box?.remove(); compItems = []; return; }
-  const q = v.slice(1).toLowerCase();
-  compItems = COMMANDS.filter(([c]) => c.startsWith(q)).slice(0, 12);
+  compItems = [];
+  if (v.startsWith("/") && !v.includes(" ") && !v.includes("\n")) {
+    const q = v.slice(1).toLowerCase();
+    compTyped = v;
+    compItems = COMMANDS.filter(([c]) => c.startsWith(q)).slice(0, 12).map(([c, d]) => ({
+      label: "/" + c, desc: d, apply: () => { input.value = "/" + c + " "; },
+    }));
+  } else {
+    const sw = shortcutWordBeforeCaret();
+    if (sw) {
+      const q = sw.word.toLowerCase();
+      compTyped = sw.word;
+      compItems = (S.cfg.shortcuts || []).filter((sc) => sc.trigger.toLowerCase().startsWith(q)).slice(0, 12).map((sc) => ({
+        label: sc.trigger, desc: sc.text, apply: () => replaceRange(sw.start, sw.start + sw.word.length, sc.text + " "),
+      }));
+    }
+  }
   if (!compItems.length) { box?.remove(); return; }
   compSel = Math.min(compSel, compItems.length - 1);
   const el = box || Object.assign(document.createElement("div"), { id: "completeBox" });
-  el.innerHTML = compItems.map(([c, d], i) => `<div class="c ${i === compSel ? "sel" : ""}" data-c="${c}"><b>/${c}</b><span class="d">${esc(d)}</span></div>`).join("");
+  el.innerHTML = compItems.map((it, i) => `<div class="c ${i === compSel ? "sel" : ""}" data-i="${i}"><b>${esc(it.label)}</b><span class="d">${esc(it.desc)}</span></div>`).join("");
   document.body.appendChild(el);
   const r = input.closest(".input-box").getBoundingClientRect();
   el.style.left = r.left + "px";
   el.style.bottom = innerHeight - r.top + 6 + "px";
-  el.onmousedown = (e) => { e.preventDefault(); const c = e.target.closest("[data-c]"); if (c) acceptCompletion(c.dataset.c); };
+  el.onmousedown = (e) => { e.preventDefault(); const c = e.target.closest("[data-i]"); if (c) acceptCompletion(+c.dataset.i); };
 }
-function acceptCompletion(c) {
-  input.value = "/" + c + " ";
+function acceptCompletion(i) {
+  compItems[i]?.apply();
   document.getElementById("completeBox")?.remove();
   compItems = [];
   input.focus();
@@ -797,8 +827,15 @@ input.addEventListener("keydown", (e) => {
   const box = document.getElementById("completeBox");
   if (box && compItems.length) {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); compSel = (compSel + (e.key === "ArrowDown" ? 1 : -1) + compItems.length) % compItems.length; updateCompletions(); return; }
-    if (e.key === "Tab" || (e.key === "Enter" && input.value.length > 1 && !COMMANDS.some(([c]) => "/" + c === input.value))) { e.preventDefault(); acceptCompletion(compItems[compSel][0]); return; }
+    const exact = compItems.some((it) => it.label.toLowerCase() === compTyped.toLowerCase());
+    if (e.key === "Tab" || (e.key === "Enter" && compTyped.length > 1 && !exact)) { e.preventDefault(); acceptCompletion(compSel); return; }
     if (e.key === "Escape") { box.remove(); compItems = []; return; }
+  }
+  // expand a shortcut as soon as you type the space after it
+  if (e.key === " " && input.selectionStart === input.selectionEnd && !input.value.toLowerCase().startsWith("/shortcut")) {
+    const sw = shortcutWordBeforeCaret();
+    const sc = sw && findShortcut(sw.word);
+    if (sc) replaceRange(sw.start, sw.start + sw.word.length, sc.text);
   }
   if (e.key === "Tab") { e.preventDefault(); tabComplete(); return; }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); return; }
@@ -968,7 +1005,54 @@ function setupResizer(id, varName, side) {
 }
 setupResizer("sideResizer", "--side-w", "left");
 setupResizer("userResizer", "--users-w", "right");
-for (const v of ["--side-w", "--users-w"]) if (S.ui[v]) document.documentElement.style.setProperty(v, S.ui[v] + "px");
+for (const v of ["--side-w", "--users-w", "--nick-col"]) if (S.ui[v]) document.documentElement.style.setProperty(v, S.ui[v] + "px");
+
+// Draggable divider between the nick column and the message column.
+function positionNickHandle() {
+  const h = $("nickHandle");
+  const who = $("chat").querySelector(".line:not(.hidden) .who");
+  if (!who) { h.style.display = "none"; return; }
+  h.style.display = "";
+  const wrap = $("chatWrap").getBoundingClientRect();
+  h.style.left = who.getBoundingClientRect().right - wrap.left + "px";
+}
+function setNickCol(w) {
+  w = Math.round(Math.max(40, Math.min(400, w)));
+  document.documentElement.style.setProperty("--nick-col", w + "px");
+  S.ui["--nick-col"] = w;
+  positionNickHandle();
+}
+$("nickHandle").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--nick-col")) || 132;
+  $("nickHandle").classList.add("drag");
+  document.body.classList.add("col-resizing");
+  const move = (ev) => setNickCol(startW + ev.clientX - startX);
+  const up = () => {
+    removeEventListener("mousemove", move); removeEventListener("mouseup", up);
+    $("nickHandle").classList.remove("drag");
+    document.body.classList.remove("col-resizing");
+    saveUi();
+  };
+  addEventListener("mousemove", move);
+  addEventListener("mouseup", up);
+});
+// double-click: fit the longest nick currently shown
+$("nickHandle").addEventListener("dblclick", () => {
+  const probe = document.createElement("span");
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font-weight:600;font-size:var(--fs);font-family:var(--chat-font)";
+  document.body.appendChild(probe);
+  let max = 40;
+  for (const el of $("chat").querySelectorAll(".line .who")) {
+    probe.innerHTML = el.innerHTML;
+    max = Math.max(max, probe.offsetWidth);
+  }
+  probe.remove();
+  setNickCol(max + 12); // + padding-right
+  saveUi();
+});
+new ResizeObserver(positionNickHandle).observe($("chatWrap"));
 
 $("usersBtn").onclick = () => { S.ui.users = S.ui.users === false; saveUi(); renderHeader(); renderUsers(); };
 $("settingsBtn").onclick = () => openSettings();
@@ -981,6 +1065,14 @@ export function applySettings() {
   root.setProperty("--chat-font", set.fontFamily ? `"${set.fontFamily}", var(--font)` : "var(--font)");
   setNickOverrides(S.cfg.nickColors);
   applyTheme(resolveTheme(set));
+  // fixed-width timestamp column so the nick divider lines up on every row
+  const probe = document.createElement("span");
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font-size:calc(var(--fs) * .82);font-variant-numeric:tabular-nums;font-family:var(--chat-font)";
+  probe.textContent = fmtTime(new Date(2000, 0, 1, 22, 58, 58).getTime());
+  document.body.appendChild(probe);
+  root.setProperty("--ts-col", probe.offsetWidth + 2 + "px");
+  probe.remove();
+  if (typeof positionNickHandle === "function") requestAnimationFrame(positionNickHandle);
 }
 
 export function renderAll() {
@@ -1006,6 +1098,8 @@ export function editServer(cfg) {
     if (!S.active.server) select(saved.id, "");
   });
 }
+
+document.querySelector(".brand .logo").outerHTML = `<img class="logo-img" src="${logoUrl}" alt="">`;
 
 // ---------- boot ----------
 async function boot() {
