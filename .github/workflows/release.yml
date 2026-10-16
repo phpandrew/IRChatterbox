@@ -87,6 +87,9 @@ jobs:
           $j = Get-Content wails.json -Raw | ConvertFrom-Json
           $j.info.productVersion = $num
           $j | ConvertTo-Json -Depth 10 | Set-Content wails.json
+          # `git describe` fails when there are no tags yet; that's handled above, so don't
+          # let its exit code fail the step (GitHub uses the last native exit code)
+          exit 0
 
       - name: Build
         run: wails build -platform windows/amd64 -clean -trimpath -ldflags "-s -w -X main.appVersion=${{ steps.ver.outputs.version }}"
