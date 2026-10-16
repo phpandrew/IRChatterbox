@@ -1,2 +1,19 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Store and check out text files with LF line endings on every OS.
+# (Go, Node, Wails and GitHub Actions are all happy with LF on Windows.)
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.nsi  text eol=crlf
+*.nsh  text eol=crlf
+
+# Binary files — never touch
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.exe  binary
+*.zip  binary
+*.woff binary
+*.woff2 binary

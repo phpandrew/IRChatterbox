@@ -1,14 +1,38 @@
-name: Build release
+name: Build
 
-# Builds IRChatterbox.exe whenever a GitHub release is published and attaches it to the release.
-# Can also be run manually from the Actions tab (the exe is then kept as a workflow artifact).
+# Builds IRChatterbox.exe:
+#  - every push / pull request  → downloadable artifact on the run (kept 30 days)
+#  - every push to main         → also updates the "Nightly" pre-release (always the latest build)
+#  - pushing a tag like v0.3.0  → creates the v0.3.0 release with notes + exe
+#  - publishing a release in the GitHub UI → exe attached to it
+#  - manually from the Actions tab
+#
+# Version:
+#  - tag / release: the tag (v0.3.0 → 0.3.0)
+#  - other builds: the latest v* tag + commits since + commit, e.g. 0.2.5-dev.4+ea78534
+#                  (no tags yet → the version in source/app.go, e.g. 0.2.5-dev+ea78534)
 on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+    paths-ignore:
+      - "**.md"
+      - ".github/assets/**"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - ".github/assets/**"
   release:
     types: [published]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# a newer push to the same branch cancels the older build
+concurrency:
+  group: build-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 # The Go/Wails project lives in source/ inside the repo
 defaults:
@@ -20,6 +44,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, needed to work out the version
 
       - uses: actions/setup-go@v7
         with:
@@ -39,12 +65,25 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $tag = "${{ github.event.release.tag_name }}"
-          if (-not $tag) { $tag = "0.0.0-dev" }
-          $v = $tag.TrimStart("v")
+          $sha = (git rev-parse --short HEAD).Trim()
+          if ("${{ github.event_name }}" -eq "release") {
+            $v = "${{ github.event.release.tag_name }}".TrimStart("v")
+          } elseif ("${{ github.ref_type }}" -eq "tag") {
+            $v = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $desc = git describe --tags --match "v[0-9]*" --long 2>$null
+            if ($LASTEXITCODE -eq 0 -and $desc -match '^v(.+)-(\d+)-g([0-9a-f]+)$') {
+              $base = $Matches[1]; $n = [int]$Matches[2]
+              $v = if ($n -eq 0) { $base } else { "$base-dev.$n+$sha" }
+            } else {
+              $base = (Select-String -Path app.go -Pattern 'var appVersion = "([^"]+)"').Matches[0].Groups[1].Value
+              $v = "$base-dev+$sha"
+            }
+          }
+          Write-Host "Version: $v"
           "version=$v" >> $env:GITHUB_OUTPUT
-          # Windows file version must be numeric (1.2.3), so drop any -beta suffix there
-          $num = ($v -split "-")[0]
+          # Windows file version must be numeric (1.2.3)
+          $num = ($v -split '[-+]')[0]
           $j = Get-Content wails.json -Raw | ConvertFrom-Json
           $j.info.productVersion = $num
           $j | ConvertTo-Json -Depth 10 | Set-Content wails.json
@@ -58,7 +97,7 @@ jobs:
         run: |
           $v = "${{ steps.ver.outputs.version }}"
           $exe = "build/bin/IRChatterbox.exe"
-          $zip = "IRChatterbox-$v-windows-amd64.zip"
+          $zip = "IRChatterbox-$($v -replace '\+','_')-windows-amd64.zip"
           Compress-Archive -Path $exe, ../.github/README.md -DestinationPath $zip
           (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() + "  IRChatterbox.exe" | Set-Content SHA256SUMS.txt
           (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  $zip" | Add-Content SHA256SUMS.txt
@@ -70,11 +109,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" build/bin/IRChatterbox.exe "${{ steps.pkg.outputs.zip }}" SHA256SUMS.txt --clobber
 
-      - name: Keep as artifact (manual runs)
+      - name: Create release from tag
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $files = @("build/bin/IRChatterbox.exe", "${{ steps.pkg.outputs.zip }}", "SHA256SUMS.txt")
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber          # release already made in the UI
+          } else {
+            $opts = @("--title", "IRChatterbox $tag", "--generate-notes", "--verify-tag")
+            if ($tag -match '-') { $opts += "--prerelease" }   # v0.3.0-beta1 → pre-release
+            gh release create $tag @files @opts
+          }
+
+      - name: Update Nightly pre-release
+        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $notes = "Automatic build of the latest commit on ``${{ github.ref_name }}`` (${{ github.sha }}).`n`nVersion **$v**. Not a stable release — for those see the versioned releases."
+          # replace the previous nightly (release + tag) with this commit's build
+          gh release delete nightly --cleanup-tag --yes *> $null
+          gh release create nightly build/bin/IRChatterbox.exe "${{ steps.pkg.outputs.zip }}" SHA256SUMS.txt `
+            --prerelease --target "${{ github.sha }}" --title "Nightly build ($v)" --notes $notes
+
+      - name: Keep as artifact
         if: github.event_name != 'release'
         uses: actions/upload-artifact@v7
         with:
           name: IRChatterbox-${{ steps.ver.outputs.version }}
+          retention-days: 30
           path: |
             source/build/bin/IRChatterbox.exe
             source/SHA256SUMS.txt

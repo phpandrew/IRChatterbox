@@ -54,7 +54,17 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings â†
 **JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. `_example.js` documents the API: `on("message", fn)`, `reply()`, `say()`, `httpGet()`, `me()`, `log()`, `prefix`.
 
 ## Download
-Get the latest `IRChatterbox.exe` from the [Releases](../../releases) page. Publishing a GitHub release builds the exe automatically and attaches it to that release.
+Get `IRChatterbox.exe` from the [Releases](../../releases) page:
+- **Versioned releases** (v0.3.0 â€¦) are the stable builds.
+- **Nightly build** is a pre-release that is rebuilt from every commit to `main`.
+
+### Making a release
+Push a version tag and GitHub builds the exe and publishes the release with notes:
+
+    git tag v0.3.0
+    git push origin v0.3.0
+
+A tag with a suffix, such as `v0.3.0-beta1`, is published as a pre-release. Every other push or pull request is also built; the exe is on the Actions run page for 30 days.
 
 ## Build from source
 The project is in `source/`. Requires Go 1.26+, Node 18+ and `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.
