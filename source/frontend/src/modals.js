@@ -1,4 +1,9 @@
 import { Go } from "./api.js";
+import wordmarkLight from "./assets/wordmark-light.png";
+import wordmarkDark from "./assets/wordmark-dark.png";
+import githubIcon from "./assets/github.png";
+
+const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes } from "./themes.js";
@@ -202,7 +207,7 @@ export function openSettings(startTab) {
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
   const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
-    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
@@ -275,6 +280,7 @@ export function openSettings(startTab) {
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
       <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`);
     else if (tab === "plugins") drawPlugins();
+    else if (tab === "about") drawAbout();
     wire();
   }
 
@@ -391,6 +397,26 @@ export function openSettings(startTab) {
     };
     for (const id of ["aMode", "aLight", "aDark"]) $(id).onchange = () => { collect(); applyTheme(resolveTheme(set)); };
     drawVars();
+  }
+
+  async function drawAbout() {
+    body.innerHTML = `
+      <section class="set-card about">
+        <img class="about-logo for-light" src="${wordmarkLight}" alt="IRChatterbox">
+        <img class="about-logo for-dark" src="${wordmarkDark}" alt="IRChatterbox">
+        <p class="about-tag">A modern IRC client for Windows.</p>
+        <div class="about-ver">Version <b id="abVer">…</b></div>
+        <p class="about-by">Created by <b>Andrew Lyle</b> · <a href="https://github.com/phpandrew" data-url="https://github.com/phpandrew">@phpandrew</a></p>
+        <div class="about-actions">
+          <button class="btn primary gh" data-open="${REPO}"><img src="${githubIcon}" alt="">View on GitHub</button>
+          <button class="btn" data-open="${REPO}/releases">Releases</button>
+          <button class="btn" data-open="${REPO}/issues">Report an issue</button>
+        </div>
+        <a class="about-url" href="${REPO}" data-url="${REPO}">${REPO.replace("https://", "")}</a>
+      </section>
+      <p class="about-foot">Built with Go and Wails · Emoji data from unicode-emoji-json (MIT)</p>`;
+    body.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => Go.OpenURL(b.dataset.open)));
+    $("abVer").textContent = (await Go.GetVersion()) || "dev";
   }
 
   function drawShortcuts() {

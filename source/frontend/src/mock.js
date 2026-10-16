@@ -34,6 +34,7 @@ export const api = {
   ToggleFullscreen: () => {},
   PickFolder: () => "D:\\IRC Logs",
   OpenLogFolder: () => {},
+  GetVersion: () => "0.2.5",
   GetDefaultNick: () => "Andrew",
   SaveServer: (sv) => ({ ...sv, id: sv.id || "new1" }),
   Connect: () => {},

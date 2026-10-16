@@ -363,3 +363,21 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .set-card .hint.indent { margin-top: -2px; }
 .set-card .urlcmd { background: var(--bg-input); }
 .set-card .check { padding: 5px 0; }
+
+/* ---------- about ---------- */
+.set-card.about { text-align: center; padding: 36px 24px 28px; }
+.about-logo { width: min(420px, 80%); height: auto; display: block; margin: 0 auto 6px; }
+:root[data-base="dark"] .about-logo.for-light, :root:not([data-base="dark"]) .about-logo.for-dark { display: none; }
+.about-tag { margin: 10px 0 18px; color: var(--text-muted); font-size: 14px; }
+.about-ver { display: inline-block; padding: 4px 12px; border-radius: 14px; background: var(--bg-input); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-muted); }
+.about-ver b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.about-by { margin: 18px 0 20px; font-size: 14px; }
+.about-by a, .about-url { color: var(--link); text-decoration: none; }
+.about-by a:hover, .about-url:hover { text-decoration: underline; }
+.about-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.about-actions .gh { display: inline-flex; align-items: center; gap: 8px; }
+.about-actions .gh img { width: 18px; height: 18px; }
+/* match the button text: white on the light theme's dark-blue button, dark on the dark theme's light-blue one */
+:root[data-base="light"] .about-actions .gh img { filter: invert(1); }
+.about-url { display: inline-block; margin-top: 16px; font-size: 12.5px; font-family: var(--mono); }
+.about-foot { text-align: center; font-size: 11.5px; color: var(--text-faint); margin: 14px 0 0; }
