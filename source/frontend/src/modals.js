@@ -1,5 +1,5 @@
 import { Go } from "./api.js";
-import { S, closeOverlay, applySettings, reloadConfig } from "./main.js";
+import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes } from "./themes.js";
 
@@ -154,11 +154,12 @@ export function openSettings(startTab) {
   $("stFolder").onclick = () => Go.OpenDataFolder();
   $("stSave").onclick = async () => {
     collect();
-    await Go.SaveSettings(set);
+    const err = await Go.SaveSettings(set);
     await Go.SavePlugins(plug);
     await Go.SaveShortcuts(shortcuts.filter((x) => x.trigger.trim() && x.text));
     await reloadConfig();
     closeOverlay();
+    toast(err || "Settings saved", err ? "error" : "ok");
   };
 
   const body = $("stBody");
@@ -179,6 +180,9 @@ export function openSettings(startTab) {
         <div class="field">${check("gLog", set.logging, "Save chat logs to disk")}</div>
         ${field("Lines of history to load when opening a channel", text("gHist", set.historyLines, "200", "number"))}
       </div>
+      <div class="section-title">Startup</div>
+      ${check("gAuto", set.startWithWindows, "Start IRChatterbox when I sign in to Windows")}
+      <div style="padding-left:24px">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
       <div class="section-title">Other</div>
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`;
     else if (tab === "appearance") drawAppearance();
@@ -205,7 +209,7 @@ export function openSettings(startTab) {
     if ($("hTest")) $("hTest").onclick = () => Go.Notify("IRChatterbox", "This is what a highlight notification looks like.");
   }
 
-  function drawAppearance() {
+  function drawAppearance(selectTheme) {
     const themes = allThemes();
     const opts = (sel) => Object.keys(themes).map((n) => `<option ${n === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
     body.innerHTML = `
@@ -219,15 +223,16 @@ export function openSettings(startTab) {
       </div>
       <div class="section-title">Theme editor</div>
       <div class="fgrid">
-        ${field("Start from", `<select id="tBase">${opts(resolveTheme(set).name)}</select>`)}
+        ${field("Start from", `<select id="tBase">${opts(selectTheme || resolveTheme(set).name)}</select>`)}
         ${field("New theme name", text("tName", "", "My theme"))}
       </div>
       <div class="theme-vars" id="tVars" style="margin-top:12px"></div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn primary sm" id="tSave">Save theme</button>
         <button class="btn danger sm" id="tDel">Delete selected custom theme</button>
-        <span class="muted" style="align-self:center;font-size:12px">Edits preview live. Themes are saved as JSON in the themes folder — share them by copying the file.</span>
+        <span id="tStatus" class="t-status"></span>
       </div>
+      <p class="muted" style="font-size:12px">Edits preview live. Themes are saved as JSON in the themes folder — share them by copying the file.</p>
       <div class="section-title">Nick colours</div>
       <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${c}"></span><span style="color:${c}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`;
     const drawVars = () => {
@@ -259,24 +264,47 @@ export function openSettings(startTab) {
       preview();
     });
     $("tVars").addEventListener("change", preview);
+    const status = (msg, ok = true) => {
+      const el = $("tStatus");
+      el.textContent = msg;
+      el.className = "t-status " + (ok ? "ok" : "bad");
+    };
     $("tSave").onclick = async () => {
       const t = current();
-      if (!t.name || BUILTIN[t.name]) { $("tName").focus(); return; }
-      await Go.SaveTheme(t);
+      if (!t.name) { status("Give the theme a name first", false); $("tName").focus(); return; }
+      if (BUILTIN[t.name]) { status(`“${t.name}” is a built-in theme — pick another name`, false); $("tName").focus(); return; }
+      const err = await Go.SaveTheme(t);
+      if (err) { status("Couldn't save: " + err, false); return; }
       setCustomThemes(await Go.GetThemes());
       collect();
-      set.theme = t.name;
-      if (t.base === "light") set.lightTheme = t.name; else set.darkTheme = t.name;
-      drawAppearance();
-      wire();
+      // use it straight away: in auto mode fill the matching light/dark slot, otherwise switch to it
+      let where;
+      if (set.theme === "auto") {
+        if (t.base === "light") set.lightTheme = t.name; else set.darkTheme = t.name;
+        where = `now your ${t.base} theme in automatic mode`;
+      } else {
+        set.theme = t.name;
+        where = "now your active theme";
+      }
+      await Go.SaveSettings(set);
+      S.cfg.settings = structuredClone(set);
+      applySettings();
+      const msg = `✓ Saved “${t.name}” — ${where}`;
+      drawAppearance(t.name);
+      status(msg);
+      toast(`Theme “${t.name}” saved`, "ok");
     };
     $("tDel").onclick = async () => {
       const n = $("tBase").value;
-      if (BUILTIN[n]) return;
+      if (BUILTIN[n]) { status("Built-in themes can't be deleted", false); return; }
       await Go.DeleteTheme(n);
       setCustomThemes(await Go.GetThemes());
       for (const k of ["theme", "lightTheme", "darkTheme"]) if (set[k] === n) set[k] = k === "theme" ? "auto" : k === "lightTheme" ? "Light" : "Dark";
+      await Go.SaveSettings(set);
+      S.cfg.settings = structuredClone(set);
+      applySettings();
       drawAppearance();
+      toast(`Theme “${n}” deleted`, "ok");
     };
     $("ncList").onclick = async (e) => {
       const b = e.target.closest("[data-nc]");
@@ -329,7 +357,7 @@ export function openSettings(startTab) {
         ${field("Only in these channels", text("pWChans", (plug.weatherChannels || []).join(" "), "all channels"), "Space separated, e.g. #neowin #lounge. Empty = everywhere.")}
         ${field("Cooldown per channel (seconds)", text("pWCd", plug.weatherCooldown, "5", "number"))}
       </div>
-      <p class="muted" style="font-size:12px">Example: “Today it feels like 20c” → <code>${esc(plug.botPrefix)}20c = 68F</code></p>
+      <p class="muted" style="font-size:12px">Example: “Today it feels like 20c” → <code>${esc(plug.botPrefix)}20 C = 68 F</code></p>
       <div class="section-title">URL commands</div>
       <p class="muted" style="font-size:12px;margin-top:0">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
@@ -383,6 +411,7 @@ export function openSettings(startTab) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
       set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0; set.quitMessage = val("gQuit");
+      set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }

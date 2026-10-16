@@ -122,15 +122,16 @@ func channelAllowed(list []string, ch string) bool {
 var urlRe = regexp.MustCompile(`(?i)\b(?:https?://|www\.)\S+`)
 var tempRe = regexp.MustCompile(`(?i)(^|[^\w.\-+])([-+−]?\d{1,3}(?:[.,]\d+)?)\s?(°\s?)?(celsius|fahrenheit|c|f)\b`)
 
-func fmtNum(v float64, decimals bool) string {
-	if !decimals {
-		return strconv.Itoa(int(math.Round(v)))
+// fmtNum shows up to one decimal place, dropping a trailing ".0" (64.4, 68, -15.8).
+func fmtNum(v float64) string {
+	v = math.Round(v*10) / 10
+	if v == 0 {
+		v = 0 // avoid "-0"
 	}
-	s := strconv.FormatFloat(math.Round(v*10)/10, 'f', 1, 64)
-	return strings.TrimSuffix(s, ".0")
+	return strings.TrimSuffix(strconv.FormatFloat(v, 'f', 1, 64), ".0")
 }
 
-// convertTemps finds temperatures like "20c", "-5 °C", "68F" and returns "20c = 68F".
+// convertTemps finds temperatures like "18c", "-5 °C", "68F" and returns "18 C = 64.4 F".
 func convertTemps(text string) string {
 	text = urlRe.ReplaceAllString(text, " ")
 	var parts []string
@@ -141,24 +142,20 @@ func convertTemps(text string) string {
 		if err != nil {
 			continue
 		}
-		unit := strings.ToLower(m[4][:1])
-		decimals := strings.Contains(numStr, ".")
+		unit := strings.ToUpper(m[4][:1])
 		var out string
-		if unit == "c" {
+		if unit == "C" {
 			if v < -90 || v > 60 {
 				continue
 			}
-			out = fmtNum(v*9/5+32, decimals) + "F"
+			out = fmtNum(v*9/5+32) + " F"
 		} else {
 			if v < -130 || v > 140 {
 				continue
 			}
-			out = fmtNum((v-32)*5/9, decimals) + "C"
+			out = fmtNum((v-32)*5/9) + " C"
 		}
-		orig := strings.TrimSpace(m[2]) + strings.TrimSpace(m[3]) + m[4]
-		if len(m[4]) > 1 {
-			orig = strings.TrimSpace(m[2]) + strings.TrimSpace(m[3]) + strings.ToUpper(m[4][:1])
-		}
+		orig := fmtNum(v) + " " + unit
 		line := orig + " = " + out
 		if !seen[line] {
 			seen[line] = true

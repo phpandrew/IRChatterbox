@@ -24,6 +24,8 @@ export const api = {
     { id: "neo", status: "connected", nick: "Andrew", network: "Neowin", channels: [{ name: "#neowin", topic: "Welcome to #Neowin | Stats: \x02https://flawlesscowboy.xyz/ircstats\x02 | <Andrew> LTT screwdrivers, UNITE!", modes: "+cCfnstT", users }, { name: "#lounge", topic: "", users: users.slice(0, 6) }] },
   ],
   GetHistory: () => [],
+  SaveSettings: (st) => { cfg.settings = st; return ""; },
+  SaveTheme: () => null,
   SaveShortcuts: (l) => { cfg.shortcuts = l; },
   SendInput: (s, b, t) => { if (!t.startsWith("/")) emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now() }); },
   AutoConnect: () => {
@@ -39,7 +41,7 @@ export const api = {
       ["Caleo", "@", "I mean, isn't discord just irc with extra steps and voice chat?"],
       ["Kennyout", "", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
       ["Andrew", "@", "Today it feels like 20c"],
-      ["Andrew", "@", "[Bot] 20c = 68F"],
+      ["Andrew", "@", "[Bot] 20 C = 68 F"],
       ["Laura", "%", "\x0304colours\x03 and \x02bold\x02 work too, \x1ditalic\x1d"],
       ["Alan-", "", "alcohol in a plastic ball, Andrew", true],
     ];

@@ -7,6 +7,11 @@
 
 A modern IRC client for Windows. The backend is Go and the UI is built with Wails (WebView2).
 
+## Screenshots
+<p align="center">
+  <img src="assets/screenshot.png" alt="IRChatterbox showing #neowin with an inline image, a YouTube preview, colour nicks and the user list" width="900">
+</p>
+
 ## Run it
 Double-click `IRChatterbox.exe`. No install is needed. It uses WebView2, which comes with Windows 10 and 11.
 Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings → Open data folder).
@@ -20,12 +25,15 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Commands.** Every IRC command works, and `/help` lists the built-in ones. Anything the client doesn't recognise is sent to the server as-is (`/knock #chan` → `KNOCK #chan`).
 - **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes are Dark, Light, Midnight and Classic. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
 - **Logs and history.** Logs are JSON lines, and the last 200 lines reload when you open a channel.
+- **Start with Windows.** Optionally start minimised (Settings → General).
+- **Topics.** Double-click a channel topic to change it.
+- **Jump to latest.** When you scroll up, a round arrow takes you back to the newest messages and counts new lines below. Ctrl+End does the same.
 - **Text shortcuts.** Type `$whatever` and it becomes `¯\_(ツ)_/¯`. Shortcuts expand when you press space or send, and typing `$` lists them. Edit them in Settings → Shortcuts or with `/shortcut add $name text`. The replacement can also be a command, such as `/me waves`.
 - **Resizable nick column.** Drag the line between nicks and messages, or double-click it to fit the longest nick.
 - **Keyboard.** Ctrl+K jumps to a channel. Ctrl+F filters the buffer. Alt+↑/↓ and Ctrl+Tab switch buffers, and Alt+A goes to the next unread. Tab completes nicks, ↑/↓ recall input history, and Ctrl+B/I/U add bold, italic and underline.
 
 ## Plugins
-**Temperature converter (built in).** "Today it feels like 20c" → `[Bot] 20c = 68F`. It also handles °C, F, "fahrenheit", decimals and negatives. It reacts to your messages and other people's (each can be switched off), can be limited to certain channels, and never replies to lines that start with the bot prefix, so two bots won't loop.
+**Temperature converter (built in).** "Today it feels like 18c" → `[Bot] 18 C = 64.4 F`. It also handles °C, F, "fahrenheit", decimals and negatives. It reacts to your messages and other people's (each can be switched off), can be limited to certain channels, and never replies to lines that start with the bot prefix, so two bots won't loop.
 
 **URL commands (`!solar`).** Settings → Plugins. Set a trigger and a URL. By default only you can trigger them; untick "Only I can trigger it" to let others use one. Plain text or HTML replies are posted as up to N lines. JSON can be shaped with a Go template:
 

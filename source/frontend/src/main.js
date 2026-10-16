@@ -376,7 +376,8 @@ function renderHeader() {
     name.innerHTML = `<span class="hash">#</span>${esc(b.name.replace(/^#/, ""))}`;
     sub.textContent = `${net}`;
     topic.innerHTML = b.topic ? ircToHtml(b.topic, ctxFor(srv)) : `<span class="muted">No topic set</span>`;
-    topic.title = stripCodes(b.topic);
+    topic.title = (b.topic ? stripCodes(b.topic) + "\n\n" : "") + "Double-click to change the topic";
+    topic.classList.add("editable");
     meta.innerHTML = [
       b.joined ? `<span><i class="dot connected"></i> <b>Joined</b></span>` : `<span><i class="dot"></i> Not joined</span>`,
       b.users.length ? `<span><b>${b.users.length}</b> users</span>` : "",
@@ -384,6 +385,7 @@ function renderHeader() {
       srv.cfg.tls ? `<span title="TLS">🔒 <b>TLS</b></span>` : "",
     ].join("");
   } else if (b.type === "query") {
+    topic.classList.remove("editable");
     name.innerHTML = `<span style="color:${nickColor(b.name)}">${esc(b.name)}</span>`;
     sub.textContent = `Private conversation · ${net}`;
     topic.innerHTML = "";
@@ -391,6 +393,8 @@ function renderHeader() {
   } else {
     name.textContent = srv.cfg.name || srv.cfg.host;
     sub.textContent = `${srv.cfg.host}:${srv.cfg.port}${srv.cfg.tls ? " · TLS" : ""}`;
+    topic.classList.remove("editable");
+    topic.title = "";
     topic.innerHTML = `<span class="muted">Server messages, MOTD and notices</span>`;
     meta.innerHTML = `<span><i class="dot ${srv.status}"></i> <b>${srv.status}</b></span>`;
   }
@@ -555,6 +559,7 @@ function renderChat() {
   stick = true;
   scrollBottom();
   applyFind();
+  newBelow = 0;
   $("toLatest").classList.add("hidden");
   requestAnimationFrame(positionNickHandle);
 }
@@ -573,15 +578,24 @@ function appendLineDom(b, line) {
   if (findText) matchLine(el);
   if (chat.childElementCount < 4) requestAnimationFrame(positionNickHandle);
   if (atBottom || line.self) { stick = true; scrollBottom(); }
-  else $("toLatest").classList.remove("hidden");
+  else if (!line.history) { newBelow++; updateToLatest(); }
 }
 
+// Round "jump to latest" arrow: shown whenever you've scrolled up, with a count of new lines below.
+let newBelow = 0;
+function updateToLatest() {
+  const c = $("chat");
+  const away = c.scrollHeight - c.scrollTop - c.clientHeight > 150;
+  if (!away) newBelow = 0;
+  $("toLatest").classList.toggle("hidden", !away);
+  $("toLatestN").textContent = newBelow ? (newBelow > 99 ? "99+" : newBelow) : "";
+}
 $("chat").addEventListener("scroll", () => {
   const c = $("chat");
   stick = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
-  if (stick) $("toLatest").classList.add("hidden");
+  updateToLatest();
 });
-$("toLatest").onclick = () => { scrollBottom(); $("toLatest").classList.add("hidden"); };
+$("toLatest").onclick = () => { $("chat").scrollTo({ top: $("chat").scrollHeight, behavior: "smooth" }); newBelow = 0; };
 
 // chat interactions
 $("chat").addEventListener("click", (e) => {
@@ -702,6 +716,28 @@ function userMenu(nick, e) {
   if (S.cfg.nickColors?.[nick.toLowerCase()]) items.push(["Reset nick colour", () => Go.SetNickColor(nick, "")]);
   items.push(["Ignore", () => send("/ignore " + nick), "danger"]);
   showMenu(e.clientX, e.clientY, items.filter((x) => x !== "danger"), nick);
+}
+
+// double-click the topic to edit it
+$("hTopic").addEventListener("dblclick", (e) => {
+  const srv = activeServer(), b = activeBuffer();
+  if (!srv || b?.type !== "channel") return;
+  if (e.target.closest("a")) return;
+  window.getSelection()?.removeAllRanges();
+  openPrompt(`Topic for ${b.name}`, "New topic (leave empty to clear)", b.topic || "", (v) => {
+    if (v === undefined || v === (b.topic || "")) return;
+    Go.SendInput(srv.id, b.name, v ? `/topic ${b.name} ${v}` : `/raw TOPIC ${b.name} :`);
+  }, "Set topic");
+});
+
+// ---------- toast ----------
+let toastTimer;
+export function toast(msg, kind = "ok") {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add("hidden"), 2600);
 }
 
 // ---------- context menu ----------
@@ -968,6 +1004,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); cycleBuffer(e.key === "ArrowDown" ? 1 : -1); }
   else if (e.ctrlKey && e.key === "Tab") { e.preventDefault(); cycleBuffer(e.shiftKey ? -1 : 1); }
   else if (e.altKey && e.key.toLowerCase() === "a") { e.preventDefault(); cycleBuffer(1, true); }
+  else if (e.ctrlKey && e.key === "End") { e.preventDefault(); scrollBottom(); }
   else if (e.key === "PageUp" || e.key === "PageDown") { const c = $("chat"); c.scrollTop += (e.key === "PageUp" ? -1 : 1) * c.clientHeight * 0.9; }
   else if (e.ctrlKey && e.key === ",") { e.preventDefault(); openSettings(); }
   else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1 && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") input.focus();

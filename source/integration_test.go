@@ -128,7 +128,7 @@ func TestIntegration(t *testing.T) {
 	bob.send("PRIVMSG #test :Today it feels like 20c")
 	l := bob.waitFor(t, "[Bot]", 4*time.Second)
 	t.Log("bob saw:", l)
-	if !strings.Contains(l, "[Bot] 20c = 68F") {
+	if !strings.Contains(l, "[Bot] 20 C = 68 F") {
 		t.Fatalf("bad weather reply %q", l)
 	}
 	// weather from me

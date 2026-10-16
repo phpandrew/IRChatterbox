@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -14,6 +15,12 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+	startState := options.Normal
+	for _, a := range os.Args[1:] {
+		if a == "--minimized" || a == "/minimized" {
+			startState = options.Minimised
+		}
+	}
 
 	err := wails.Run(&options.App{
 		Title:     "IRChatterbox",
@@ -21,6 +28,7 @@ func main() {
 		Height:    880,
 		MinWidth:  720,
 		MinHeight: 480,
+		WindowStartState: startState,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

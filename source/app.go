@@ -71,6 +71,9 @@ func (a *App) startup(ctx context.Context) {
 		})
 	}
 	a.plugins.LoadScripts()
+	if set := a.store.Get().Settings; set.StartWithWindows {
+		setAutostart(true, set.StartMinimized)
+	}
 }
 
 func (a *App) domReady(ctx context.Context) {}
@@ -425,8 +428,12 @@ func (a *App) Disconnect(id string) {
 	}
 }
 
-func (a *App) SaveSettings(s Settings) {
+func (a *App) SaveSettings(s Settings) string {
 	a.store.Update(func(c *Config) { c.Settings = s })
+	if err := setAutostart(s.StartWithWindows, s.StartMinimized); err != nil {
+		return "Couldn't change Windows startup: " + err.Error()
+	}
+	return ""
 }
 
 func (a *App) SavePlugins(p PluginSettings) {

@@ -73,6 +73,8 @@ type Settings struct {
 	ShowUserList   bool     `json:"showUserList"`
 	CompactMode    bool     `json:"compactMode"`
 	QuitMessage    string   `json:"quitMessage"`
+	StartWithWindows bool   `json:"startWithWindows"`
+	StartMinimized   bool   `json:"startMinimized"`
 	Ignore         []string `json:"ignore"`
 }
 
