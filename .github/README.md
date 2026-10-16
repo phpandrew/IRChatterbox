@@ -9,7 +9,10 @@ A modern IRC client for Windows. The backend is Go and the UI is built with Wail
 
 ## Screenshots
 <p align="center">
-  <img src="assets/screenshot.png" alt="IRChatterbox showing #neowin with an inline image, a YouTube preview, colour nicks and the user list" width="900">
+  <img src="assets/screenshot.png" alt="IRChatterbox connected to Libera.Chat, showing the server MOTD and a highlighted NickServ notice" width="900">
+</p>
+<p align="center">
+  <img src="assets/screenshot-settings.png" alt="The Appearance settings with automatic light/dark mode and the theme editor" width="900">
 </p>
 
 ## Run it
