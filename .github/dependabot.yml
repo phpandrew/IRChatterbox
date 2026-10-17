@@ -1,0 +1,25 @@
+# Dependabot opens a pull request when a dependency has an update (security fixes included).
+# Turn on "Dependabot security updates" in Settings → Code security as well, so security
+# fixes are raised straight away instead of waiting for the weekly run.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /source
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies]
+    groups:
+      go-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /source/frontend
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies]
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    labels: [dependencies]

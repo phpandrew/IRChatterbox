@@ -23,7 +23,7 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Saved servers and auto-login.** Each server can use SASL PLAIN (recommended) or NickServ IDENTIFY, connect on startup, auto-join channels (with keys) and run commands on connect. It reconnects automatically with backoff.
 - **Sidebar.** Servers collapse to show the channels and queries under them. Unread counts appear in grey. Pings and PMs appear in red, and a collapsed server shows a combined badge.
 - **Highlights.** Your nick and any highlight words trigger three things: a coloured line, a red badge and a Windows toast. Clicking the toast opens that channel.
-- **Inline media.** PNG, JPG, GIF, WEBP and AVIF links, plus imgur. YouTube links show a thumbnail and play in the chat when clicked. You can turn either off in Settings → Media.
+- **Inline media.** Images (PNG, JPG, GIF, WEBP, AVIF, SVG, plus imgur and Giphy links) show in the chat. Video files (MP4, WEBM, MOV) and imgur GIFV get a player, and audio files (MP3, OGG, WAV, FLAC) get a play bar. YouTube, Vimeo, Streamable and Spotify links show a preview that plays in the chat when clicked. Each kind can be turned off in Settings → Media.
 - **Nick colours.** Colours are automatic per nick. Override one with `/color nick #ff8800`, `/color nick orange` or `/color nick reset`, or right-click a nick.
 - **Commands.** Every IRC command works, and `/help` lists the built-in ones. Anything the client doesn't recognise is sent to the server as-is (`/knock #chan` → `KNOCK #chan`).
 - **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes are Dark, Light, Midnight and Classic. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
@@ -66,12 +66,15 @@ Get `IRChatterbox.exe` from the [Releases](../../releases) page:
 - **Nightly build** is a pre-release that is rebuilt from every commit to `main`.
 
 ### Making a release
-Push a version tag and GitHub builds the exe and publishes the release with notes:
+The version number lives in `source/VERSION`. To release it, go to **Actions → Build → Run workflow**, tick **Publish a release** and run. GitHub builds the exe, tags `v<VERSION>` and publishes the release with notes. Then bump `VERSION` for the next round.
 
-    git tag v0.3.0
-    git push origin v0.3.0
+Builds between releases are numbered as pre-releases of `VERSION` (`0.3.0-dev.7+abc1234`), so they never look newer than the release they lead up to. A `VERSION` with a suffix, such as `0.4.0-beta.1`, is published as a pre-release. Every push or pull request is also built; the exe is on the Actions run page for 30 days.
 
-A tag with a suffix, such as `v0.3.0-beta1`, is published as a pre-release. Every other push or pull request is also built; the exe is on the Actions run page for 30 days.
+## Roadmap
+- **Bouncer support (soju).** Load missed messages and older history from an always-online bouncer through IRCv3 `chathistory`, and sync read markers so a channel read on another device shows as read here. This would also make an Android client practical, either Goguma or a future IRChatterbox app.
+
+## Security
+IRC text is never rendered as HTML, and the app has a strict Content Security Policy. Dependencies and code are scanned daily, and findings are opened as issues automatically. To report a problem privately, see **[SECURITY.md](SECURITY.md)**.
 
 ## Build from source
 See **[docs/BUILDING.md](../docs/BUILDING.md)** for requirements, building, live-reload development, running the tests and how releases work.

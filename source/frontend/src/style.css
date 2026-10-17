@@ -182,6 +182,13 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 
 .media { grid-column: 3; margin: 4px 0 6px; }
 .media img { max-width: min(480px, 100%); max-height: 320px; border-radius: 8px; border: 1px solid var(--border); display: block; cursor: zoom-in; background: var(--bg-elev); }
+.media video { max-width: min(480px, 100%); max-height: 320px; border-radius: 8px; border: 1px solid var(--border); display: block; background: #000; }
+.media audio { width: min(380px, 100%); display: block; }
+.yt.embed { background: linear-gradient(135deg, #1b2330, #0d1117); }
+.yt.embed .play span { background: #3b82f6; }
+.yt.embed.spotify { aspect-ratio: auto; height: 80px; width: min(420px, 100%); background: linear-gradient(135deg, #1a2b20, #0d1410); border-radius: 12px; }
+.yt.embed.spotify .play span { background: #1db954; width: 46px; height: 46px; border-radius: 50%; }
+.yt.embed.spotify .ytitle { background: none; }
 .media .cap { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
 .yt { width: min(480px, 100%); aspect-ratio: 16/9; border-radius: 8px; overflow: hidden; position: relative; background: #000; border: 1px solid var(--border); cursor: pointer; }
 .yt img { width: 100%; height: 100%; object-fit: cover; border: 0; border-radius: 0; max-height: none; max-width: none; opacity: .9; cursor: pointer; }

@@ -79,6 +79,7 @@ type Settings struct {
 	NotifyPMs      bool     `json:"notifyPMs"`
 	InlineImages   bool     `json:"inlineImages"`
 	InlineYouTube  bool     `json:"inlineYouTube"`
+	InlineVideos   bool     `json:"inlineVideos"` // video/audio files, imgur gifv, Giphy, Vimeo, Streamable
 	ShowJoinsParts bool     `json:"showJoinsParts"`
 	TimeFormat     string   `json:"timeFormat"` // 24h | 12h
 	ShowSeconds    bool     `json:"showSeconds"`
@@ -194,7 +195,7 @@ func defaultConfig() Config {
 		Settings: Settings{
 			Theme: "auto", LightTheme: "Light", DarkTheme: "Dark",
 			HighlightWords: []string{}, Notifications: true, NotifyPMs: true,
-			InlineImages: true, InlineYouTube: true, ShowJoinsParts: true,
+			InlineImages: true, InlineYouTube: true, InlineVideos: true, ShowJoinsParts: true,
 			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200, LogMaxLines: 10000,
 			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, NickContrast: true, Ignore: []string{},
 			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,

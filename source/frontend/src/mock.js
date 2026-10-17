@@ -8,7 +8,7 @@ const cfg = {
     { id: "lib", name: "Libera.Chat", host: "irc.libera.chat", port: 6697, tls: true, nick: "Andrew", authMethod: "sasl", autoConnect: true, autoJoin: ["#linux"], perform: [] },
     { id: "neo", name: "Neowin", host: "irc.neowin.net", port: 6697, tls: true, nick: "Andrew", authMethod: "nickserv", autoConnect: true, autoJoin: [], perform: [] },
   ],
-  settings: { theme: "auto", lightTheme: "Light", darkTheme: "Dark", highlightWords: ["tshirtgang"], notifications: true, notifyPMs: true, inlineImages: true, inlineYouTube: true, showJoinsParts: true, timeFormat: "24h", fontSize: 14, logging: true, historyLines: 200, quitMessage: "IRChatterbox", ignore: [] },
+  settings: { theme: "auto", lightTheme: "Light", darkTheme: "Dark", highlightWords: ["tshirtgang"], notifications: true, notifyPMs: true, inlineImages: true, inlineYouTube: true, inlineVideos: true, showJoinsParts: true, timeFormat: "24h", fontSize: 14, logging: true, historyLines: 200, quitMessage: "IRChatterbox", ignore: [] },
   nickColors: { caleo: "#f2b53c" },
   shortcuts: [{ trigger: "$whatever", text: "¯\\_(ツ)_/¯" }, { trigger: "$shrug", text: "¯\\_(ツ)_/¯" }, { trigger: "$tableflip", text: "(╯°□°)╯︵ ┻━┻" }],
   plugins: { botPrefix: "[Bot] ", weatherEnabled: true, weatherFromMe: true, weatherFromOthers: true, weatherChannels: [], weatherCooldown: 5, urlCommands: [{ trigger: "!solar", url: "https://example.com/solar", template: "", maxLines: 3, cooldown: 30, enabled: true }], scriptsEnabled: true },

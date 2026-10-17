@@ -221,7 +221,9 @@ export function nickColor(nick) {
 }
 
 // ---------- inline media ----------
-const IMG_RE = /\.(png|jpe?g|gif|webp|avif|bmp)$/i;
+const IMG_RE = /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico|jfif)$/i;
+const VIDEO_RE = /\.(mp4|webm|mov|m4v|ogv)$/i;
+const AUDIO_RE = /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac)$/i;
 const YT_RE = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/|youtube-nocookie\.com\/embed\/)([\w-]{11})/i;
 
 export function mediaFor(url) {
@@ -237,7 +239,30 @@ export function mediaFor(url) {
     }
     return { type: "youtube", id: yt[1], start };
   }
-  if (IMG_RE.test(u.pathname)) return { type: "image", src: url, name: decodeURIComponent(u.pathname.split("/").pop() || "") };
+  const name = (() => { try { return decodeURIComponent(u.pathname.split("/").pop() || ""); } catch { return u.pathname.split("/").pop() || ""; } })();
+  const host = u.hostname.replace(/^www\./i, "").toLowerCase();
+  // imgur .gifv is really a silent looping mp4
+  if (/(^|\.)imgur\.com$/.test(host) && /\.gifv$/i.test(u.pathname))
+    return { type: "video", src: `https://i.imgur.com${u.pathname.replace(/\.gifv$/i, ".mp4")}`, name, gif: true };
+  // Giphy pages: giphy.com/gifs/some-title-ID → the gif itself
+  const gp = host === "giphy.com" && /^\/(?:gifs|stickers|embed)\/(?:[\w-]*-)?([A-Za-z0-9]{8,})\/?$/.exec(u.pathname);
+  if (gp) return { type: "image", src: `https://media.giphy.com/media/${gp[1]}/giphy.gif`, name: "Giphy" };
+  if (IMG_RE.test(u.pathname)) return { type: "image", src: url, name };
+  if (VIDEO_RE.test(u.pathname)) return { type: "video", src: url, name };
+  if (AUDIO_RE.test(u.pathname)) return { type: "audio", src: url, name };
+  // click-to-play embeds
+  // Spotify: open.spotify.com/(intl-xx/)track|album|playlist|episode|show|artist/ID
+  const sp = host === "open.spotify.com" && /^\/(?:intl-[\w-]+\/)?(track|album|playlist|episode|show|artist)\/([A-Za-z0-9]{22})\/?$/.exec(u.pathname);
+  if (sp) {
+    const kind = sp[1][0].toUpperCase() + sp[1].slice(1);
+    return { type: "embed", id: `spotify:${sp[1]}:${sp[2]}`, provider: "Spotify", kind, link: url,
+      src: `https://open.spotify.com/embed/${sp[1]}/${sp[2]}?utm_source=generator`,
+      height: sp[1] === "track" || sp[1] === "episode" ? 152 : 352 };
+  }
+  const vm = host === "vimeo.com" && /^\/(\d{5,})\/?$/.exec(u.pathname);
+  if (vm) return { type: "embed", id: "vimeo:" + vm[1], provider: "Vimeo", src: `https://player.vimeo.com/video/${vm[1]}?autoplay=1`, link: url };
+  const st = host === "streamable.com" && /^\/([a-z0-9]{4,})\/?$/i.exec(u.pathname);
+  if (st) return { type: "embed", id: "streamable:" + st[1], provider: "Streamable", src: `https://streamable.com/e/${st[1]}?autoplay=1`, link: url };
   // imgur single image pages: imgur.com/abc123 → i.imgur.com/abc123.jpg
   if (/^(www\.)?imgur\.com$/i.test(u.hostname) && /^\/[A-Za-z0-9]{5,8}$/.test(u.pathname))
     return { type: "image", src: `https://i.imgur.com${u.pathname}.jpg`, name: u.pathname.slice(1) };

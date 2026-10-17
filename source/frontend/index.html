@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <!-- Content Security Policy: even if a bug let IRC text through as HTML, it can't run script.
+       Images may come from anywhere (inline previews); scripts only from the app itself. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://streamable.com https://open.spotify.com; object-src 'none'; base-uri 'none'; form-action 'none'"/>
   <title>IRChatterbox</title>
   <link rel="icon" href="./src/assets/logo.png"/>
   <link rel="stylesheet" href="./src/style.css"/>

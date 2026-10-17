@@ -90,8 +90,8 @@ func fetchLatestRelease() (UpdateInfo, error) {
 	return info, nil
 }
 
-// compareVersions compares versions: 1.2.10 > 1.2.9; 0.3.0-beta1 < 0.3.0 < 0.3.0-dev.4
-// (dev builds are commits made after the 0.3.0 tag, so they're newer than it).
+// compareVersions compares versions: 1.2.10 > 1.2.9; 0.3.0-dev.4 < 0.3.0-dev.10 < 0.3.0.
+// Dev builds are working towards the version in VERSION, so they come before its release.
 func compareVersions(a, b string) int {
 	split := func(v string) ([]int, string) {
 		v = strings.TrimPrefix(strings.TrimSpace(v), "v")
@@ -122,44 +122,39 @@ func compareVersions(a, b string) int {
 			return -1
 		}
 	}
-	// suffix rank: beta/rc (before the release) < release < dev builds (built from commits
-	// *after* that release's tag, e.g. 0.2.5-dev.3 = 3 commits past v0.2.5)
-	rank := func(p string) int {
-		switch {
-		case p == "":
-			return 1
-		case strings.HasPrefix(p, "dev"):
-			return 2
-		default:
-			return 0
-		}
-	}
-	if ra, rb := rank(ap), rank(bp); ra != rb {
-		if ra > rb {
+	// a pre-release (0.3.0-dev.4, 0.3.0-beta1) comes before its release (0.3.0)
+	if (ap == "") != (bp == "") {
+		if ap == "" {
 			return 1
 		}
 		return -1
 	}
-	// dev.10 vs dev.9: compare the commit counts as numbers
-	if strings.HasPrefix(ap, "dev.") && strings.HasPrefix(bp, "dev.") {
-		na, _ := strconv.Atoi(strings.TrimPrefix(ap, "dev."))
-		nb, _ := strconv.Atoi(strings.TrimPrefix(bp, "dev."))
-		if na != nb {
+	// both pre-releases: compare dot-separated parts, numbers as numbers (dev.10 > dev.9)
+	pa, pb := strings.Split(ap, "."), strings.Split(bp, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if pa[i] == pb[i] {
+			continue
+		}
+		na, ea := strconv.Atoi(pa[i])
+		nb, eb := strconv.Atoi(pb[i])
+		if ea == nil && eb == nil {
 			if na > nb {
 				return 1
 			}
 			return -1
 		}
-		return 0
-	}
-	switch {
-	case ap == bp:
-		return 0
-	case ap > bp:
-		return 1
-	default:
+		if pa[i] > pb[i] {
+			return 1
+		}
 		return -1
 	}
+	switch {
+	case len(pa) > len(pb):
+		return 1
+	case len(pa) < len(pb):
+		return -1
+	}
+	return 0
 }
 
 // CheckForUpdate is called by the About tab ("Check for updates") and the startup check.

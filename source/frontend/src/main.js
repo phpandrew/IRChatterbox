@@ -588,7 +588,7 @@ function lineEl(srv, b, line) {
 
 function addMedia(el, text) {
   const set = S.cfg.settings;
-  if (!set.inlineImages && !set.inlineYouTube) return;
+  if (!set.inlineImages && !set.inlineYouTube && !set.inlineVideos) return;
   const seen = new Set();
   for (const url of findUrls(text)) {
     const m = mediaFor(url);
@@ -614,6 +614,37 @@ function addMedia(el, text) {
       wrap.innerHTML = `<div class="yt" data-yt="${esc(m.id)}" data-start="${m.start}"><img src="https://i.ytimg.com/vi/${esc(m.id)}/hqdefault.jpg" referrerpolicy="no-referrer" alt=""><div class="play"><span></span></div></div>
         <div class="cap"><a href="https://www.youtube.com/watch?v=${esc(m.id)}" data-url="https://www.youtube.com/watch?v=${esc(m.id)}">Open on YouTube</a></div>`;
       wrap.querySelector("img").onload = () => { if (stick) scrollBottom(); };
+    } else if (m.type === "video" && set.inlineVideos) {
+      const v = document.createElement("video");
+      v.src = m.src;
+      v.preload = "metadata";
+      v.playsInline = true;
+      if (m.gif) { v.autoplay = v.loop = v.muted = true; } // gifv: behaves like a gif
+      else v.controls = true;
+      v.onerror = () => wrap.remove();
+      v.onloadedmetadata = () => { if (stick) scrollBottom(); };
+      wrap.appendChild(v);
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      cap.textContent = m.name;
+      wrap.appendChild(cap);
+    } else if (m.type === "audio" && set.inlineVideos) {
+      const a = document.createElement("audio");
+      a.src = m.src;
+      a.preload = "none";
+      a.controls = true;
+      a.onerror = () => wrap.remove();
+      wrap.appendChild(a);
+      const cap = document.createElement("div");
+      cap.className = "cap";
+      cap.textContent = m.name;
+      wrap.appendChild(cap);
+    } else if (m.type === "embed" && set.inlineVideos) {
+      // nothing loads from the site until it's clicked
+      const cls = m.provider === "Spotify" ? "yt embed spotify" : "yt embed";
+      const title = m.kind ? `${m.provider} · ${m.kind}` : m.provider;
+      wrap.innerHTML = `<div class="${cls}" data-embed="${esc(m.src)}"${m.height ? ` data-h="${m.height}"` : ""}><div class="ytitle">${esc(title)}</div><div class="play"><span></span></div></div>
+        <div class="cap"><a href="${esc(m.link)}" data-url="${esc(m.link)}">Open on ${esc(m.provider)}</a></div>`;
     } else continue;
     el.appendChild(document.createElement("span"));
     el.appendChild(document.createElement("span"));
@@ -711,6 +742,17 @@ $("chat").addEventListener("click", (e) => {
   if (yt && !yt.querySelector("iframe")) {
     const id = yt.dataset.yt, start = +yt.dataset.start || 0;
     yt.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0${start ? "&start=" + start : ""}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    return;
+  }
+  const em = e.target.closest(".yt[data-embed]");
+  if (em && !em.querySelector("iframe")) {
+    const f = document.createElement("iframe");
+    f.src = em.dataset.embed; // built by mediaFor from a fixed host + an id, never the raw link
+    f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    f.allowFullscreen = true;
+    f.referrerPolicy = "strict-origin-when-cross-origin";
+    if (em.dataset.h) em.style.height = em.dataset.h + "px";
+    em.replaceChildren(f);
     return;
   }
   const img = e.target.closest(".media img[data-full]");

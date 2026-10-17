@@ -24,9 +24,6 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// appVersion is overridden at build time: -ldflags "-X main.appVersion=1.2.3"
-var appVersion = "0.3.0"
-
 type App struct {
 	ctx     context.Context
 	store   *Store

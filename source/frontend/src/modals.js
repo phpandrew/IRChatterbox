@@ -335,8 +335,9 @@ export function openSettings(startTab) {
     else if (tab === "shortcuts") drawShortcuts();
     else if (tab === "media") body.innerHTML =
       card("Inline media", "Show pictures and videos right in the chat.", `
-      ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF and imgur links)")}
+      ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF, SVG, imgur and Giphy links)")}
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
+      ${check("mVid", set.inlineVideos ?? true, "Show video and audio players (MP4, WEBM, MOV, MP3, OGG, imgur GIFV) and Vimeo, Streamable or Spotify — click to play")}
       <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`);
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
@@ -640,7 +641,7 @@ export function openSettings(startTab) {
       set.flashOnPing = on("hFlash");
     }
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
-    if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); }
+    if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;

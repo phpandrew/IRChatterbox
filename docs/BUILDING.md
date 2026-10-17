@@ -23,7 +23,7 @@ wails build
 
 The exe is written to `source\build\bin\IRChatterbox.exe`. It's a single file with no installer.
 
-To stamp a version into the build (shown in Settings → About, and used by the updater):
+The version comes from `source\VERSION` (embedded at build time), so a plain `wails build` of `0.3.0` shows as `0.3.0-dev` in Settings → About. To build an exact version string instead:
 
 ```powershell
 wails build -ldflags "-X main.appVersion=0.3.0"
@@ -79,16 +79,46 @@ The tests cover connecting over TLS, SASL and NickServ logins, highlights, the t
 | Push a tag `vX.Y.Z` | Release `vX.Y.Z` is published with notes, the exe, a zip and SHA256SUMS |
 | Publishing a release on GitHub | The exe is attached to it |
 
+### Versions
+
+`source/VERSION` holds the version you're working towards, e.g. `0.3.0`. It's the only place the number lives.
+
+| Build | Version |
+|---|---|
+| Release | exactly `VERSION`, e.g. `0.3.0` |
+| Any other CI build (Nightly, branches, PRs) | `0.3.0-dev.7+abc1234`, where 7 is the commits since `VERSION` last changed |
+| Local `wails build` | `0.3.0-dev` |
+
+Dev builds are pre-releases of `VERSION`, so they rank below the release: anyone on a dev build is offered `0.3.0` once it's out.
+
 To cut a release:
 
+1. Make sure `source/VERSION` says the version you're releasing, and push.
+2. **Actions → Build → Run workflow**, tick **Publish a release**, run. It builds, tags `v0.3.0` and publishes the release with notes and the exe.
+   (Pushing a tag works too: `git tag v0.3.0 && git push origin v0.3.0`. The tag must match `VERSION` or the build fails.)
+3. Bump `VERSION` to the next version (`0.3.1`) and push, so new dev builds count towards it.
+
+The app's auto-updater checks the latest non-pre-release release, downloads `IRChatterbox.exe`, checks it against `SHA256SUMS.txt` and swaps it in. Keep those two asset names unchanged. A `VERSION` like `0.4.0-beta.1` publishes as a pre-release, which the updater skips.
+
+## Security checks
+
+The **Security** workflow (`.github/workflows/security.yml`) runs daily, on every push to `main` and on pull requests:
+
+| Scanner | Looks for |
+|---|---|
+| `govulncheck` | Known vulnerabilities in Go modules and the Go standard library that the code actually calls |
+| `npm audit` | Known vulnerabilities in the frontend's npm packages |
+| CodeQL | Bugs in our own code: XSS, injection, path traversal and so on |
+
+Each scanner keeps one issue up to date, labelled `security`. It opens when something is found, gets a comment when the findings change, and closes itself once a scan comes back clean. On pull requests no issues are opened; the check fails instead. Dependabot (`.github/dependabot.yml`) opens weekly pull requests for dependency updates.
+
+Run the same scans locally:
+
 ```powershell
-git tag v0.3.0
-git push origin v0.3.0
+cd source
+$env:GOOS="windows"; go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+cd frontend; npm audit
 ```
-
-The app's auto-updater checks the latest non-pre-release release, downloads `IRChatterbox.exe`, checks it against `SHA256SUMS.txt` and swaps it in. Keep those two asset names unchanged.
-
-Version numbers come from git: a tagged build is `0.3.0`, a later commit is `0.3.0-dev.4+abc1234`, and with no tags at all the version falls back to the `appVersion` in `app.go`.
 
 ## Project layout
 
@@ -96,6 +126,7 @@ All paths are under `source/`.
 
 | Path | What |
 |---|---|
+| `VERSION` | The version number (see Versions above) |
 | `main.go` | Window options, startup flags (`--minimized`, `--wait-pid`) |
 | `app.go` | Methods the UI calls, notifications, attention (tray/taskbar), auto-away |
 | `irc.go`, `ircmsg.go` | IRC connection: TLS, CAP/SASL, parsing, channel and user state, events |

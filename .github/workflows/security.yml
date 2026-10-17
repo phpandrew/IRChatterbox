@@ -1,0 +1,123 @@
+name: Security
+
+# Scans IRChatterbox for security problems:
+#  - govulncheck : known vulnerabilities in Go modules (and the Go standard library) that the
+#                  app's code actually reaches
+#  - npm audit   : known vulnerabilities in the frontend's npm packages
+#  - CodeQL      : bugs in our own code (injection, XSS, path traversal, …)
+#
+# On the daily run, pushes to main and manual runs, each scanner keeps one GitHub issue
+# up to date (label "security"): opened when it finds something, updated when the findings
+# change, closed when they're fixed. On pull requests nothing is opened; the check fails instead.
+on:
+  schedule:
+    - cron: "23 11 * * *" # daily, 7:23 Toronto (new CVEs get published all the time)
+  push:
+    branches: [main]
+    paths: ["source/**", ".github/workflows/security.yml", ".github/scripts/**"]
+  pull_request:
+    paths: ["source/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: source } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+      - name: Scan
+        run: |
+          # the exe embeds frontend/dist; an empty placeholder is enough to compile
+          mkdir -p frontend/dist && touch frontend/dist/.keep
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          set +e
+          # scan as Windows, the platform we ship
+          GOOS=windows govulncheck ./... > ../govulncheck.txt 2>&1
+          code=$?
+          set -e
+          cat ../govulncheck.txt
+          # 0 = clean, 3 = vulnerabilities found, anything else = the scan itself failed
+          case $code in 0) echo clean > ../govulncheck.status ;; 3) echo found > ../govulncheck.status ;; *) echo error > ../govulncheck.status ;; esac
+      - uses: actions/upload-artifact@v7
+        with: { name: govulncheck, path: "govulncheck.*" }
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: source/frontend } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: Scan
+        run: |
+          set +e
+          npm audit --package-lock-only > ../../npm-audit.txt 2>&1
+          code=$?
+          set -e
+          cat ../../npm-audit.txt
+          if [ $code -eq 0 ]; then echo clean; elif grep -q "vulnerabilit" ../../npm-audit.txt; then echo found; else echo error; fi > ../../npm-audit.status
+      - uses: actions/upload-artifact@v7
+        with: { name: npm-audit, path: "npm-audit.*" }
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        if: matrix.language == 'go'
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'go' && 'manual' || 'none' }}
+          queries: security-extended
+      - name: Build (Go)
+        if: matrix.language == 'go'
+        working-directory: source
+        run: |
+          mkdir -p frontend/dist && touch frontend/dist/.keep
+          GOOS=windows go build ./...
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  report:
+    needs: [govulncheck, npm-audit, codeql]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    steps:
+      - uses: actions/checkout@v7
+        with: { sparse-checkout: .github/scripts }
+      - uses: actions/download-artifact@v7
+        with: { path: results, merge-multiple: true }
+      - name: Open, update or close issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+        run: bash .github/scripts/security-report.sh results

@@ -3,14 +3,16 @@ name: Build
 # Builds IRChatterbox.exe:
 #  - every push / pull request  → downloadable artifact on the run (kept 30 days)
 #  - every push to main         → also updates the "Nightly" pre-release (always the latest build)
-#  - pushing a tag like v0.3.0  → creates the v0.3.0 release with notes + exe
-#  - publishing a release in the GitHub UI → exe attached to it
-#  - manually from the Actions tab
+#  - Actions tab → Build → Run workflow → tick "Publish a release" → creates the release
+#    for the version in source/VERSION (tag v<VERSION>, notes, exe)
+#  - pushing a tag like v0.3.0  → same; the tag has to match source/VERSION
+#  - publishing a release in the GitHub UI → exe attached to it (tag must match VERSION)
 #
-# Version:
-#  - tag / release: the tag (v0.3.0 → 0.3.0)
-#  - other builds: the latest v* tag + commits since + commit, e.g. 0.2.5-dev.4+ea78534
-#                  (no tags yet → the version in source/app.go, e.g. 0.2.5-dev+ea78534)
+# Version: source/VERSION is the only place the number lives.
+#  - releases: exactly VERSION, e.g. 0.3.0
+#  - every other build: a pre-release of it, e.g. 0.3.0-dev.7+ea78534
+#    (7 = commits since VERSION was last changed), so it ranks below the 0.3.0 release
+#  - after releasing, bump VERSION (0.3.0 → 0.3.1) so the next dev builds count towards it
 on:
   push:
     branches: ["**"]
@@ -25,6 +27,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a release of the version in source/VERSION"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -66,18 +73,34 @@ jobs:
         shell: pwsh
         run: |
           $sha = (git rev-parse --short HEAD).Trim()
-          if ("${{ github.event_name }}" -eq "release") {
-            $v = "${{ github.event.release.tag_name }}".TrimStart("v")
-          } elseif ("${{ github.ref_type }}" -eq "tag") {
-            $v = "${{ github.ref_name }}".TrimStart("v")
+          $base = (Get-Content VERSION -Raw).Trim()
+          if ($base -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
+            Write-Host "::error::source/VERSION must look like 1.2.3 (got '$base')"; exit 1
+          }
+          $tag = ""
+          if ("${{ github.event_name }}" -eq "release") { $tag = "${{ github.event.release.tag_name }}" }
+          elseif ("${{ github.ref_type }}" -eq "tag") { $tag = "${{ github.ref_name }}" }
+          $released = $false
+          git rev-parse -q --verify "refs/tags/v$base" *> $null
+          if ($LASTEXITCODE -eq 0) { $released = $true }
+          if ($tag) {
+            if ($tag.TrimStart("v") -ne $base) {
+              Write-Host "::error::Tag $tag doesn't match source/VERSION ($base). Update VERSION first, or tag v$base."; exit 1
+            }
+            $v = $base
+          } elseif ("${{ inputs.release }}" -eq "true") {
+            if ($released) {
+              Write-Host "::error::v$base is already released. Bump source/VERSION first."; exit 1
+            }
+            $v = $base
+            "publish=true" >> $env:GITHUB_OUTPUT
           } else {
-            $desc = git describe --tags --match "v[0-9]*" --long 2>$null
-            if ($LASTEXITCODE -eq 0 -and $desc -match '^v(.+)-(\d+)-g([0-9a-f]+)$') {
-              $base = $Matches[1]; $n = [int]$Matches[2]
-              $v = if ($n -eq 0) { $base } else { "$base-dev.$n+$sha" }
-            } else {
-              $base = (Select-String -Path app.go -Pattern 'var appVersion = "([^"]+)"').Matches[0].Groups[1].Value
-              $v = "$base-dev+$sha"
+            # commits since VERSION last changed: counts up through the dev cycle
+            $since = (git log -1 --format=%H -- VERSION).Trim()
+            $n = if ($since) { [int](git rev-list --count "$since..HEAD") } else { 0 }
+            $v = "$base-dev.$n+$sha"
+            if ($released) {
+              Write-Host "::warning::v$base is already released but source/VERSION wasn't bumped. Dev builds will rank below it until you change VERSION (e.g. to the next patch)."
             }
           }
           Write-Host "Version: $v"
@@ -87,8 +110,7 @@ jobs:
           $j = Get-Content wails.json -Raw | ConvertFrom-Json
           $j.info.productVersion = $num
           $j | ConvertTo-Json -Depth 10 | Set-Content wails.json
-          # `git describe` fails when there are no tags yet; that's handled above, so don't
-          # let its exit code fail the step (GitHub uses the last native exit code)
+          # git rev-parse above returns 1 when the tag doesn't exist; don't let that fail the step
           exit 0
 
       - name: Build
@@ -127,6 +149,17 @@ jobs:
             if ($tag -match '-') { $opts += "--prerelease" }   # v0.3.0-beta1 → pre-release
             gh release create $tag @files @opts
           }
+
+      - name: Publish release (manual run)
+        if: steps.ver.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $files = @("build/bin/IRChatterbox.exe", "${{ steps.pkg.outputs.zip }}", "SHA256SUMS.txt")
+          $opts = @("--title", "IRChatterbox v$v", "--generate-notes", "--target", "${{ github.sha }}")
+          if ($v -match '-') { $opts += "--prerelease" }   # 0.4.0-beta.1 → pre-release
+          gh release create "v$v" @files @opts
 
       - name: Update Nightly pre-release
         if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
