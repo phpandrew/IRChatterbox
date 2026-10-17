@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { sparse-checkout: .github/scripts }
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with: { path: results, merge-multiple: true }
       - name: Open, update or close issues
         env:
