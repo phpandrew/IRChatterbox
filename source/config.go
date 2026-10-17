@@ -96,6 +96,7 @@ type Settings struct {
 	StartMinimized   bool   `json:"startMinimized"`
 	ConfirmOnClose   bool   `json:"confirmOnClose"`
 	MarkerLine       bool   `json:"markerLine"`
+	NickContrast     bool   `json:"nickContrast"` // flip custom nick colours that are unreadable on the current theme
 	Ignore         []string `json:"ignore"`
 
 	// updates
@@ -195,7 +196,7 @@ func defaultConfig() Config {
 			HighlightWords: []string{}, Notifications: true, NotifyPMs: true,
 			InlineImages: true, InlineYouTube: true, ShowJoinsParts: true,
 			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200, LogMaxLines: 10000,
-			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, Ignore: []string{},
+			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, NickContrast: true, Ignore: []string{},
 			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,
 			AutoAwayMinutes: 15, AutoAwayMessage: "Away from keyboard",
 			SoundHighlight: "chime", SoundPM: "ping", SoundVolume: 70,

@@ -147,10 +147,75 @@ export function baseNick(nick) {
   return n || String(nick || "").toLowerCase();
 }
 
+// ---------- keeping custom colours readable ----------
+// A custom colour like black looks great in light mode but vanishes in dark mode. When
+// enabled, colours with poor contrast against the chat background get their lightness
+// flipped (black → white, navy → light blue), keeping the hue. Readable colours are untouched.
+let chatBg = null; // [r,g,b] of the current chat background
+let fixContrast = true;
+const fixedCache = new Map();
+
+export function setNickContrast(bgHex, enabled) {
+  chatBg = parseHex(bgHex);
+  fixContrast = enabled !== false;
+  fixedCache.clear();
+}
+
+function parseHex(c) {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(c || "").trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+}
+function luminance([r, g, b]) {
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+export function contrastRatio(a, b) {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+function rgbToHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min, s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function hslToRgb([h, s, l]) {
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));
+}
+const toHex = (rgb) => "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+
+const MIN_CONTRAST = 3; // WCAG minimum for large/bold text — nicks are bold
+
+export function readableColor(color) {
+  if (!fixContrast || !chatBg) return color;
+  if (fixedCache.has(color)) return fixedCache.get(color);
+  const rgb = parseHex(color);
+  let out = color;
+  if (rgb && contrastRatio(rgb, chatBg) < MIN_CONTRAST) {
+    const [h, s] = rgbToHsl(rgb);
+    let l = 1 - rgbToHsl(rgb)[2]; // flip lightness: black ↔ white, navy ↔ light blue
+    const darkBg = luminance(chatBg) < 0.5;
+    // still too close? keep moving away from the background until it's readable
+    for (let i = 0; i < 20 && contrastRatio(hslToRgb([h, s, l]), chatBg) < MIN_CONTRAST; i++) {
+      l = darkBg ? Math.min(1, l + 0.05) : Math.max(0, l - 0.05);
+    }
+    out = toHex(hslToRgb([h, s, l]));
+  }
+  fixedCache.set(color, out);
+  return out;
+}
+
 export function nickColor(nick) {
   if (!nick) return "var(--text)";
   const o = overrides[nick.toLowerCase()] || overrides[baseNick(nick)];
-  if (o) return o;
+  if (o) return readableColor(o);
   const h = HUES[hash(baseNick(nick)) % HUES.length];
   return `hsl(${h} var(--nick-s) var(--nick-l))`;
 }

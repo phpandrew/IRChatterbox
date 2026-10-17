@@ -112,6 +112,7 @@ func (a *App) domReady(ctx context.Context) {
 		}
 	}
 	go a.autoUpdateLoop()
+	go a.watchPendingBuild()
 	go a.autoAwayLoop()
 	// keep the saved window state fresh in case of a crash or power loss
 	go func() {

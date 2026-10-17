@@ -1,2 +1,5 @@
 IRChatterbox*.exe
 irchatterbox-src.zip
+# local build swaps (IRChatterbox.exe.new / .old)
+IRChatterbox.exe.*
+*.exe

@@ -1,5 +1,5 @@
 import { Go, on, initApi, setTitle } from "./api.js";
-import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
+import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
@@ -1270,7 +1270,9 @@ export function applySettings() {
   root.setProperty("--fs", (set.fontSize || 14) + "px");
   root.setProperty("--chat-font", set.fontFamily ? `"${set.fontFamily}", var(--font)` : "var(--font)");
   setNickOverrides(S.cfg.nickColors);
-  applyTheme(resolveTheme(set));
+  const theme = resolveTheme(set);
+  applyTheme(theme);
+  setNickContrast(getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(), set.nickContrast);
   // fixed-width timestamp column so the nick divider lines up on every row
   const probe = document.createElement("span");
   probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font-size:calc(var(--fs) * .82);font-variant-numeric:tabular-nums;font-family:var(--chat-font)";
@@ -1339,6 +1341,18 @@ async function boot() {
   on("confirmClose", (d) => openQuitConfirm(d?.connected));
   on("playSound", (d) => playSound(d.sound, d.volume));
   on("updateAvailable", (info) => showUpdateBar(info));
+  on("localUpdateReady", () => {
+    const bar = $("updateBar");
+    bar.innerHTML = `<span class="ub-text"><b>A new build of IRChatterbox is ready.</b> Restart to start using it.</span>
+      <button class="btn sm primary" id="lbApply">Restart to update</button><button class="icon-btn" id="lbClose" title="Later">✕</button>`;
+    bar.classList.remove("hidden");
+    $("lbClose").onclick = () => bar.classList.add("hidden");
+    $("lbApply").onclick = async () => {
+      const err = await Go.ApplyLocalUpdate();
+      if (err) toast(err, "error");
+      else bar.querySelector(".ub-text").textContent = "Restarting…";
+    };
+  });
   on("updateProgress", (d) => {
     const bar = document.querySelector("#updateBar .ub-progress i");
     if (bar) bar.style.width = d.pct + "%";

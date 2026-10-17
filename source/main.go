@@ -15,6 +15,8 @@ import (
 var assets embed.FS
 
 func main() {
+	// a new build dropped next to the exe as IRChatterbox.exe.new? swap it in and restart
+	applyPendingBuildAtLaunch()
 	// after an auto-update the new exe is started with --wait-pid <old pid>: wait for the old
 	// one to exit so the single-instance lock is free
 	for i, a := range os.Args[1:] {
