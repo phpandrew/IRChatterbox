@@ -7,7 +7,7 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/dop251/goja v0.0.0-20261016120441-313b6b662e53
 	github.com/wailsapp/wails/v2 v2.16.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 )
 
