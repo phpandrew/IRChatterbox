@@ -1,45 +1,47 @@
 name: Build
 
-# Builds IRChatterbox.exe:
-#  - every push / pull request  → downloadable artifact on the run (kept 30 days)
-#  - every push to main         → also updates the "Nightly" pre-release (always the latest build)
-#  - Actions tab → Build → Run workflow → tick "Publish a release" → creates the release
-#    for the version in source/VERSION (tag v<VERSION>, notes, exe)
-#  - pushing a tag like v0.3.0  → same; the tag has to match source/VERSION
-#  - publishing a release in the GitHub UI → exe attached to it (tag must match VERSION)
+# Builds IRChatterbox.exe, and on main publishes it as a release once every check passes.
 #
-# Version: source/VERSION is the only place the number lives.
-#  - releases: exactly VERSION, e.g. 0.3.0
-#  - every other build: a pre-release of it, e.g. 0.3.0-dev.7+ea78534
-#    (7 = commits since VERSION was last changed), so it ranks below the 0.3.0 release
-#  - after releasing, bump VERSION (0.3.0 → 0.3.1) so the next dev builds count towards it
+#  - push to main  → build + security scans → if both pass, publish a release automatically.
+#                    The in-app updater offers it to everyone within a few hours.
+#  - other branches, pull requests → build only (exe kept on the run page for 30 days)
+#  - pushing a tag like v0.4.0 → release that exact version (the tag must match source/VERSION)
+#  - manually from the Actions tab → build only
+#
+# Version numbers: source/VERSION holds MAJOR.MINOR.PATCH, e.g. 0.3.0.
+#  - The first release from main is VERSION itself (v0.3.0). After that each release from
+#    main bumps the patch on its own: v0.3.1, v0.3.2, … You never have to edit VERSION
+#    for a normal release.
+#  - To start a new minor/major version, change VERSION (0.4.0) and push: that becomes the
+#    next release, and the patch counts up from there again.
+#  - A VERSION with a suffix (0.4.0-beta.1) is released once as a pre-release, which the
+#    updater skips.
+#  - Branch and PR builds are pre-releases of the next version, e.g. 0.3.3-dev.4+ea78534.
 on:
   push:
     branches: ["**"]
     tags: ["v*"]
     paths-ignore:
       - "**.md"
+      - "docs/**"
       - ".github/assets/**"
+      - ".github/dependabot.yml"
+      - ".github/scripts/**"
+      - ".github/workflows/security.yml"
   pull_request:
     paths-ignore:
       - "**.md"
+      - "docs/**"
       - ".github/assets/**"
-  release:
-    types: [published]
   workflow_dispatch:
-    inputs:
-      release:
-        description: "Publish a release of the version in source/VERSION"
-        type: boolean
-        default: false
 
 permissions:
-  contents: write
+  contents: read
 
-# a newer push to the same branch cancels the older build
+# a newer push to the same branch cancels the older run (and its release)
 concurrency:
   group: build-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'release' }}
+  cancel-in-progress: true
 
 # The Go/Wails project lives in source/ inside the repo
 defaults:
@@ -49,6 +51,9 @@ defaults:
 jobs:
   windows:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      release: ${{ steps.ver.outputs.release }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -74,37 +79,46 @@ jobs:
         run: |
           $sha = (git rev-parse --short HEAD).Trim()
           $base = (Get-Content VERSION -Raw).Trim()
-          if ($base -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
+          if ($base -notmatch '^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?$') {
             Write-Host "::error::source/VERSION must look like 1.2.3 (got '$base')"; exit 1
           }
-          $tag = ""
-          if ("${{ github.event_name }}" -eq "release") { $tag = "${{ github.event.release.tag_name }}" }
-          elseif ("${{ github.ref_type }}" -eq "tag") { $tag = "${{ github.ref_name }}" }
-          $released = $false
+          $maj = [int]$Matches[1]; $min = [int]$Matches[2]; $pat = [int]$Matches[3]; $pre = $Matches[4]
           git rev-parse -q --verify "refs/tags/v$base" *> $null
-          if ($LASTEXITCODE -eq 0) { $released = $true }
-          if ($tag) {
-            if ($tag.TrimStart("v") -ne $base) {
-              Write-Host "::error::Tag $tag doesn't match source/VERSION ($base). Update VERSION first, or tag v$base."; exit 1
-            }
-            $v = $base
-          } elseif ("${{ inputs.release }}" -eq "true") {
-            if ($released) {
-              Write-Host "::error::v$base is already released. Bump source/VERSION first."; exit 1
-            }
-            $v = $base
-            "publish=true" >> $env:GITHUB_OUTPUT
+          $baseReleased = ($LASTEXITCODE -eq 0)
+
+          # the next release: VERSION itself, or (once that's out) the next free patch number
+          if (-not $baseReleased) {
+            $next = $base
+          } elseif ($pre) {
+            $next = ""   # a pre-release VERSION is released once; change VERSION for the next one
           } else {
-            # commits since VERSION last changed: counts up through the dev cycle
+            $hi = $pat
+            foreach ($t in (git tag --list "v$maj.$min.*")) {
+              if ($t -match "^v$maj\.$min\.(\d+)$" -and [int]$Matches[1] -gt $hi) { $hi = [int]$Matches[1] }
+            }
+            $next = "$maj.$min.$($hi + 1)"
+          }
+
+          $release = "false"
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $v = "${{ github.ref_name }}".TrimStart("v")
+            if ($v -ne $base) {
+              Write-Host "::error::Tag v$v doesn't match source/VERSION ($base). Update VERSION first."; exit 1
+            }
+            $release = "true"
+          } elseif ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -eq "refs/heads/${{ github.event.repository.default_branch }}" -and $next) {
+            $v = $next
+            $release = "true"
+          } else {
+            # pre-release of whatever comes next; N = commits since VERSION last changed
             $since = (git log -1 --format=%H -- VERSION).Trim()
             $n = if ($since) { [int](git rev-list --count "$since..HEAD") } else { 0 }
-            $v = "$base-dev.$n+$sha"
-            if ($released) {
-              Write-Host "::warning::v$base is already released but source/VERSION wasn't bumped. Dev builds will rank below it until you change VERSION (e.g. to the next patch)."
-            }
+            $target = if ($next) { $next } else { $base }
+            $v = "$target-dev.$n+$sha"
           }
-          Write-Host "Version: $v"
+          Write-Host "Version: $v (release: $release)"
           "version=$v" >> $env:GITHUB_OUTPUT
+          "release=$release" >> $env:GITHUB_OUTPUT
           # Windows file version must be numeric (1.2.3)
           $num = ($v -split '[-+]')[0]
           $j = Get-Content wails.json -Raw | ConvertFrom-Json
@@ -117,68 +131,66 @@ jobs:
         run: wails build -platform windows/amd64 -clean -trimpath -ldflags "-s -w -X main.appVersion=${{ steps.ver.outputs.version }}"
 
       - name: Package
-        id: pkg
         shell: pwsh
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          $exe = "build/bin/IRChatterbox.exe"
-          $zip = "IRChatterbox-$($v -replace '\+','_')-windows-amd64.zip"
-          Compress-Archive -Path $exe, ../.github/README.md -DestinationPath $zip
-          (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower() + "  IRChatterbox.exe" | Set-Content SHA256SUMS.txt
-          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  $zip" | Add-Content SHA256SUMS.txt
-          "zip=$zip" >> $env:GITHUB_OUTPUT
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item build/bin/IRChatterbox.exe out/
+          $zip = "out/IRChatterbox-$($v -replace '\+','_')-windows-amd64.zip"
+          Compress-Archive -Path build/bin/IRChatterbox.exe, ../.github/README.md -DestinationPath $zip
+          Push-Location out
+          Get-ChildItem -File | ForEach-Object { (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower() + "  " + $_.Name } | Set-Content SHA256SUMS.txt
+          Pop-Location
 
-      - name: Attach to release
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" build/bin/IRChatterbox.exe "${{ steps.pkg.outputs.zip }}" SHA256SUMS.txt --clobber
-
-      - name: Create release from tag
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $files = @("build/bin/IRChatterbox.exe", "${{ steps.pkg.outputs.zip }}", "SHA256SUMS.txt")
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag @files --clobber          # release already made in the UI
-          } else {
-            $opts = @("--title", "IRChatterbox $tag", "--generate-notes", "--verify-tag")
-            if ($tag -match '-') { $opts += "--prerelease" }   # v0.3.0-beta1 → pre-release
-            gh release create $tag @files @opts
-          }
-
-      - name: Publish release (manual run)
-        if: steps.ver.outputs.publish == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $v = "${{ steps.ver.outputs.version }}"
-          $files = @("build/bin/IRChatterbox.exe", "${{ steps.pkg.outputs.zip }}", "SHA256SUMS.txt")
-          $opts = @("--title", "IRChatterbox v$v", "--generate-notes", "--target", "${{ github.sha }}")
-          if ($v -match '-') { $opts += "--prerelease" }   # 0.4.0-beta.1 → pre-release
-          gh release create "v$v" @files @opts
-
-      - name: Update Nightly pre-release
-        if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $v = "${{ steps.ver.outputs.version }}"
-          $notes = "Automatic build of the latest commit on ``${{ github.ref_name }}`` (${{ github.sha }}).`n`nVersion **$v**. Not a stable release — for those see the versioned releases."
-          # replace the previous nightly (release + tag) with this commit's build
-          gh release delete nightly --cleanup-tag --yes *> $null
-          gh release create nightly build/bin/IRChatterbox.exe "${{ steps.pkg.outputs.zip }}" SHA256SUMS.txt `
-            --prerelease --target "${{ github.sha }}" --title "Nightly build ($v)" --notes $notes
-
-      - name: Keep as artifact
-        if: github.event_name != 'release'
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
           name: IRChatterbox-${{ steps.ver.outputs.version }}
           retention-days: 30
-          path: |
-            source/build/bin/IRChatterbox.exe
-            source/SHA256SUMS.txt
+          path: source/out/*
+
+  # the same scans as the Security workflow; a release only goes out if they pass
+  security:
+    if: needs.windows.outputs.release == 'true'
+    needs: windows
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+      issues: write
+      security-events: write
+
+  release:
+    needs: [windows, security]
+    if: needs.windows.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: IRChatterbox-${{ needs.windows.outputs.version }}
+          path: out
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          v="${{ needs.windows.outputs.version }}"
+          tag="v$v"
+          opts=(--title "IRChatterbox $tag" --generate-notes --target "${{ github.sha }}")
+          [[ "$v" == *-* ]] && opts+=(--prerelease)   # 0.4.0-beta.1 → pre-release (updater skips it)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" out/* --clobber   # e.g. release drafted in the UI for a pushed tag
+          else
+            gh release create "$tag" out/* "${opts[@]}"
+          fi
+          echo "Published $tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the old Nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release delete nightly --cleanup-tag --yes 2>/dev/null || true

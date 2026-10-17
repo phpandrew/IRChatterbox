@@ -61,14 +61,10 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 **JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. Plugins can react to messages, joins, parts, kicks, nick changes, topics and more, add their own `/commands`, use timers, store data and fetch web pages. **[Plugin guide and API reference →](../docs/PLUGINS.md)**
 
 ## Download
-Get `IRChatterbox.exe` from the [Releases](../../releases) page:
-- **Versioned releases** (v0.3.0 …) are the stable builds.
-- **Nightly build** is a pre-release that is rebuilt from every commit to `main`.
+Get `IRChatterbox.exe` from the [Releases](../../releases) page. Once it's installed, the app updates itself.
 
-### Making a release
-The version number lives in `source/VERSION`. To release it, go to **Actions → Build → Run workflow**, tick **Publish a release** and run. GitHub builds the exe, tags `v<VERSION>` and publishes the release with notes. Then bump `VERSION` for the next round.
-
-Builds between releases are numbered as pre-releases of `VERSION` (`0.3.0-dev.7+abc1234`), so they never look newer than the release they lead up to. A `VERSION` with a suffix, such as `0.4.0-beta.1`, is published as a pre-release. Every push or pull request is also built; the exe is on the Actions run page for 30 days.
+### Releases
+Every push to `main` that passes the build and security checks is released automatically as the next patch version (`v0.3.1`, `v0.3.2`, …). To start a new minor or major version, change `source/VERSION` (for example to `0.4.0`) and push. Pull requests and other branches are built too; the exe is on the Actions run page for 30 days. See [docs/BUILDING.md](../docs/BUILDING.md#versions) for details.
 
 ## Roadmap
 - **Bouncer support (soju).** Load missed messages and older history from an always-online bouncer through IRCv3 `chathistory`, and sync read markers so a channel read on another device shows as read here. This would also make an Android client practical, either Goguma or a future IRChatterbox app.

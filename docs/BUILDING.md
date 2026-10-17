@@ -75,30 +75,27 @@ The tests cover connecting over TLS, SASL and NickServ logins, highlights, the t
 | Trigger | Result |
 |---|---|
 | Any push or pull request | The exe is saved as an artifact on the run (30 days) |
-| Push to `main` | The **Nightly build** pre-release is replaced with this build |
-| Push a tag `vX.Y.Z` | Release `vX.Y.Z` is published with notes, the exe, a zip and SHA256SUMS |
-| Publishing a release on GitHub | The exe is attached to it |
+| Push to `main` | Build, then the security scans. If both pass, a new release is published automatically |
+| Push a tag `vX.Y.Z` | Release `vX.Y.Z` is published (the tag must match `VERSION`) |
 
 ### Versions
 
-`source/VERSION` holds the version you're working towards, e.g. `0.3.0`. It's the only place the number lives.
+`source/VERSION` holds `MAJOR.MINOR.PATCH`, e.g. `0.3.0`. You only edit it to start a new minor or major version.
 
 | Build | Version |
 |---|---|
-| Release | exactly `VERSION`, e.g. `0.3.0` |
-| Any other CI build (Nightly, branches, PRs) | `0.3.0-dev.7+abc1234`, where 7 is the commits since `VERSION` last changed |
+| First release from `main` | exactly `VERSION`, e.g. `0.3.0` |
+| Every later push to `main` | the next patch, counted from the release tags: `0.3.1`, `0.3.2`, … |
+| Branches and pull requests | a pre-release of the next version, e.g. `0.3.3-dev.4+abc1234` |
 | Local `wails build` | `0.3.0-dev` |
 
-Dev builds are pre-releases of `VERSION`, so they rank below the release: anyone on a dev build is offered `0.3.0` once it's out.
+**Releasing is automatic.** Push to `main` (or merge a pull request), and the Build workflow builds the exe and runs govulncheck, npm audit and CodeQL. If everything passes it tags the next version and publishes the release with generated notes. The in-app updater offers it to everyone within six hours. If a check fails, nothing is released; fix it and push again.
 
-To cut a release:
+To start a new minor or major version, change `VERSION` to `0.4.0` and push. That push becomes `v0.4.0`, and patches count up from there. A `VERSION` with a suffix such as `0.4.0-beta.1` is released once as a pre-release, which the updater skips.
 
-1. Make sure `source/VERSION` says the version you're releasing, and push.
-2. **Actions → Build → Run workflow**, tick **Publish a release**, run. It builds, tags `v0.3.0` and publishes the release with notes and the exe.
-   (Pushing a tag works too: `git tag v0.3.0 && git push origin v0.3.0`. The tag must match `VERSION` or the build fails.)
-3. Bump `VERSION` to the next version (`0.3.1`) and push, so new dev builds count towards it.
+Pushes that only change documentation (`*.md`, `docs/`, screenshots) don't build or release.
 
-The app's auto-updater checks the latest non-pre-release release, downloads `IRChatterbox.exe`, checks it against `SHA256SUMS.txt` and swaps it in. Keep those two asset names unchanged. A `VERSION` like `0.4.0-beta.1` publishes as a pre-release, which the updater skips.
+The updater checks the latest non-pre-release release, downloads `IRChatterbox.exe`, checks it against `SHA256SUMS.txt` and swaps it in. Keep those two asset names unchanged.
 
 ## Security checks
 

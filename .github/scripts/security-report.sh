@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Turns the Security workflow's scan results into GitHub issues, one per scanner.
 #   found → open an issue (or update the open one; comment only when the findings changed)
+#           and fail the run, which also holds back the automatic release
 #   clean → close the open issue, if there is one
 #   error → leave issues alone, but fail the run so it gets noticed
 # On pull requests it only prints a summary and fails if anything was found.
@@ -30,6 +31,10 @@ report() {
   num=$(gh issue list --repo "$repo" --state open --label security --limit 100 --json number,body \
         --jq ".[] | select(.body | contains(\"<!-- security-scan:$key -->\")) | .number" | head -n1)
 
+  if [ "$status" = "found" ]; then
+    echo "::error::$title: findings, see the issue"
+    failed=1
+  fi
   if [ "$status" = "clean" ]; then
     if [ -n "$num" ]; then
       gh issue close "$num" --repo "$repo" --comment "Fixed: the latest scan is clean. ($RUN_URL)"
