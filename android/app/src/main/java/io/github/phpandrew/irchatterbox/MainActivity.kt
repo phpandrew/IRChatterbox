@@ -1,0 +1,299 @@
+package io.github.phpandrew.irchatterbox
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.graphics.Color
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
+import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import org.json.JSONObject
+import java.io.IOException
+import java.net.URLConnection
+
+/**
+ * Hosts the shared IRChatterbox UI (source/frontend) in a WebView. bridge.js gives it the
+ * same window.go / window.runtime objects Wails provides on Windows.
+ */
+class MainActivity : ComponentActivity() {
+    private lateinit var web: WebView
+    private lateinit var root: FrameLayout
+    private val main = Handler(Looper.getMainLooper())
+    private var pageReady = false
+    private val pendingEvents = StringBuilder()
+    private var flushScheduled = false
+    private var pendingFocus: Pair<String, String>? = null
+    private var pendingShare: String? = null
+    private var fullscreenView: View? = null
+
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
+        super.onCreate(savedInstanceState)
+        current = this
+
+        root = FrameLayout(this)
+        web = WebView(this)
+        root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(root)
+
+        // keep the UI clear of the status bar, navigation bar, display cutout and keyboard
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()
+            )
+            v.updatePadding(left = bars.left, top = bars.top, right = bars.right, bottom = bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
+
+        val assets = WebViewAssetLoader.Builder()
+            .addPathHandler("/", WebPathHandler())
+            .build()
+
+        web.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            allowFileAccess = false
+            allowContentAccess = false
+            setSupportMultipleWindows(false)
+            textZoom = 100 // the app has its own font size setting
+            cacheMode = WebSettings.LOAD_DEFAULT
+        }
+        web.isVerticalScrollBarEnabled = false
+        web.overScrollMode = View.OVER_SCROLL_NEVER
+        web.addJavascriptInterface(JsBridge(this), "IcbNative")
+
+        val bridge = assets("bridge.js")
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(web, bridge, setOf("https://$HOST"))
+        }
+
+        web.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                assets.shouldInterceptRequest(request.url)
+
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (request.url.host == HOST) return false
+                CoreHost.openURL(request.url.toString())
+                return true
+            }
+
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                // older WebViews without document-start scripts
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    view.evaluateJavascript(bridge, null)
+                }
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                pageReady = true
+                flushEvents()
+                // let the UI load its state before jumping to a buffer
+                main.postDelayed({ deliverIntentExtras() }, 600)
+            }
+        }
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                Log.d(CoreHost.TAG, "js: ${m.message()} (${m.sourceId()}:${m.lineNumber()})")
+                return true
+            }
+
+            // full-screen video from YouTube / Vimeo embeds
+            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                fullscreenView = view
+                root.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                WindowCompat.getInsetsController(window, root).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
+
+            override fun onHideCustomView() {
+                fullscreenView?.let { root.removeView(it) }
+                fullscreenView = null
+                WindowCompat.getInsetsController(window, root).show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (fullscreenView != null) {
+                    web.webChromeClient?.onHideCustomView()
+                    return
+                }
+                web.evaluateJavascript("window.__icb && window.__icb.back()") { handled ->
+                    if (handled != "true") moveTaskToBack(true)
+                }
+            }
+        })
+
+        readIntent(intent)
+        web.loadUrl("https://$HOST/index.html")
+
+        if (Build.VERSION.SDK_INT >= 33 && !Notifications.allowed(this)) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readIntent(intent)
+        if (pageReady) deliverIntentExtras()
+    }
+
+    override fun onDestroy() {
+        if (current === this) current = null
+        web.destroy()
+        super.onDestroy()
+    }
+
+    // ---- intents: notification taps and "Share to IRChatterbox" ----
+
+    private fun readIntent(i: Intent?) {
+        i ?: return
+        val server = i.getStringExtra(Notifications.EXTRA_SERVER)
+        val buffer = i.getStringExtra(Notifications.EXTRA_BUFFER)
+        if (server != null && buffer != null) {
+            pendingFocus = server to buffer
+            Notifications.clear(this, server, buffer)
+        }
+        if (i.action == Intent.ACTION_SEND) {
+            pendingShare = i.getStringExtra(Intent.EXTRA_TEXT)
+        }
+    }
+
+    private fun deliverIntentExtras() {
+        pendingFocus?.let { (server, buffer) ->
+            pendingFocus = null
+            queueEvent("focusBuffer", JSONObject().put("server", server).put("buffer", buffer).toString())
+        }
+        pendingShare?.let {
+            pendingShare = null
+            queueEvent("shareText", JSONObject().put("text", it).toString())
+        }
+    }
+
+    // ---- backend → UI events, batched once per frame ----
+
+    fun queueEvent(event: String, dataJson: String) {
+        synchronized(pendingEvents) {
+            if (pendingEvents.isNotEmpty()) pendingEvents.append(',')
+            pendingEvents.append('[').append(JSONObject.quote(event)).append(',').append(dataJson).append(']')
+            if (flushScheduled) return
+            flushScheduled = true
+        }
+        main.postDelayed({ flushEvents() }, 16)
+    }
+
+    private fun flushEvents() {
+        if (!pageReady || isDestroyed) return
+        val batch = synchronized(pendingEvents) {
+            flushScheduled = false
+            if (pendingEvents.isEmpty()) return
+            val s = pendingEvents.toString()
+            pendingEvents.setLength(0)
+            s
+        }
+        web.evaluateJavascript("window.__icb&&window.__icb.emit([$batch])", null)
+    }
+
+    fun resolve(id: Int, replyJson: String) {
+        if (isDestroyed) return
+        web.evaluateJavascript("window.__icb&&window.__icb.resolve($id,$replyJson)", null)
+    }
+
+    /** Status/navigation bar colour follows the current theme. */
+    fun setSystemBars(color: String, light: Boolean) {
+        val c = try { Color.parseColor(color) } catch (_: IllegalArgumentException) { return }
+        root.setBackgroundColor(c)
+        window.decorView.setBackgroundColor(c)
+        WindowCompat.getInsetsController(window, root).apply {
+            isAppearanceLightStatusBars = light
+            isAppearanceLightNavigationBars = light
+        }
+    }
+
+    private fun assets(name: String) = assets.open(name).bufferedReader().use { it.readText() }
+
+    /** Serves the built frontend from assets/web/ at https://appassets.androidplatform.net/. */
+    private inner class WebPathHandler : WebViewAssetLoader.PathHandler {
+        override fun handle(path: String): WebResourceResponse? {
+            val clean = path.trimStart('/').ifEmpty { "index.html" }
+            if (clean.contains("..")) return null
+            return try {
+                val stream = assets.open("web/$clean")
+                val mime = when {
+                    clean.endsWith(".js") || clean.endsWith(".mjs") -> "text/javascript"
+                    clean.endsWith(".css") -> "text/css"
+                    clean.endsWith(".html") -> "text/html"
+                    clean.endsWith(".svg") -> "image/svg+xml"
+                    clean.endsWith(".wav") -> "audio/wav"
+                    clean.endsWith(".woff2") -> "font/woff2"
+                    clean.endsWith(".json") -> "application/json"
+                    else -> URLConnection.guessContentTypeFromName(clean) ?: "application/octet-stream"
+                }
+                WebResourceResponse(mime, if (mime.startsWith("text/") || mime.endsWith("json")) "utf-8" else null, stream)
+            } catch (_: IOException) {
+                null
+            }
+        }
+    }
+
+    fun openNotificationSettings() {
+        startActivity(
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+        )
+    }
+
+    fun requestNotifications() {
+        if (Build.VERSION.SDK_INT >= 33) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else openNotificationSettings()
+    }
+
+    @SuppressLint("BatteryLife")
+    fun requestUnrestricted() {
+        try {
+            startActivity(
+                Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+            )
+        } catch (_: Exception) {
+            startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+    }
+
+    companion object {
+        const val HOST = "appassets.androidplatform.net"
+        @Volatile var current: MainActivity? = null
+            private set
+    }
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">IRChatterbox</string>
+    <string name="channel_mentions">Mentions</string>
+    <string name="channel_mentions_desc">Your nick or a highlight word in a channel</string>
+    <string name="channel_messages">Private messages</string>
+    <string name="channel_messages_desc">Messages sent directly to you</string>
+    <string name="channel_service">Connection</string>
+    <string name="channel_service_desc">Shown while connections are kept open in the background</string>
+    <string name="service_title">Connected</string>
+    <string name="service_text_one">Online on 1 server</string>
+    <string name="service_text_many">Online on %d servers</string>
+    <string name="quit">Disconnect</string>
+</resources>

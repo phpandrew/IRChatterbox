@@ -5,6 +5,7 @@ import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm } from "./modals.js";
+import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_LINES = 2000;
@@ -282,7 +283,8 @@ function select(serverId, key) {
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
   if (S.focused) sendRead(srv, b);
-  $("input").focus();
+  afterSelect();
+  if (!isMobile()) $("input").focus(); // on a phone that would pop the keyboard up every time
 }
 
 function allBuffers() {
@@ -355,6 +357,7 @@ function renderTree() {
   if (!S.servers.length) html = `<div class="empty" style="padding:30px 10px">No servers yet.</div>`;
   tree.innerHTML = html;
   updateTitle();
+  afterTree(S.servers, S.active);
 }
 
 function updateTitle() {
@@ -523,6 +526,7 @@ async function moveServer(srv, d) {
 function renderHeader() {
   const srv = activeServer(), b = activeBuffer();
   const name = $("hName"), sub = $("hSub"), topic = $("hTopic"), meta = $("hMeta");
+  afterHeader(b);
   if (!srv || !b) { name.textContent = ""; sub.textContent = ""; topic.innerHTML = ""; meta.innerHTML = ""; return; }
   const net = srv.network || srv.cfg.name;
   if (b.type === "channel") {
@@ -944,7 +948,7 @@ export function showUpdateBar(info) {
   const bar = $("updateBar");
   bar.innerHTML = `<span class="ub-text"><b>IRChatterbox ${esc(info.latest)}</b> is available — you have ${esc(info.current)}.</span>
     <span class="ub-progress hidden"><i></i></span>
-    <button class="btn sm primary" id="ubInstall">Update &amp; restart</button>
+    <button class="btn sm primary" id="ubInstall">${android ? "Download update" : "Update &amp; restart"}</button>
     <button class="btn sm" id="ubNotes">What's new</button>
     <button class="btn sm" id="ubSkip">Skip this version</button>
     <button class="icon-btn" id="ubClose" title="Later">✕</button>`;
@@ -955,7 +959,7 @@ export function showUpdateBar(info) {
   $("ubInstall").onclick = async () => {
     bar.querySelectorAll("button").forEach((b) => (b.disabled = true));
     bar.querySelector(".ub-progress").classList.remove("hidden");
-    bar.querySelector(".ub-text").innerHTML = `Downloading IRChatterbox ${esc(info.latest)}…`;
+    bar.querySelector(".ub-text").innerHTML = android ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
     const err = await Go.InstallUpdate();
     if (err) {
       toast(err, "error");
@@ -963,7 +967,7 @@ export function showUpdateBar(info) {
       bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
       bar.querySelector(".ub-progress").classList.add("hidden");
     } else {
-      bar.querySelector(".ub-text").textContent = "Installed — restarting…";
+      bar.querySelector(".ub-text").textContent = android ? "Open the downloaded file to install it." : "Installed — restarting…";
     }
   };
 }
@@ -1384,6 +1388,7 @@ export function applySettings() {
   root.setProperty("--ts-col", probe.offsetWidth + 2 + "px");
   probe.remove();
   if (typeof positionNickHandle === "function") requestAnimationFrame(positionNickHandle);
+  afterTheme();
 }
 
 export function renderAll() {
@@ -1420,6 +1425,7 @@ document.querySelector(".brand .logo").outerHTML = `<img class="logo-img" src="$
 // ---------- boot ----------
 async function boot() {
   await initApi();
+  initMobile({ tabComplete, hideMenu, closeOverlay, closeFind });
   S.cfg = await Go.GetConfig();
   setCustomThemes(await Go.GetThemes());
   applySettings();

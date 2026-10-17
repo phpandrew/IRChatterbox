@@ -5,10 +5,11 @@
   </picture>
 </p>
 
-A modern IRC client for Windows. The backend is Go and the UI is built with Wails (WebView2).
+A modern IRC client for Windows and Android. The backend is Go; on Windows the UI runs in Wails (WebView2), and the Android app shares the same core and UI.
 
 ## Highlights
 - **Single exe**: no installer, starts with Windows if you want, updates itself from GitHub
+- **Android app**: the same client on your phone, with notifications you can reply to and an option to stay connected in the background. **[Android guide →](../docs/ANDROID.md)**
 - **Saved servers**: SASL or NickServ login, auto-connect, auto-join and reconnect
 - **Bouncer support**: connect through soju or ZNC to stay online 24/7, get what you missed, and sync read status with your phone
 - **Sidebar**: collapsible servers, unread and mention badges, drag to reorder
@@ -79,7 +80,7 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 **JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. Plugins can react to messages, joins, parts, kicks, nick changes, topics and more, add their own `/commands`, use timers, store data and fetch web pages. **[Plugin guide and API reference →](../docs/PLUGINS.md)**
 
 ## Download
-Get `IRChatterbox.exe` from the [Releases](../../releases) page. Once it's installed, the app updates itself.
+Get `IRChatterbox.exe` (Windows) or `IRChatterbox.apk` (Android) from the [Releases](../../releases) page. Once it's installed, the app tells you about new versions.
 
 ### Releases
 Every push to `main` that passes the build and security checks is released automatically as the next patch version (`v0.3.1`, `v0.3.2`, …). To start a new minor or major version, change `source/VERSION` (for example to `0.4.0`) and push. Pull requests and other branches are built too; the exe is on the Actions run page for 30 days. See [docs/BUILDING.md](../docs/BUILDING.md#versions) for details.

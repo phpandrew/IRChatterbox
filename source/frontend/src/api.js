@@ -1,8 +1,13 @@
-// Thin wrapper over the Wails bindings so the UI can also run in a plain browser with a mock backend.
+// Thin wrapper over the backend bindings. The same UI runs in three hosts:
+//  - Windows (Wails): window.go.core.App + window.runtime
+//  - Android: the shell injects the same two objects (android/…/bridge.js)
+//  - a plain browser, with the mock backend, for UI development
 let mock = null;
 
+const backend = () => window.go?.core?.App;
+
 export async function initApi() {
-  if (!window.go?.main?.App) {
+  if (!backend()) {
     mock = await import("./mock.js");
     mock.install();
   }
@@ -10,7 +15,7 @@ export async function initApi() {
 
 export const Go = new Proxy({}, {
   get: (_, name) => (...args) => {
-    const real = window.go?.main?.App;
+    const real = backend();
     if (real && real[name]) return real[name](...args);
     if (mock?.api[name]) return Promise.resolve(mock.api[name](...args));
     return Promise.resolve(null);

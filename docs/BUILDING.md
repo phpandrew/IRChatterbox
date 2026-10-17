@@ -126,24 +126,32 @@ All paths are under `source/`.
 | Path | What |
 |---|---|
 | `VERSION` | The version number (see Versions above) |
-| `main.go` | Window options, startup flags (`--minimized`, `--wait-pid`) |
-| `app.go` | Methods the UI calls, notifications, attention (tray/taskbar), auto-away |
-| `irc.go`, `ircmsg.go` | IRC connection: TLS, CAP/SASL, parsing, channel and user state, events |
-| `commands.go` | `/command` handling |
-| `encoding.go` | Per-server text encodings (UTF-8 with fallback, Cyrillic, Japanese, …) |
-| `plugins.go` | Built-in bots: temperature converter, URL commands, `!music` |
-| `scripts.go` | JavaScript plugin engine (see `docs/PLUGINS.md`) |
-| `nowplaying*.go` | Reading the current song from Windows media controls, MusicBee or a text file |
-| `logging.go` | History (`.jsonl`) and text logs (`.txt`), trimming |
-| `updater.go` | Auto-update from GitHub Releases |
-| `platform_windows.go` | Tray icon, taskbar flash, idle time, toasts |
-| `window_windows.go`, `autostart_windows.go` | Restoring window position and size, starting with Windows |
-| `config.go` | `config.json`, themes |
+| `main.go` | Desktop entry point: embeds the UI and `VERSION`, starts `core.RunDesktop` |
+| `core/` | Everything shared by Windows and Android (package `core`) |
+| `core/desktop.go` | Window options, lifecycle, dialogs, startup flags (`--minimized`, `--wait-pid`) — not built for Android |
+| `core/host_android.go` | The Android host: events, notifications, background/keep-alive — Android only |
+| `core/app.go` | Methods the UI calls, notifications, attention (tray/taskbar), auto-away |
+| `core/irc.go`, `core/ircmsg.go` | IRC connection: TLS, CAP/SASL, parsing, channel and user state, events |
+| `core/bouncer.go` | soju/ZNC: history replay, read markers |
+| `core/commands.go` | `/command` handling |
+| `core/encoding.go` | Per-server text encodings (UTF-8 with fallback, Cyrillic, Japanese, …) |
+| `core/plugins.go` | Built-in bots: temperature converter, URL commands, `!music` |
+| `core/scripts.go` | JavaScript plugin engine (see `docs/PLUGINS.md`) |
+| `core/nowplaying*.go` | Reading the current song from Windows media controls, MusicBee or a text file |
+| `core/logging.go` | History (`.jsonl`) and text logs (`.txt`), trimming |
+| `core/updater.go`, `core/updater_desktop.go` | Checking GitHub Releases; downloading and swapping the exe (desktop) |
+| `core/platform_windows.go` | Tray icon, taskbar flash, idle time, toasts |
+| `core/window_windows.go`, `core/autostart_windows.go` | Restoring window position and size, starting with Windows |
+| `core/config.go` | `config.json`, themes |
+| `mobile/` | gomobile binding for the Android app (see `docs/ANDROID.md`) |
 | `frontend/src/main.js` | UI: sidebar, chat, user list, input, drag to reorder |
 | `frontend/src/modals.js` | Settings, server editor, dialogs |
 | `frontend/src/format.js` | mIRC formatting and colours, links, inline media, nick colours |
 | `frontend/src/themes.js` | Built-in themes and theme handling |
 | `frontend/src/emoji.js`, `sounds.js` | Emoji picker, notification sounds |
+| `frontend/src/mobile.js` | Phone layout: drawers, back button, swipe gestures (Android and narrow windows) |
+
+The Android shell lives in `android/` at the repo root; see [ANDROID.md](ANDROID.md).
 
 ## Where user data lives
 

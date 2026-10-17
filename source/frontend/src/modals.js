@@ -4,6 +4,7 @@ import wordmarkDark from "./assets/wordmark-dark.png";
 import githubIcon from "./assets/github.png";
 import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
 import { showUpdateBar } from "./main.js";
+import { android } from "./mobile.js";
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
@@ -22,14 +23,14 @@ function open(html, cls = "", sticky = false) {
 }
 
 // a settings group: title, one-line description, then its controls
-const card = (title, desc, inner) =>
-  `<section class="set-card"><div class="set-head"><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ""}</div><div class="set-body">${inner}</div></section>`;
+const card = (title, desc, inner, cls = "") =>
+  `<section class="set-card ${cls}"><div class="set-head"><h3>${title}</h3>${desc ? `<p>${desc}</p>` : ""}</div><div class="set-body">${inner}</div></section>`;
 const field = (label, inner, hint = "", full = false) =>
   `<div class="field${full ? " full" : ""}"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
 const text = (id, v, ph = "", type = "text") => `<input type="${type}" id="${id}" value="${esc(v ?? "")}" placeholder="${esc(ph)}">`;
 const check = (id, v, label) => `<label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> ${label}</label>`;
-const val = (id) => $(id).value.trim();
-const on = (id) => $(id).checked;
+const val = (id) => ($(id)?.value ?? "").trim();
+const on = (id) => !!$(id)?.checked;
 const lines = (id) => $(id).value.split("\n").map((s) => s.trim()).filter(Boolean);
 
 // ---------- simple prompt ----------
@@ -255,7 +256,7 @@ export function openSettings(startTab) {
   const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
     <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
-    <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
+    <div class="modal-foot"><button class="btn left desktop-only" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
     const t = e.target.closest("[data-t]");
     if (!t) return;
@@ -281,7 +282,7 @@ export function openSettings(startTab) {
         <select id="${id}" style="flex:1">
           <option value="">None</option>
           ${BUILTIN_SOUNDS.map(([v, l]) => `<option value="${v}" ${value === v ? "selected" : ""}>${l}</option>`).join("")}
-          <option value="file" ${(value || "").startsWith("file:") ? "selected" : ""}>Custom sound file…</option>
+          ${android ? "" : `<option value="file" ${(value || "").startsWith("file:") ? "selected" : ""}>Custom sound file…</option>`}
         </select>
         <button class="btn sm" data-test-sound="${id}">▶ Test</button></div>
         <div class="snd-file ${(value || "").startsWith("file:") ? "" : "hidden"}" id="${id}File" style="display:flex;gap:8px;margin-top:6px">
@@ -311,25 +312,32 @@ export function openSettings(startTab) {
         ${field("History shown when opening a channel", text("gHist", set.historyLines, "200", "number"))}
         ${field("Maximum saved lines per channel", text("gMax", set.logMaxLines ?? 10000, "10000", "number"), "Older lines are removed from the history and .txt files. 0 = keep everything.")}
       </div>
-      <div class="set-sep"></div>
+      <div class="desktop-only"><div class="set-sep"></div>
       ${check("gTxt", set.textLogs, "Save each channel to a text log file (.txt)")}
       <div class="hint indent">Readable logs like <code>[2026-10-16 09:41:22] &lt;@Andrew&gt; hello</code> — one file per channel and private chat.</div>
       <div class="field" id="gTxtRow" style="margin-top:10px"><label>Log folder</label>
         <div style="display:flex;gap:8px"><input type="text" id="gFolder" value="${esc(set.logFolder || "")}" placeholder="Default: the IRChatterbox data folder\\logs" style="flex:1">
-        <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div>`) +
+        <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div></div>`) +
       card("Startup & closing", "Configure how IRChatterbox starts and exits.", `
       ${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
       <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
       ${check("gConfirm", set.confirmOnClose, "Confirm before quitting when I close the window")}
       ${check("gTray", set.trayIcon !== false, "Show an icon in the system tray")}
-      <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div>`) +
-      card("Away", "Mark yourself away on every network when you step away from your PC.", `
+      <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div>`, "desktop-only") +
+      card("Background", "What happens when you leave the app.", `
+      ${check("gKeep", set.keepAlive !== false, "Keep connection live in background")}
+      <div class="hint indent">Stays connected while the app is closed, with a small “Connected” notification. Off: disconnects in the background, and your bouncer replays what you missed when you come back.</div>
+      <div class="set-sep"></div>
+      <div class="status-row"><span class="grow" id="gBatt"></span><button class="btn sm" id="gBattBtn">Allow</button></div>
+      <div class="hint">Android may cut the connection to save battery. Letting IRChatterbox run unrestricted keeps it reliable.</div>
+      <div class="status-row"><span class="grow" id="gNotif"></span><button class="btn sm" id="gNotifBtn">Settings</button></div>`, "android-only") +
+      card("Away", android ? "Mark yourself away on every network when you put the app away." : "Mark yourself away on every network when you step away from your PC.", `
       ${check("gAway", set.autoAway, "Set me away automatically when I'm idle")}
       <div class="fgrid" style="margin-top:10px">
-        ${field("After this many minutes without keyboard or mouse input", text("gAwayMin", set.autoAwayMinutes ?? 15, "15", "number"))}
+        ${field(android ? "After this many minutes in the background" : "After this many minutes without keyboard or mouse input", text("gAwayMin", set.autoAwayMinutes ?? 15, "15", "number"))}
         ${field("Away message", text("gAwayMsg", set.autoAwayMessage ?? "Away from keyboard", "Away from keyboard"))}
       </div>
-      <div class="hint">You're set back as soon as you use your PC again. A manual <code>/away</code> is never undone automatically.</div>`) +
+      <div class="hint">You're set back as soon as you ${android ? "open the app" : "use your PC"} again. A manual <code>/away</code> is never undone automatically.</div>`) +
       card("Sending", "Protection against flooding a channel by accident.", `
       <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>`) +
       card("Messages", "The default message sent when you quit or leave a channel.", `
@@ -338,7 +346,7 @@ export function openSettings(startTab) {
     else if (tab === "highlights") body.innerHTML =
       card("Highlight words", "Lines containing your nick or these words are highlighted, badged in red and trigger a notification.", `
       ${field("Words", `<textarea id="hWords" placeholder="andrew&#10;tshirtgang">${esc((set.highlightWords || []).join("\n"))}</textarea>`, "One per line. Your current nick is always a highlight.")}`) +
-      card("Windows notifications", "Pop-up alerts when someone needs your attention.", `
+      card(android ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
       ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
       <div style="margin-top:10px"><button class="btn sm" id="hTest">Send a test notification</button></div>`) +
@@ -351,7 +359,7 @@ export function openSettings(startTab) {
       <div class="hint">Custom sounds can be .wav, .mp3, .ogg or .m4a. When a sound is set, the Windows notification itself stays silent so you don't hear two.</div>`) +
       card("Tray & taskbar", "Get your attention when you're in another app.", `
       ${check("hFlash", set.flashOnPing !== false, "Flash the tray icon and taskbar button when I'm mentioned or messaged")}
-      <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`) +
+      <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`, "desktop-only") +
       card("Ignore list", "Hide messages from these people entirely.", `
       ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`);
     else if (tab === "shortcuts") drawShortcuts();
@@ -372,6 +380,21 @@ export function openSettings(startTab) {
       $("gTxt").addEventListener("change", sync); sync();
       $("gBrowse").onclick = async () => { const f = await Go.PickFolder("Choose where to save text logs"); if (f) $("gFolder").value = f; };
       $("gOpenLogs").onclick = () => Go.OpenLogFolder();
+    }
+    if ($("gBatt") && android) {
+      const sync = () => {
+        const ok = window.icbAndroid.batteryUnrestricted();
+        $("gBatt").textContent = ok ? "✓ Battery: unrestricted" : "Battery: optimised by Android";
+        $("gBattBtn").classList.toggle("hidden", ok);
+        const n = window.icbAndroid.notificationsAllowed();
+        $("gNotif").textContent = n ? "✓ Notifications allowed" : "Notifications are turned off";
+        $("gNotifBtn").textContent = n ? "Settings" : "Turn on";
+      };
+      sync();
+      $("gBattBtn").onclick = () => window.icbAndroid.requestUnrestricted();
+      $("gNotifBtn").onclick = () => (window.icbAndroid.notificationsAllowed() ? window.icbAndroid.openNotificationSettings() : window.icbAndroid.requestNotifications());
+      // re-check when coming back from Android's settings screen
+      document.addEventListener("visibilitychange", () => { if (!document.hidden && $("gBatt")) sync(); });
     }
     if ($("hTest")) $("hTest").onclick = () => { collect(); Go.SaveSettings(set); Go.Notify("IRChatterbox", "This is what a highlight notification looks like."); };
     if ($("sndVol")) {
@@ -499,7 +522,7 @@ export function openSettings(startTab) {
       <section class="set-card about">
         <img class="about-logo for-light" src="${wordmarkLight}" alt="IRChatterbox">
         <img class="about-logo for-dark" src="${wordmarkDark}" alt="IRChatterbox">
-        <p class="about-tag">A modern IRC client for Windows.</p>
+        <p class="about-tag">A modern IRC client for Windows and Android.</p>
         <div class="about-ver">Version <b id="abVer">…</b></div>
         <p class="about-by">Created by <b>Andrew Lyle</b> · <a href="https://github.com/phpandrew" data-url="https://github.com/phpandrew">@phpandrew</a></p>
         <div class="about-actions">
@@ -585,15 +608,15 @@ export function openSettings(startTab) {
         ${field("Cooldown per channel (seconds)", text("muCd", plug.music.cooldown, "10", "number"))}
         <div class="field" style="align-self:end"><button class="btn sm" id="muTest">Test now</button></div>
       </div>
-      <div class="test-out hidden" id="muOut"></div>`) +
+      <div class="test-out hidden" id="muOut"></div>`, "desktop-only") +
       card("URL commands", "Typing the trigger fetches a web address and posts the result — like !solar.", `
       <p class="hint" style="margin:0 0 12px">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
       <button class="btn sm" id="ucAdd">+ Add command</button>`) +
       card("Script plugins", "Your own JavaScript plugins from the plugins folder.", `
       ${check("pScripts", plug.scriptsEnabled, "Run JavaScript plugins from the plugins folder")}
-      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm" id="pOpen">Open data folder</button><button class="btn sm" id="pReload">Reload plugins</button><span class="muted" id="pReloadOut" style="align-self:center;font-size:12px"></span></div>
-      <div class="hint" style="margin-top:10px">See <code>plugins/_example.js</code> for the API (on, reply, say, httpGet…).</div>`);
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm desktop-only" id="pOpen">Open data folder</button><button class="btn sm" id="pReload">Reload plugins</button><span class="muted" id="pReloadOut" style="align-self:center;font-size:12px"></span></div>
+      <div class="hint" style="margin-top:10px">See <code>plugins/_example.js</code> for the API (on, reply, say, httpGet…).</div>`, "desktop-only");
     const drawUc = () => {
       $("ucList").innerHTML = plug.urlCommands.map((u, i) => `
         <div class="urlcmd" data-i="${i}">
@@ -653,6 +676,7 @@ export function openSettings(startTab) {
       set.trayIcon = on("gTray"); set.closeToTray = on("gCloseTray");
       set.autoAway = on("gAway"); set.autoAwayMinutes = Math.max(1, parseInt(val("gAwayMin")) || 15); set.autoAwayMessage = val("gAwayMsg");
       set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
+      if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }

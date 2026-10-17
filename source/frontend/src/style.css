@@ -415,3 +415,92 @@ input[type=range] { accent-color: var(--accent); }
 .mode-opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .bnc-mode .only-direct, .modal-body:not(.bnc-mode) .only-bouncer { display: none !important; }
 .bnc-note { margin: 10px 0 0; }
+
+/* ---------- phones: the Android app, or a window narrower than 760px (mobile.js) ---------- */
+.m-only, #scrim { display: none; }
+body.mobile .m-only { display: grid; }
+body.mobile .m-hide, body.android .desktop-only { display: none !important; }
+body:not(.android) .android-only { display: none !important; }
+body.mobile .resizer, body.mobile #nickHandle, body.mobile #statusbar, body.mobile .composer-hint,
+body.mobile .h-meta, body.mobile .jump kbd, body.mobile .buf .x { display: none !important; }
+body.mobile [draggable] { -webkit-user-drag: none; }
+body.mobile { -webkit-tap-highlight-color: transparent; }
+
+/* drawers */
+body.mobile #sidebar, body.mobile #userlist { position: fixed; top: 0; bottom: 0; z-index: 30; width: min(84vw, 320px); transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s; }
+body.mobile #sidebar { left: 0; transform: translateX(-104%); }
+body.mobile #userlist, body.mobile #userlist.off { right: 0; left: auto; transform: translateX(104%); display: flex; width: min(72vw, 280px); }
+body.mobile.nav-open #sidebar, body.mobile.users-open #userlist { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.35); }
+body.mobile #scrim { display: block; position: fixed; inset: 0; z-index: 29; background: rgba(0,0,0,.45); opacity: 0; pointer-events: none; transition: opacity .2s; }
+body.mobile.nav-open #scrim, body.mobile.users-open #scrim { opacity: 1; pointer-events: auto; }
+
+/* bigger touch targets in the drawers */
+body.mobile .buf { padding: 10px 10px; font-size: 15px; }
+body.mobile .srv-head { padding: 9px 6px; }
+body.mobile .srv-name { font-size: 15px; }
+body.mobile .ul-user { padding-top: 8px; padding-bottom: 8px; font-size: 14.5px; }
+body.mobile .side-top { padding-top: 14px; }
+body.mobile .jump { padding: 10px 12px; }
+
+/* header: ☰ | title | actions, topic on a second line */
+body.mobile #header { grid-template-columns: auto 1fr auto; grid-template-areas: "nav title act" "topic topic topic"; gap: 2px 6px; padding: 6px 6px 6px 4px; min-height: 0; }
+body.mobile #navBtn { grid-area: nav; position: relative; width: 40px; height: 40px; }
+body.mobile #navBtn svg { width: 22px; height: 22px; }
+body.mobile .h-title { grid-area: title; min-width: 0; }
+body.mobile .h-name { font-size: 17px; overflow: hidden; text-overflow: ellipsis; }
+body.mobile .h-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.mobile .h-actions { grid-area: act; }
+body.mobile .h-actions .icon-btn { width: 40px; height: 40px; }
+body.mobile .h-topic { grid-area: topic; border-left: 0; padding: 0 8px 2px 46px; font-size: 12.5px; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+body.mobile .h-topic.open { white-space: normal; max-height: 40vh; overflow-y: auto; }
+body.mobile .h-topic:empty { display: none; }
+.nav-badge { position: absolute; top: 4px; right: 2px; display: none; }
+.nav-badge.dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); top: 8px; right: 7px; }
+.nav-badge.hl { display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 10.5px; font-style: normal; font-weight: 700; }
+
+/* chat lines flow like text: time, nick, message */
+body.mobile #chat { padding: 6px 0 10px; }
+body.mobile .line { display: block; padding: 2px 10px; }
+body.mobile .line .ts { margin-right: 6px; font-size: .74em; }
+body.mobile .line .who { display: inline; text-align: left; border-right: 0; padding-right: 0; margin-right: 6px; }
+body.mobile .line .msg { display: inline; }
+body.mobile .line.ev .who { margin-right: 4px; }
+body.mobile .day { margin: 8px 10px 4px; }
+body.mobile #toLatest { right: 14px; bottom: 10px; }
+
+/* composer */
+body.mobile #composer { padding: 6px 8px 8px; }
+body.mobile .input-box { padding: 4px 4px 4px 4px; align-items: flex-end; border-radius: 22px; }
+body.mobile #input { font-size: 16px; padding: 8px 4px; }
+body.mobile .input-box .icon-btn { width: 38px; height: 38px; border-radius: 19px; }
+body.mobile #sendBtn { background: var(--accent); color: var(--accent-text); }
+body.mobile #tabBtn { color: var(--text-faint); }
+body.mobile #emojiPicker { left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important; width: 100% !important; height: min(46vh, 380px) !important; border-radius: 14px 14px 0 0; }
+body.mobile #completeBox { left: 8px !important; right: 8px; min-width: 0; max-height: 36vh; }
+body.mobile #completeBox .c { padding: 9px 10px; font-size: 14px; }
+body.mobile #findBar { padding: 6px 8px; }
+
+/* menus and dialogs */
+body.mobile #menu { min-width: 220px; max-width: calc(100vw - 16px); }
+body.mobile #menu .mi { padding: 12px 14px; font-size: 15px; }
+body.mobile #toast { top: auto; bottom: 84px; max-width: calc(100vw - 32px); }
+body.mobile #overlay { place-items: end center; }
+body.mobile .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+body.mobile .modal.sm { height: auto; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+body.mobile .modal.settings { width: 100vw; height: 100dvh; max-height: 100dvh; }
+body.mobile .modal-head { padding: 14px 14px 8px; }
+body.mobile .modal-body, body.mobile .modal.settings .modal-body { padding: 10px 12px 14px; }
+body.mobile .modal-foot { padding: 10px 12px; flex-wrap: wrap; }
+body.mobile .modal-foot .btn { padding-top: 10px; padding-bottom: 10px; }
+body.mobile .tabs { padding: 0 8px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+body.mobile .tab { white-space: nowrap; padding: 10px 12px; }
+body.mobile .fgrid { grid-template-columns: 1fr; }
+body.mobile .set-card { padding: 14px 14px; }
+body.mobile .set-card .indent { padding-left: 26px; }
+body.mobile .set-card .check { padding: 8px 0; }
+body.mobile input[type=text], body.mobile input[type=number], body.mobile select, body.mobile textarea { font-size: 16px; }
+.status-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.status-row .grow { flex: 1; }
+body.mobile .urlcmd .row { flex-wrap: wrap; }
+body.mobile .urlcmd .row .field { flex: 1 1 40% !important; min-width: 120px; }
+body.mobile .urlcmd .row .field:has(.check) { flex-basis: 100% !important; }

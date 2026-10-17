@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="brand">#2F81F7</color>
+    <!-- matches the built-in themes's background so there's no flash before the UI paints -->
+    <color name="window_bg">#FFFFFF</color>
+</resources>
