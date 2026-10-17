@@ -135,7 +135,7 @@ export async function openServerEditor(cfg, onSaved) {
             <option value="soju" ${c.bouncer !== "znc" ? "selected" : ""}>soju</option>
             <option value="znc" ${c.bouncer === "znc" ? "selected" : ""}>ZNC</option></select></div>
         <div class="field only-bouncer"><label>Network</label>${text("sBncNet", c.bouncerNetwork, "libera")}<div class="hint">The network's name on your bouncer. Add one server here per network.</div></div>
-        <div class="field only-bouncer"><label>Bouncer username</label>${text("sBncUser", c.bouncerUser, "andrew")}</div>
+        <div class="field only-bouncer"><label>Bouncer username</label>${text("sBncUser", c.bouncerUser, "your bouncer login")}</div>
         <div class="field only-bouncer"><label>Bouncer password</label>${text("sBncPass", c.bouncerPass, "", "password")}</div>
         <div class="field only-direct"><label>Server password</label>${text("sPass", c.password, "usually empty", "password")}</div>
         <div class="field"><label>&nbsp;</label>${check("sAuto", c.autoConnect, "Connect automatically on startup")}</div>
@@ -202,13 +202,13 @@ export async function openServerEditor(cfg, onSaved) {
   $("sCancel").onclick = closeOverlay;
   const save = async (connect) => {
     const bnc = $("sBody").classList.contains("bnc-mode");
-    const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : bnc && !$("sBncPass").value ? "sBncPass" : null;
+    const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : bnc && !val("sBncUser") ? "sBncUser" : bnc && !$("sBncPass").value ? "sBncPass" : null;
     document.querySelectorAll(".field input.invalid").forEach((x) => x.classList.remove("invalid"));
     if (missing) {
       $(missing).classList.add("invalid");
       $(missing).focus();
       $("sErr").textContent = missing === "sHost" ? (bnc ? "Enter your bouncer's host" : "Enter a server host (or pick a network above)")
-        : missing === "sNick" ? "Enter a nickname" : "Enter your bouncer password";
+        : missing === "sNick" ? "Enter a nickname" : missing === "sBncUser" ? "Enter your bouncer username" : "Enter your bouncer password";
       return;
     }
     const out = {

@@ -70,6 +70,8 @@ type Conn struct {
 
 	userDebounce map[string]*time.Timer
 	stop         chan struct{}
+	running      bool          // a run() loop exists (connected, connecting or waiting to reconnect)
+	wake         chan struct{} // cuts a reconnect wait short
 
 	// bouncer / history state (see bouncer.go)
 	connectedAt    time.Time
@@ -136,15 +138,46 @@ func (c *Conn) Status() string {
 
 func (c *Conn) Connect() {
 	c.mu.Lock()
-	if c.status != "disconnected" {
+	if c.running {
+		// Already connected, or waiting to reconnect: never start a second loop (two loops
+		// would share one connection's state). If it's waiting, retry now instead.
+		if !c.wantQuit {
+			select {
+			case c.wake <- struct{}{}:
+			default:
+			}
+		}
 		c.mu.Unlock()
+		if c.wantQuitNow() {
+			// the old loop is shutting down after a Disconnect: start fresh once it's gone
+			go func() {
+				for i := 0; i < 50 && c.isRunning(); i++ {
+					time.Sleep(100 * time.Millisecond)
+				}
+				c.Connect()
+			}()
+		}
 		return
 	}
+	c.running = true
 	c.wantQuit = false
 	c.status = "connecting"
 	c.stop = make(chan struct{})
+	c.wake = make(chan struct{}, 1)
 	c.mu.Unlock()
 	go c.run()
+}
+
+func (c *Conn) isRunning() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.running
+}
+
+func (c *Conn) wantQuitNow() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.wantQuit
 }
 
 func (c *Conn) Disconnect(msg string) {
@@ -172,6 +205,11 @@ func (c *Conn) Disconnect(msg string) {
 }
 
 func (c *Conn) run() {
+	defer func() {
+		c.mu.Lock()
+		c.running = false
+		c.mu.Unlock()
+	}()
 	for {
 		c.setStatus("connecting")
 		addr := net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
@@ -206,6 +244,7 @@ func (c *Conn) run() {
 		c.info("", "info", fmt.Sprintf("Reconnecting in %ds…", int(wait.Seconds())))
 		select {
 		case <-time.After(wait):
+		case <-c.wake: // Connect pressed (e.g. after fixing the settings): retry now
 		case <-c.stop:
 			return
 		}
@@ -307,6 +346,9 @@ func (c *Conn) session(addr string) error {
 			return err
 		}
 		line = c.decode(line)
+		if debugRaw != nil {
+			debugRaw("<< " + strings.TrimRight(line, "\r\n"))
+		}
 		c.handle(ParseMessage(line))
 	}
 }
@@ -355,7 +397,13 @@ func mathMin(a, b float64) float64 {
 	return b
 }
 
+// debugRaw, when set (tests), sees every line sent and received.
+var debugRaw func(string)
+
 func (c *Conn) SendRaw(line string) {
+	if debugRaw != nil {
+		debugRaw(">> " + line)
+	}
 	line = c.encode(strings.NewReplacer("\r", "", "\n", " ").Replace(line))
 	c.mu.Lock()
 	out := c.out
