@@ -95,6 +95,9 @@ type Settings struct {
 	LightTheme       string   `json:"lightTheme"` // used when theme = auto
 	DarkTheme        string   `json:"darkTheme"`
 	HighlightWords   []string `json:"highlightWords"`
+	NotifyList       []string `json:"notifyList"`    // friends to watch with MONITOR
+	NotifyFriends    bool     `json:"notifyFriends"` // toast when a friend comes online
+	SendTyping       bool     `json:"sendTyping"`    // tell others when you're typing (+typing)
 	Notifications    bool     `json:"notifications"`
 	NotifyPMs        bool     `json:"notifyPMs"`
 	InlineImages     bool     `json:"inlineImages"`
@@ -141,6 +144,10 @@ type Settings struct {
 	SoundHighlight string `json:"soundHighlight"`
 	SoundPM        string `json:"soundPM"`
 	SoundVolume    int    `json:"soundVolume"` // 0-100
+
+	// image uploads (attach button, paste, drag and drop): "irchatterbox" | "imgur"
+	UploadHost    string `json:"uploadHost"`
+	ImgurClientID string `json:"imgurClientId"`
 
 	// Android: keep connections live while the app is in the background (a foreground
 	// service with a status-bar notification). Off: disconnect in the background and let
@@ -225,14 +232,14 @@ func defaultConfig() Config {
 		Servers: []ServerConfig{},
 		Settings: Settings{
 			Theme: "auto", LightTheme: "Light", DarkTheme: "Dark",
-			HighlightWords: []string{}, Notifications: true, NotifyPMs: true,
+			HighlightWords: []string{}, Notifications: true, NotifyPMs: true, NotifyList: []string{}, NotifyFriends: true, SendTyping: true,
 			InlineImages: true, InlineYouTube: true, InlineVideos: true, ShowJoinsParts: true,
 			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200, LogMaxLines: 10000,
 			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, NickContrast: true, Ignore: []string{},
 			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,
 			AutoAwayMinutes: 15, AutoAwayMessage: "Away from keyboard",
 			SoundHighlight: "chime", SoundPM: "ping", SoundVolume: 70,
-			KeepAlive: true,
+			KeepAlive: true, UploadHost: UploadHostIRChatterbox,
 		},
 		NickColors: map[string]string{},
 		Shortcuts:  defaultShortcuts(),
@@ -288,6 +295,7 @@ func NewStore() *Store {
 		s.saveLocked()
 	}
 	writeExamplePlugin(filepath.Join(dir, "plugins"))
+	writeExampleMirc(filepath.Join(dir, "plugins"))
 	return s
 }
 

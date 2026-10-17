@@ -10,7 +10,7 @@ plugins {
 val baseVersion = rootProject.file("../source/VERSION").readText().trim()
 val appVersion = (findProperty("appVersion") as String?)?.takeIf { it.isNotBlank() } ?: "$baseVersion-dev"
 
-// 0.4.2 → 4002 (+ the CI run number for dev builds so they still install over each other)
+// 0.4.2 → 40020: major·1,000,000 + minor·10,000 + patch·10
 fun versionCodeOf(v: String): Int {
     val nums = v.substringBefore('-').substringBefore('+').split('.').map { it.toIntOrNull() ?: 0 }
     val (maj, min, pat) = (nums + listOf(0, 0, 0)).take(3)

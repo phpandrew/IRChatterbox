@@ -5,6 +5,7 @@ import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm } from "./modals.js";
+import { detectOS, os } from "./platform.js";
 import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
 
 const $ = (id) => document.getElementById(id);
@@ -47,6 +48,7 @@ function ensureBuffer(srv, name, type) {
     srv.buffers.set(key, b);
     if (b.type !== "server") loadHistory(srv, b);
     scheduleTree();
+    if (isSplit()) renderPanesSoon();
   }
   return b;
 }
@@ -58,10 +60,16 @@ function activeBuffer() { const s = activeServer(); return s?.buffers.get(S.acti
 async function loadHistory(srv, b) {
   b.history = true;
   const lines = (await Go.GetHistory(srv.id, b.name)) || [];
-  const old = lines.filter((ev) => ev.time < b.created).map((ev) => ({ ...evToLine(ev), history: true, hl: false }));
+  const redacted = new Map(lines.filter((ev) => ev.type === "redact").map((ev) => [ev.text, ev.extra?.reason || ""]));
+  const old = lines.filter((ev) => ev.time < b.created && ev.type !== "redact").map((ev) => {
+    const l = { ...evToLine(ev), history: true, hl: false };
+    if (l.extra?.msgid && redacted.has(l.extra.msgid)) { l.redacted = true; l.redactReason = redacted.get(l.extra.msgid); }
+    return l;
+  });
   if (!old.length) return;
   b.lines = old.concat(b.lines);
   if (isActive(srv, b)) renderChat();
+  if (onScreen(srv, b)) renderPanesSoon();
 }
 
 function isActive(srv, b) { return S.active.server === srv.id && S.active.key === b.key; }
@@ -93,7 +101,7 @@ function addLine(srv, b, line) {
   }
   // already read on another device (bouncer read marker)?
   const counts = ["privmsg", "action", "notice"].includes(line.kind) && !line.self && !(b.readMark && line.t <= b.readMark);
-  const visible = isActive(srv, b) && S.focused;
+  const visible = onScreen(srv, b) && S.focused;
   if (visible && counts) sendReadSoon(srv, b);
   // Marker line: the first message that arrives after you stopped looking at this buffer
   // (switched away or alt-tabbed) gets the divider above it.
@@ -110,6 +118,7 @@ function addLine(srv, b, line) {
       appendLineDom(b, line);
     }
   }
+  appendToPanes(srv, b, line, outOfOrder);
   if (!visible && counts) {
     b.unread++;
     if (line.hl || (b.type === "query" && line.kind !== "notice")) b.hl++;
@@ -143,7 +152,7 @@ function sendReadSoon(srv, b) {
   if (!srv?.cfg?.bouncer) return;
   const k = srv.id + "\0" + b.key;
   clearTimeout(readTimers.get(k));
-  readTimers.set(k, setTimeout(() => { readTimers.delete(k); if (isActive(srv, b) && S.focused) sendRead(srv, b); }, 1500));
+  readTimers.set(k, setTimeout(() => { readTimers.delete(k); if (onScreen(srv, b) && S.focused) sendRead(srv, b); }, 1500));
 }
 // a read marker arrived (from this or another device): recount what's still unread
 function applyReadMark(srv, b, t) {
@@ -181,8 +190,25 @@ function onIrc(ev) {
     }
     case "msg": {
       const b = resolveBuffer(srv, ev.buffer);
+      if (b.typing?.has(ev.nick)) setTyping(srv, b, ev.nick, "done");
       if (b.readMark === undefined && srv.readMarks?.[b.key]) b.readMark = srv.readMarks[b.key];
       addLine(srv, b, evToLine(ev));
+      break;
+    }
+    case "typing": {
+      const b = srv.buffers.get((ev.buffer || "").toLowerCase());
+      if (b) setTyping(srv, b, ev.nick, ev.text);
+      break;
+    }
+    case "redact": {
+      const b = srv.buffers.get((ev.buffer || "").toLowerCase());
+      const line = b?.lines.find((l) => l.extra?.msgid === ev.text);
+      if (line) {
+        line.redacted = true;
+        line.redactReason = ev.extra?.reason || "";
+        if (isActive(srv, b)) renderChat();
+        if (onScreen(srv, b)) renderPanesSoon();
+      }
       break;
     }
     case "read": {
@@ -259,12 +285,22 @@ function onIrc(ev) {
 function closeBufferLocal(srv, key) {
   if (!key) return;
   srv.buffers.delete(key);
+  if (isSplit()) paneList().forEach((p, i) => { if (p && p.server === srv.id && p.key === key && i !== S.ui.focus) S.ui.panes[i] = null; });
+  renderPanesSoon();
   if (S.active.server === srv.id && S.active.key === key) select(srv.id, "");
   scheduleTree();
 }
 
 // ---------- selection ----------
 function select(serverId, key) {
+  if (isSplit()) {
+    const list = paneList();
+    // already open in another pane: focus that pane instead of showing it twice
+    const j = list.findIndex((p, i) => i !== S.ui.focus && p && p.server === serverId && p.key === key);
+    if (j >= 0) { S.ui.focus = j; buildPanes(); }
+    list[S.ui.focus] = { server: serverId, key };
+    saveUi();
+  }
   const prev = activeBuffer();
   if (prev && !(S.active.server === serverId && S.active.key === key)) {
     // leaving a buffer: everything in it now counts as read, so the next message gets the line
@@ -279,6 +315,7 @@ function select(serverId, key) {
   saveUi();
   Go.SetActive(serverId, b.name);
   renderAll();
+  renderTyping();
   b.markPending = false; // you're reading it now
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
@@ -483,12 +520,15 @@ $("tree").addEventListener("contextmenu", (e) => {
       S.cfg.startView = isStart ? {} : { server: srv.id, buffer: b.name };
       toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
     }, "", isStart]);
+    items.push(["Show in split view", () => showInSplit(srv, b)]);
     items.push("-");
     items.push(["Mark as read", () => { b.unread = b.hl = 0; b.activity = false; scheduleTree(); sendRead(srv, b); }]);
     items.push(["Clear buffer", () => { b.lines = []; if (isActive(srv, b)) renderChat(); }]);
     items.push("-");
     items.push([b.type === "channel" ? "Leave & close" : "Close", () => closeBuffer(srv, b), "danger"]);
-    showMenu(e.clientX, e.clientY, items, b.name);
+    const x = e.clientX, y = e.clientY;
+    withPluginItems(items, { server: srv.id, buffer: b.name, kind: b.type === "channel" ? "channel" : "query", nick: b.type === "channel" ? "" : b.name })
+      .then((all) => showMenu(x, y, all, b.name));
   }
 });
 
@@ -511,7 +551,8 @@ function serverMenu(srv, e) {
       renderAll();
     }, "Remove");
   }, "danger"]);
-  showMenu(e.clientX, e.clientY, items, srv.cfg.name);
+  const x = e.clientX, y = e.clientY;
+  withPluginItems(items, { server: srv.id, buffer: "", kind: "status", nick: "" }).then((all) => showMenu(x, y, all, srv.cfg.name));
 }
 
 async function moveServer(srv, d) {
@@ -615,6 +656,8 @@ function ctxFor(srv) {
 
 const EV_SYMBOL = { join: "→", part: "←", quit: "←", kick: "✕", nick: "•", mode: "•", topic: "•" };
 
+const lineOf = new WeakMap(); // rendered .line element -> its line object
+
 function lineEl(srv, b, line) {
   const el = document.createElement("div");
   const isEv = line.type === "event";
@@ -645,8 +688,12 @@ function lineEl(srv, b, line) {
     msg = line.kind === "action" ? `<span class="nickref" style="color:${nickColor(line.nick)}">${esc(line.nick)}</span> ${ircToHtml(line.text, ctx)}` : ircToHtml(line.text, ctx);
   }
   const whoStyle = !isEv && line.type !== "info" && line.kind !== "action" ? ` style="color:${nickColor(line.nick)}"` : "";
-  el.innerHTML = `<span class="ts">${fmtTime(line.t)}</span><span class="who"${whoStyle} data-nick="${esc(line.nick || "")}" title="${esc(line.nick || "")}">${who}</span><span class="msg">${msg}</span>`;
-  if (line.type === "msg") addMedia(el, line.text);
+  if (line.redacted) msg = `<span class="redacted">message deleted${line.redactReason ? " · " + esc(line.redactReason) : ""}</span>`;
+  const acct = line.extra?.account;
+  const title = line.nick ? (acct ? `${line.nick} · logged in as ${acct}` : line.nick) : "";
+  el.innerHTML = `<span class="ts">${fmtTime(line.t)}</span><span class="who"${whoStyle} data-nick="${esc(line.nick || "")}" title="${esc(title)}">${who}</span><span class="msg">${msg}</span>`;
+  lineOf.set(el, line);
+  if (line.type === "msg" && !line.redacted) addMedia(el, line.text);
   return el;
 }
 
@@ -726,6 +773,10 @@ function renderChat() {
   chat.innerHTML = "";
   lastRenderedDay = "";
   chat.classList.toggle("compact", !!S.cfg.settings.compactMode);
+  if ((!srv || !b) && isSplit() && S.servers.length) {
+    chat.innerHTML = `<div class="pane-empty"><div><b>Empty pane</b><br>Pick a channel in the sidebar to show it here,<br>or drag a channel onto this pane.</div></div>`;
+    return;
+  }
   if (!srv || !b) {
     chat.innerHTML = `<div class="empty"><img src="${logoUrl}" width="96" alt="" style="margin-bottom:12px"><h2>Welcome to IRChatterbox</h2><p>Add a server to get started.</p><p><button class="btn primary" id="emptyAdd">Add server</button></p></div>`;
     $("emptyAdd").onclick = () => editServer();
@@ -782,6 +833,213 @@ function appendLineDom(b, line) {
   else if (!line.history) { newBelow++; updateToLatest(); }
 }
 
+
+// ---------- split view ----------
+// Up to four buffers on screen at once. The focused pane is the normal chat (#chat, with the
+// header, user list and input following it); the others are live read-only views. Click a
+// pane to focus it, pick a channel in the sidebar to show it there, or drag a channel onto it.
+const LAYOUTS = { single: 1, cols: 2, rows: 2, grid: 4 };
+const panes = []; // runtime: { cell, view } per pane (view is null for the focused one)
+// phones get one pane (no room for more); the saved layout comes back on a wide window
+function layout() { return LAYOUTS[S.ui.layout] && !isMobile() ? S.ui.layout : "single"; }
+function isSplit() { return layout() !== "single"; }
+function paneList() {
+  const n = LAYOUTS[layout()];
+  S.ui.panes = (S.ui.panes || []).slice(0, n);
+  while (S.ui.panes.length < n) S.ui.panes.push(null);
+  if (!(S.ui.focus >= 0 && S.ui.focus < n)) S.ui.focus = 0;
+  return S.ui.panes;
+}
+function paneBuf(p) {
+  const srv = p && S.byId[p.server];
+  const b = srv?.buffers.get(p.key);
+  return b ? { srv, b } : null;
+}
+// on screen anywhere: the focused buffer, or one shown in another pane
+function onScreen(srv, b) {
+  if (isActive(srv, b)) return true;
+  if (!isSplit()) return false;
+  return paneList().some((p, i) => i !== S.ui.focus && p && p.server === srv.id && p.key === b.key);
+}
+
+function buildPanes() {
+  const wrap = $("chatWrap"), chat = $("chat"), toLatest = $("toLatest");
+  wrap.querySelector(".pane-grid")?.remove();
+  panes.length = 0;
+  wrap.classList.toggle("split", isSplit());
+  if (!isSplit()) { wrap.prepend(chat); wrap.appendChild(toLatest); return; }
+  const grid = document.createElement("div");
+  grid.className = "pane-grid " + layout();
+  paneList().forEach((p, i) => {
+    const cell = document.createElement("div");
+    cell.className = "pane" + (i === S.ui.focus ? " focus" : "");
+    cell.dataset.i = i;
+    cell.innerHTML = `<div class="pane-head"><span class="pane-title"></span><button class="pane-x" title="Empty this pane">✕</button></div><div class="pane-body"></div>`;
+    const body = cell.querySelector(".pane-body");
+    let view = null;
+    if (i === S.ui.focus) body.append(chat, toLatest);
+    else { view = document.createElement("div"); view.className = "pane-view"; body.appendChild(view); }
+    grid.appendChild(cell);
+    panes.push({ cell, view });
+  });
+  wrap.prepend(grid);
+}
+
+function paneTitle(srv, b) {
+  const name = b.type === "server" ? srv.cfg.name || srv.cfg.host : b.name;
+  const style = b.type === "query" ? ` style="color:${nickColor(b.name)}"` : "";
+  return `<b${style}>${esc(name)}</b><span class="muted"> · ${esc(srv.network || srv.cfg.name)}</span>`;
+}
+
+function renderPanes() {
+  if (!isSplit()) return;
+  paneList().forEach((p, i) => {
+    const pn = panes[i];
+    if (!pn) return;
+    const pb = paneBuf(p);
+    pn.cell.querySelector(".pane-title").innerHTML = pb ? paneTitle(pb.srv, pb.b) : `<span class="muted">Empty pane</span>`;
+    pn.cell.classList.toggle("focus", i === S.ui.focus);
+    if (pn.view) renderPaneView(pn.view, pb);
+    // on screen counts as read
+    if (pb && pn.view && S.focused && (pb.b.unread || pb.b.hl)) { pb.b.unread = pb.b.hl = 0; pb.b.activity = false; scheduleTree(); sendRead(pb.srv, pb.b); }
+  });
+}
+let panesTimer = 0;
+function renderPanesSoon() { clearTimeout(panesTimer); panesTimer = setTimeout(renderPanes, 80); }
+
+function renderPaneView(view, pb) {
+  view.innerHTML = "";
+  view.classList.toggle("compact", !!S.cfg.settings.compactMode);
+  view._day = "";
+  if (!pb) {
+    view.innerHTML = `<div class="pane-empty"><div><b>Empty pane</b><br>Click here, then pick a channel in the sidebar,<br>or drag a channel onto it.</div></div>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for (const line of pb.b.lines.slice(-300)) {
+    const d = new Date(line.t).toDateString();
+    if (d !== view._day) { view._day = d; const el = document.createElement("div"); el.className = "day"; el.textContent = dayLabel(line.t); frag.appendChild(el); }
+    frag.appendChild(lineEl(pb.srv, pb.b, line));
+  }
+  view.appendChild(frag);
+  view.scrollTop = view.scrollHeight;
+}
+
+// a new line arrived: show it in any other pane that has this buffer open
+function appendToPanes(srv, b, line, outOfOrder) {
+  if (!isSplit()) return;
+  paneList().forEach((p, i) => {
+    if (i === S.ui.focus || !p || p.server !== srv.id || p.key !== b.key) return;
+    const view = panes[i]?.view;
+    if (!view) return;
+    if (outOfOrder || view.querySelector(".pane-empty")) return renderPanesSoon();
+    const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 80;
+    const d = new Date(line.t).toDateString();
+    if (d !== view._day) { view._day = d; const el = document.createElement("div"); el.className = "day"; el.textContent = dayLabel(line.t); view.appendChild(el); }
+    view.appendChild(lineEl(srv, b, line));
+    while (view.childElementCount > 350) view.firstElementChild.remove();
+    if (atBottom) view.scrollTop = view.scrollHeight;
+  });
+}
+
+function focusPane(i) {
+  const list = paneList();
+  if (i === S.ui.focus || i >= list.length) return;
+  S.ui.focus = i;
+  saveUi();
+  buildPanes();
+  const pb = paneBuf(list[i]);
+  if (pb) select(pb.srv.id, pb.b.key);
+  else { S.active = { server: null, key: null }; renderAll(); }
+}
+
+function setLayout(name) {
+  const cur = S.active.server ? { server: S.active.server, key: S.active.key } : null;
+  S.ui.layout = name;
+  if (name !== "single") paneList()[S.ui.focus] = cur;
+  saveUi();
+  buildPanes();
+  if (!isSplit() && !cur) {
+    // back to one pane: keep showing something
+    const first = paneList()[0] || (S.ui.panes || []).find(Boolean);
+    const pb = paneBuf(first);
+    if (pb) return select(pb.srv.id, pb.b.key);
+  }
+  renderAll();
+}
+
+// put a buffer in another pane (opening split view if needed)
+function showInSplit(srv, b) {
+  if (!isSplit()) setLayout("cols");
+  const list = paneList();
+  let i = list.findIndex((p, j) => j !== S.ui.focus && !p);
+  if (i < 0) i = list.findIndex((_, j) => j !== S.ui.focus);
+  list[i] = { server: srv.id, key: b.key };
+  saveUi();
+  renderPanes();
+}
+
+function emptyPane(i) {
+  const list = paneList();
+  list[i] = null;
+  saveUi();
+  if (i === S.ui.focus) { S.active = { server: null, key: null }; renderAll(); }
+  else renderPanes();
+}
+
+$("chatWrap").addEventListener("mousedown", (e) => {
+  const cell = e.target.closest(".pane");
+  if (!cell || e.target.closest(".pane-x")) return;
+  const i = +cell.dataset.i;
+  if (i !== S.ui.focus) focusPane(i);
+});
+$("chatWrap").addEventListener("click", (e) => {
+  const x = e.target.closest(".pane-x");
+  if (x) emptyPane(+x.closest(".pane").dataset.i);
+});
+$("chatWrap").addEventListener("dragover", (e) => {
+  const cell = e.target.closest(".pane");
+  if (!cell || drag?.kind !== "channel") return;
+  e.preventDefault();
+  document.querySelectorAll(".pane.drop-on").forEach((c) => c !== cell && c.classList.remove("drop-on"));
+  cell.classList.add("drop-on");
+});
+$("chatWrap").addEventListener("dragleave", (e) => {
+  const cell = e.target.closest(".pane");
+  if (cell && !cell.contains(e.relatedTarget)) cell.classList.remove("drop-on");
+});
+$("chatWrap").addEventListener("drop", (e) => {
+  const cell = e.target.closest(".pane");
+  if (!cell || drag?.kind !== "channel") return;
+  e.preventDefault();
+  cell.classList.remove("drop-on");
+  const i = +cell.dataset.i, list = paneList();
+  // already shown in another pane: swap them
+  const j = list.findIndex((p) => p && p.server === drag.srv && p.key === drag.key);
+  if (j >= 0 && j !== i) list[j] = list[i];
+  list[i] = { server: drag.srv, key: drag.key };
+  saveUi();
+  if (i === S.ui.focus || j === S.ui.focus) {
+    const pb = paneBuf(list[S.ui.focus]);
+    if (pb) select(pb.srv.id, pb.b.key); else renderAll();
+  } else renderPanes();
+});
+
+// window narrowed into phone layout (or widened back): rebuild the panes to match
+addEventListener("resize", () => {
+  if ($("chatWrap").classList.contains("split") !== isSplit()) { buildPanes(); renderAll(); }
+});
+
+$("layoutBtn").onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect(), cur = layout();
+  showMenu(r.left, r.bottom + 4, [
+    ["Single", () => setLayout("single"), "", cur === "single"],
+    ["Side by side", () => setLayout("cols"), "", cur === "cols"],
+    ["Top and bottom", () => setLayout("rows"), "", cur === "rows"],
+    ["Four (2 × 2)", () => setLayout("grid"), "", cur === "grid"],
+  ], "Split view");
+};
+
 // Round "jump to latest" arrow: shown whenever you've scrolled up, with a count of new lines below.
 let newBelow = 0;
 function updateToLatest() {
@@ -837,7 +1095,24 @@ $("chat").addEventListener("contextmenu", (e) => {
   if (a) {
     e.preventDefault();
     showMenu(e.clientX, e.clientY, [["Open link", () => Go.OpenURL(a.dataset.url)], ["Copy link", () => navigator.clipboard.writeText(a.dataset.url)]]);
+    return;
   }
+  // your own message with a server msgid: offer to delete it (IRCv3 message-redaction)
+  // a chat line: copy, delete your own (IRCv3 message-redaction), and script items
+  const lineElm = e.target.closest(".line");
+  const line = lineElm && lineOf.get(lineElm);
+  if (!line || line.redacted || window.getSelection()?.toString() || !["privmsg", "action", "notice"].includes(line.kind)) return;
+  e.preventDefault();
+  const srv = activeServer(), b = activeBuffer();
+  if (!srv || !b) return;
+  const items = [["Copy text", () => navigator.clipboard.writeText(line.text)]];
+  if (line.self && line.extra?.msgid) items.push(["Delete message", async () => {
+    const err = await Go.Redact(srv.id, b.name, line.extra.msgid);
+    if (err) toast(err, "error");
+  }, "danger"]);
+  const x = e.clientX, y = e.clientY;
+  withPluginItems(items, { server: srv.id, buffer: b.name, kind: "message", nick: line.nick || "", text: line.text || "" })
+    .then((all) => showMenu(x, y, all));
 });
 document.addEventListener("click", (e) => {
   const a = e.target.closest("a[href]");
@@ -928,7 +1203,9 @@ function userMenu(nick, e) {
   items.push(["Set nick colour…", () => openColorPicker(nick, custom, (c) => Go.SetNickColor(nick, c))]);
   if (custom) items.push(["Reset nick colour", () => Go.SetNickColor(nick, "")]);
   items.push(["Ignore", () => send("/ignore " + nick), "danger"]);
-  showMenu(e.clientX, e.clientY, items.filter((x) => x !== "danger"), nick);
+  const x = e.clientX, y = e.clientY;
+  withPluginItems(items.filter((i) => i !== "danger"), { server: srv.id, buffer: b?.name || "", kind: "nicklist", nick })
+    .then((all) => showMenu(x, y, all, nick));
 }
 
 // double-click the topic to edit it
@@ -948,7 +1225,7 @@ export function showUpdateBar(info) {
   const bar = $("updateBar");
   bar.innerHTML = `<span class="ub-text"><b>IRChatterbox ${esc(info.latest)}</b> is available — you have ${esc(info.current)}.</span>
     <span class="ub-progress hidden"><i></i></span>
-    <button class="btn sm primary" id="ubInstall">${android ? "Download update" : "Update &amp; restart"}</button>
+    <button class="btn sm primary" id="ubInstall">${android || info.manual ? "Download update" : "Update &amp; restart"}</button>
     <button class="btn sm" id="ubNotes">What's new</button>
     <button class="btn sm" id="ubSkip">Skip this version</button>
     <button class="icon-btn" id="ubClose" title="Later">✕</button>`;
@@ -959,7 +1236,7 @@ export function showUpdateBar(info) {
   $("ubInstall").onclick = async () => {
     bar.querySelectorAll("button").forEach((b) => (b.disabled = true));
     bar.querySelector(".ub-progress").classList.remove("hidden");
-    bar.querySelector(".ub-text").innerHTML = android ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
+    bar.querySelector(".ub-text").innerHTML = android || info.manual ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
     const err = await Go.InstallUpdate();
     if (err) {
       toast(err, "error");
@@ -967,9 +1244,68 @@ export function showUpdateBar(info) {
       bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
       bar.querySelector(".ub-progress").classList.add("hidden");
     } else {
-      bar.querySelector(".ub-text").textContent = android ? "Open the downloaded file to install it." : "Installed — restarting…";
+      bar.querySelector(".ub-text").textContent = android ? "Open the downloaded file to install it."
+        : info.manual ? "Unzip the download and move IRChatterbox into Applications, replacing the old one." : "Installed — restarting…";
     }
   };
+}
+
+// ---------- typing (IRCv3 +typing) ----------
+// Others: "Bob is typing…" above the input. Active expires after 6s, paused after 30s.
+function setTyping(srv, b, nick, state) {
+  b.typing ||= new Map();
+  clearTimeout(b.typing.get(nick)?.timer);
+  if (state === "done") b.typing.delete(nick);
+  else {
+    const timer = setTimeout(() => { b.typing.delete(nick); if (isActive(srv, b)) renderTyping(); }, state === "paused" ? 30000 : 6000);
+    b.typing.set(nick, { state, timer });
+  }
+  if (isActive(srv, b)) renderTyping();
+}
+function renderTyping() {
+  const b = activeBuffer(), el = $("typingNow");
+  const who = b?.typing ? [...b.typing.entries()].filter(([, v]) => v.state === "active").map(([n]) => n) : [];
+  el.textContent = !who.length ? "" : who.length === 1 ? `${who[0]} is typing…` : who.length === 2 ? `${who[0]} and ${who[1]} are typing…` : "Several people are typing…";
+  el.classList.toggle("on", who.length > 0);
+}
+// Ours: "active" at most every 3s while typing, "paused" after 5s idle, "done" on send/clear.
+let typingSent = { key: "", at: 0, state: "" }, typingIdle = 0;
+function typingTarget() {
+  const srv = activeServer(), b = activeBuffer();
+  return srv && b && b.type !== "server" ? { srv, b } : null;
+}
+function sendTypingState(state) {
+  const t = typingTarget();
+  if (!t || S.cfg.settings.sendTyping === false) return;
+  const key = t.srv.id + "\0" + t.b.key;
+  if (state === "active" && typingSent.key === key && typingSent.state === "active" && Date.now() - typingSent.at < 3000) return;
+  if (state !== "active" && (typingSent.key !== key || typingSent.state === "done" || !typingSent.state)) return;
+  typingSent = { key, at: Date.now(), state };
+  Go.SendTyping(t.srv.id, t.b.name, state);
+}
+function onTypingInput() {
+  clearTimeout(typingIdle);
+  const v = input.value;
+  if (!v.trim() || v.startsWith("/")) { sendTypingState("done"); return; }
+  sendTypingState("active");
+  typingIdle = setTimeout(() => sendTypingState("paused"), 5000);
+}
+
+// ---------- "closed unexpectedly" notice ----------
+async function showCrashNotice() {
+  if (android) return;
+  const d = await Go.GetDiagnostics();
+  if (!d?.lastCrash) return;
+  const bar = $("noticeBar");
+  bar.innerHTML = `<span class="ub-text"><b>IRChatterbox closed unexpectedly last time.</b> A crash report was saved — sending it helps get it fixed.</span>
+    <button class="btn sm primary" id="nbReport">Report problem</button>
+    <button class="btn sm" id="nbLogs">Open logs</button>
+    <button class="icon-btn" id="nbClose" title="Dismiss">✕</button>`;
+  bar.classList.remove("hidden");
+  const close = () => { bar.classList.add("hidden"); Go.DismissCrash(); };
+  $("nbReport").onclick = () => { Go.ReportProblem(); close(); };
+  $("nbLogs").onclick = () => Go.OpenDiagnostics();
+  $("nbClose").onclick = close;
 }
 
 // ---------- toast ----------
@@ -983,20 +1319,36 @@ export function toast(msg, kind = "ok") {
 }
 
 // ---------- context menu ----------
-export function showMenu(x, y, items, header) {
+// items: "-" or [label, fn | subItems[], className, checked]. A submenu opens in place,
+// with a Back item, so it works the same with a mouse and on a phone.
+export function showMenu(x, y, items, header, parent) {
   const m = $("menu");
-  m.innerHTML = (header ? `<div class="mh">${esc(header)}</div>` : "") + items.map((it, i) =>
-    it === "-" ? `<div class="sep"></div>` : `<button class="mi ${it[2] || ""}${it.length > 3 ? " chk" : ""}${it[3] ? " on" : ""}" data-i="${i}">${esc(it[0])}</button>`).join("");
+  const back = parent ? `<button class="mi back" data-back="1">‹ ${esc(parent.header || "Back")}</button><div class="sep"></div>` : "";
+  m.innerHTML = (header ? `<div class="mh">${esc(header)}</div>` : "") + back + items.map((it, i) =>
+    it === "-" ? `<div class="sep"></div>` : `<button class="mi ${it[2] || ""}${it.length > 3 ? " chk" : ""}${it[3] ? " on" : ""}${Array.isArray(it[1]) ? " sub" : ""}" data-i="${i}">${esc(it[0])}</button>`).join("");
   m.classList.remove("hidden");
   const r = m.getBoundingClientRect();
-  m.style.left = Math.min(x, innerWidth - r.width - 8) + "px";
-  m.style.top = Math.min(y, innerHeight - r.height - 8) + "px";
+  m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 8)) + "px";
   m.onclick = (e) => {
+    if (e.target.closest("[data-back]")) return showMenu(x, y, parent.items, parent.header, parent.parent);
     const b = e.target.closest("[data-i]");
     if (!b) return;
+    const it = items[+b.dataset.i];
+    if (Array.isArray(it[1])) return showMenu(x, y, it[1], it[0], { items, header, parent });
     hideMenu();
-    items[+b.dataset.i][1]();
+    it[1]();
   };
+}
+
+// Script-added menu items (mIRC "menu" blocks and the JS menu() call), appended after a
+// separator. kind: nicklist, channel, query, status or message.
+async function withPluginItems(items, ctx) {
+  let extra = null;
+  try { extra = await Go.PluginMenu(ctx); } catch { /* scripts off or not supported */ }
+  if (!extra?.length) return items;
+  const conv = (list) => list.map((it) => it.sep ? "-" : it.items ? [it.label, conv(it.items)] : [it.label, () => Go.RunPluginMenu(ctx, it.id)]);
+  return items.length ? [...items, "-", ...conv(extra)] : conv(extra);
 }
 function hideMenu() { $("menu").classList.add("hidden"); }
 document.addEventListener("mousedown", (e) => { if (!e.target.closest("#menu")) hideMenu(); });
@@ -1008,7 +1360,7 @@ function autosize() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 160) + "px";
 }
-input.addEventListener("input", () => { autosize(); updateCompletions(); tabState = null; });
+input.addEventListener("input", () => { autosize(); updateCompletions(); tabState = null; onTypingInput(); });
 
 const COMMANDS = [
   ["join", "#channel [key]"], ["part", "[#channel] [message]"], ["msg", "nick message"], ["query", "nick [message]"], ["me", "action"],
@@ -1149,6 +1501,134 @@ function openEmoji() {
 }
 $("emojiBtn").onclick = openEmoji;
 
+// ---------- image uploads: attach button, paste, drag and drop ----------
+const UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp", "image/bmp"];
+const UPLOAD_MAX = 10 * 1024 * 1024;
+let uploading = 0;
+
+// Phone photos are large (4000×3000, several MB) and carry EXIF metadata, GPS location
+// included. Before uploading, anything big is redrawn at most 2048 px on its longest side
+// and saved as JPEG: a fraction of the size, the right way up, and without the metadata.
+const SHRINK_EDGE = 2048;
+async function shrinkForUpload(file) {
+  const big = file.size > 1.5 * 1024 * 1024;
+  const convert = !UPLOAD_TYPES.includes(file.type); // e.g. HEIC from a phone camera, if the browser can read it
+  if (!(big || convert || file.type === "image/jpeg" || file.type === "image/bmp") || typeof createImageBitmap !== "function") return file;
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { return file; }
+  const scale = Math.min(1, SHRINK_EDGE / Math.max(bmp.width, bmp.height));
+  // a small PNG/WebP (a screenshot) stays as it is: re-encoding text as JPEG blurs it
+  if (scale === 1 && !big && !convert && file.type !== "image/jpeg" && file.type !== "image/bmp") { bmp.close?.(); return file; }
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  const g = c.getContext("2d");
+  g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); // transparent PNGs get a white background in JPEG
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.86));
+  if (!blob || (blob.size >= file.size && file.type !== "image/jpeg" && !convert)) return file;
+  return new File([blob], (file.name || "image").replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+}
+
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ""));
+    r.onerror = () => reject(new Error("That file couldn't be read."));
+    r.readAsDataURL(file);
+  });
+}
+
+// put the link where the caret is, with a space either side as needed
+function insertLink(url) {
+  const s = input.selectionStart ?? input.value.length, e = input.selectionEnd ?? s;
+  const before = input.value.slice(0, s), after = input.value.slice(e);
+  const text = (before && !/\s$/.test(before) ? " " : "") + url + (/^\s/.test(after) ? "" : " ");
+  input.setRangeText(text, s, e, "end");
+  autosize();
+  input.focus();
+}
+
+function setUploading(delta) {
+  uploading += delta;
+  $("attachBtn").classList.toggle("busy", uploading > 0);
+  $("attachBtn").title = uploading > 0 ? "Uploading…" : "Attach an image (or paste / drop one)";
+}
+
+async function uploadFiles(files) {
+  const list = [...files];
+  if (!list.length) return;
+  for (let f of list) {
+    if (f.type.startsWith("image/")) try { f = await shrinkForUpload(f); } catch {}
+    if (!UPLOAD_TYPES.includes(f.type)) { toast(`${f.name || "That file"}: only JPG, PNG, WebP and BMP images can be uploaded`, "error"); continue; }
+    if (f.size > UPLOAD_MAX) { toast(`${f.name || "That image"} is over 10 MB`, "error"); continue; }
+    setUploading(1);
+    toast(list.length > 1 ? `Uploading ${f.name}…` : "Uploading image…", "info");
+    try {
+      const res = await Go.UploadImage(await readAsBase64(f));
+      if (!res?.url) throw new Error("The upload didn't return a link.");
+      insertLink(res.url);
+      const days = res.expires ? Math.round((Date.parse(res.expires) - Date.now()) / 86400000) : 0;
+      toast(days > 0 ? `Image uploaded · link works for ${days} day${days === 1 ? "" : "s"}` : "Image uploaded", "ok");
+    } catch (err) {
+      toast(String(err?.message ?? err ?? "The upload failed."), "error");
+    } finally {
+      setUploading(-1);
+    }
+  }
+}
+
+$("attachBtn").onclick = () => {
+  if (uploading) return;
+  if (!android) { $("attachInput").click(); return; }
+  // on the phone: the camera app, or photos already on the phone
+  const r = $("attachBtn").getBoundingClientRect();
+  showMenu(r.left, r.top - 120, [
+    ["Take photo", () => $("cameraInput").click()],
+    ["Choose from gallery", () => $("attachInput").click()],
+  ]);
+};
+for (const id of ["attachInput", "cameraInput"])
+  $(id).addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
+
+// Android "Share → IRChatterbox" with photos: the app serves each one at a local URL
+on("shareImages", async ({ files }) => {
+  const got = [];
+  for (const { url, type, name } of files || []) {
+    try {
+      const blob = await (await fetch(url)).blob();
+      got.push(new File([blob], name || "image", { type: type || blob.type }));
+    } catch { toast("A shared image couldn't be read", "error"); }
+  }
+  uploadFiles(got);
+});
+
+// pasting a screenshot or a copied image uploads it; pasted text works as before
+input.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  e.preventDefault();
+  uploadFiles(files);
+});
+
+// dropping image files anywhere in the chat or message box uploads them; anything else
+// dropped from outside is ignored rather than opened in the window
+const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+document.addEventListener("dragover", (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  const ok = !!e.target.closest?.("#chatWrap, #composer");
+  e.dataTransfer.dropEffect = ok ? "copy" : "none";
+  $("composer").classList.toggle("file-drop", ok);
+});
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) $("composer").classList.remove("file-drop"); });
+document.addEventListener("drop", (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  $("composer").classList.remove("file-drop");
+  if (e.target.closest?.("#chatWrap, #composer")) uploadFiles(e.dataTransfer.files);
+});
+
 function send() {
   const text = input.value;
   if (!text.trim()) return;
@@ -1173,6 +1653,8 @@ function finishSend(srv, b, original, text) {
   S.histPos = -1;
   input.value = "";
   autosize();
+  clearTimeout(typingIdle);
+  typingSent = { key: "", at: 0, state: "" }; // the message itself ends "typing" for others
   document.getElementById("completeBox")?.remove();
   if (clientCommand(srv, b, text.trim())) return;
   Go.SendInput(srv.id, b.type === "server" ? "" : b.name, text);
@@ -1277,6 +1759,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === ",") { e.preventDefault(); openSettings(); }
   else if (e.ctrlKey && e.key.toLowerCase() === "e") { e.preventDefault(); openEmoji(); }
   else if (e.key === "F11") { e.preventDefault(); Go.ToggleFullscreen(); }
+  else if (e.key === "F6" && isSplit()) { e.preventDefault(); focusPane((S.ui.focus + (e.shiftKey ? LAYOUTS[layout()] - 1 : 1)) % LAYOUTS[layout()]); }
   else if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key.length === 1 && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") input.focus();
 });
 
@@ -1293,6 +1776,7 @@ function setFocus(f) {
     b.markPending = false;
     if (b.unread || b.hl) { b.unread = 0; b.hl = 0; b.activity = false; scheduleTree(); }
     sendRead(activeServer(), b);
+    renderPanes();
   }
 }
 window.addEventListener("focus", () => setFocus(true));
@@ -1375,7 +1859,7 @@ export function applySettings() {
   const set = S.cfg.settings;
   const root = document.documentElement.style;
   root.setProperty("--fs", (set.fontSize || 14) + "px");
-  root.setProperty("--chat-font", set.fontFamily ? `"${set.fontFamily}", var(--font)` : "var(--font)");
+  root.setProperty("--chat-font", set.fontFamily ? `"${set.fontFamily}", var(--font)` : "var(--theme-chat-font, var(--font))");
   setNickOverrides(S.cfg.nickColors);
   const theme = resolveTheme(set);
   applyTheme(theme);
@@ -1392,7 +1876,7 @@ export function applySettings() {
 }
 
 export function renderAll() {
-  renderTree(); renderHeader(); renderChat(); renderUsers(); renderStatus(); renderMe();
+  renderTree(); renderHeader(); renderChat(); renderUsers(); renderStatus(); renderMe(); renderPanes();
 }
 
 // Called by modals after the config changed.
@@ -1425,6 +1909,12 @@ document.querySelector(".brand .logo").outerHTML = `<img class="logo-img" src="$
 // ---------- boot ----------
 async function boot() {
   await initApi();
+  await detectOS();
+  // frontend errors go to app.log too (Settings → About → Open logs)
+  if (!android) {
+    addEventListener("error", (e) => Go.LogUI(`${e.message} at ${e.filename}:${e.lineno}`));
+    addEventListener("unhandledrejection", (e) => Go.LogUI("unhandled promise: " + (e.reason?.stack || e.reason)));
+  }
   initMobile({ tabComplete, hideMenu, closeOverlay, closeFind });
   S.cfg = await Go.GetConfig();
   setCustomThemes(await Go.GetThemes());
@@ -1475,6 +1965,7 @@ async function boot() {
     select(server, b.key);
   });
 
+  buildPanes();
   // open the channel chosen with "Show at startup", otherwise where you left off
   const sv = S.cfg.startView;
   const last = sv?.server && S.byId[sv.server] ? { server: sv.server, name: sv.buffer || "" } : S.ui.last;
@@ -1486,6 +1977,7 @@ async function boot() {
   else renderAll();
 
   Go.SetFocus(document.hasFocus());
+  showCrashNotice();
   await Go.AutoConnect();
 
   // First run only: open the server editor when there's nothing to connect to yet.

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"net"
 	"sort"
 	"strconv"
@@ -85,8 +86,15 @@ type Conn struct {
 	replayMentions int
 	replayFirst    string // buffer of the first missed mention, opened by the summary toast
 	summaryTimer   *time.Timer
-	prevOnline     int64     // when this bouncer connection was last online (ms), loaded at connect
-	onlineSince    time.Time // set once registered
+
+	// IRCv3 extras (ircv3.go)
+	labelSeq      int
+	pending       []pendingMsg // sent, waiting for echo-message
+	clientTagDeny string       // ISUPPORT CLIENTTAGDENY
+	monitorMax    int          // ISUPPORT MONITOR: -1 = not supported, 0 = no limit
+	monInitial    bool         // first MONITOR replies after connecting (no toasts)
+	prevOnline    int64        // when this bouncer connection was last online (ms), loaded at connect
+	onlineSince   time.Time    // set once registered
 }
 
 func newConn(app *App, cfg ServerConfig) *Conn {
@@ -230,6 +238,7 @@ func (c *Conn) run() {
 		c.mu.Unlock()
 		if err != nil {
 			c.info("", "error", "Disconnected: "+err.Error())
+			log.Printf("%s: disconnected: %v", c.cfg.Name, err)
 		} else {
 			c.info("", "info", "Disconnected")
 		}
@@ -284,6 +293,9 @@ func (c *Conn) session(addr string) error {
 	c.batches = map[string]string{}
 	c.histFetched = map[string]bool{}
 	c.replayBase = map[string]int64{}
+	c.pending = nil
+	c.clientTagDeny = ""
+	c.monitorMax = -1
 	c.prevOnline = c.app.lastOnline(c.cfg.ID)
 	c.historyLimit = 0
 	if c.lastSeen == nil {
@@ -434,23 +446,27 @@ func (c *Conn) Say(target, text string, viaPlugin bool) {
 		return
 	}
 	for _, chunk := range splitText(text, c.maxPayload("PRIVMSG", target)) {
-		c.SendRaw("PRIVMSG " + target + " :" + chunk)
-		c.emitOwn(target, "privmsg", chunk)
-		if !viaPlugin {
-			c.app.plugins.OnMessage(c, target, c.Nick(), chunk, true)
+		// with echo-message the line is shown (and bots see it) when the server echoes it
+		if !c.sendMsg("PRIVMSG", target, chunk, viaPlugin) {
+			c.emitOwn(target, "privmsg", chunk)
+			if !viaPlugin {
+				c.app.plugins.OnMessage(c, target, c.Nick(), chunk, true)
+			}
 		}
 	}
 }
 
 func (c *Conn) Action(target, text string) {
-	c.SendRaw("PRIVMSG " + target + " :\x01ACTION " + text + "\x01")
-	c.emitOwn(target, "action", text)
+	if !c.sendMsg("PRIVMSG", target, "\x01ACTION "+text+"\x01", false) {
+		c.emitOwn(target, "action", text)
+	}
 }
 
 func (c *Conn) Notice(target, text string) {
 	for _, chunk := range splitText(text, c.maxPayload("NOTICE", target)) {
-		c.SendRaw("NOTICE " + target + " :" + chunk)
-		c.emitOwn(target, "notice", chunk)
+		if !c.sendMsg("NOTICE", target, chunk, false) {
+			c.emitOwn(target, "notice", chunk)
+		}
 	}
 }
 
@@ -591,7 +607,8 @@ func (c *Conn) ChannelStates() []ChannelState {
 
 func (c *Conn) wantedCaps() []string {
 	want := []string{"multi-prefix", "away-notify", "account-notify", "server-time", "extended-join", "chghost", "userhost-in-names", "message-tags", "invite-notify", "cap-notify",
-		"batch", "draft/chathistory", "draft/read-marker"}
+		"batch", "draft/chathistory", "draft/read-marker",
+		"echo-message", "labeled-response", "setname", "account-tag", "extended-monitor", "draft/message-redaction", "standard-replies"}
 	switch {
 	case c.cfg.Bouncer == "soju" && c.cfg.BouncerPass != "":
 		want = append(want, "sasl")
@@ -612,6 +629,10 @@ func (c *Conn) onRegistered() {
 	if c.cfg.Bouncer != "" {
 		c.fetchMissedQueries()
 	}
+	go func() {
+		time.Sleep(1500 * time.Millisecond) // after ISUPPORT (005) has said whether MONITOR exists
+		c.startMonitor()
+	}()
 	if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "nickserv" && c.cfg.AuthPass != "" {
 		user := c.cfg.AuthUser
 		if user != "" {
@@ -691,6 +712,9 @@ func (c *Conn) handle(m *Message) {
 	}
 	me := c.Nick()
 	isMe := strings.EqualFold(nick, me)
+	if lbl := m.Tags["label"]; lbl != "" && m.Command != "PRIVMSG" && m.Command != "NOTICE" {
+		c.dropLabel(lbl) // an error (e.g. "cannot send to channel") instead of the echo
+	}
 	replay := c.isReplay(m)
 	if replay && m.Command != "PRIVMSG" && m.Command != "NOTICE" {
 		return // joins/parts etc. inside a history batch would corrupt the live channel state
@@ -712,6 +736,22 @@ func (c *Conn) handle(m *Message) {
 		}
 	case "ERROR":
 		c.info("", "error", m.Trailing())
+	case "TAGMSG":
+		c.onTagmsg(m, nick, isMe)
+	case "REDACT":
+		c.onRedact(m, nick)
+	case "SETNAME":
+		c.onSetname(m, nick, isMe)
+	case "730", "731":
+		c.onMonitor(m)
+	case "732", "733":
+		// MONITOR list replies
+	case "734":
+		c.info("", "error", "Your friends list is longer than this server allows ("+m.Param(1)+"); the rest aren't watched")
+	case "WARN", "NOTE":
+		c.info("*active*", "info", strings.Join(m.Params[2:], " "))
+	case "ACK":
+		// labeled-response: the server got a labeled command that has no other reply
 	case "BATCH":
 		c.onBatch(m)
 	case "MARKREAD":
@@ -731,6 +771,15 @@ func (c *Conn) handle(m *Message) {
 			more := m.Param(2) == "*"
 			c.capLS = append(c.capLS, strings.Fields(m.Trailing())...)
 			if more {
+				return
+			}
+			if c.checkSTS(c.capLS) {
+				// plain-text connection to a server that requires TLS: drop it; run() reconnects with TLS
+				c.mu.Lock()
+				if c.conn != nil {
+					c.conn.Close()
+				}
+				c.mu.Unlock()
 				return
 			}
 			avail := map[string]bool{}
@@ -809,6 +858,15 @@ func (c *Conn) handle(m *Message) {
 				for i := 0; i < 4 && i < len(parts); i++ {
 					c.chanModes[i] = parts[i]
 				}
+			case "CLIENTTAGDENY":
+				c.mu.Lock()
+				c.clientTagDeny = v
+				c.mu.Unlock()
+			case "MONITOR":
+				n, _ := strconv.Atoi(v) // no value = no limit
+				c.mu.Lock()
+				c.monitorMax = n
+				c.mu.Unlock()
 			case "CHATHISTORY":
 				if n, err := strconv.Atoi(v); err == nil {
 					c.mu.Lock()
@@ -1156,6 +1214,13 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 	if c.app.isIgnored(nick, m.Prefix) {
 		return
 	}
+	// our own message coming back (echo-message), or sent from another of our clients
+	skipPlugins := false
+	if isMe && c.hasCap("echo-message") {
+		if p, found := c.takeEcho(m, target, text); found {
+			skipPlugins = p.viaPlugin // a bot's own reply: don't let bots answer it
+		}
+	}
 
 	// CTCP
 	if len(text) > 1 && text[0] == 1 {
@@ -1166,6 +1231,9 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 			kind = "action"
 			text = arg
 		} else {
+			if isMe {
+				return // our own CTCP request echoed back: never answer ourselves
+			}
 			if m.Command == "PRIVMSG" {
 				switch cmd {
 				case "VERSION":
@@ -1204,11 +1272,15 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		highlight = c.app.isHighlight(c.Nick(), text)
 	}
 	ev := Event{Type: "msg", Buffer: buffer, Kind: kind, Nick: nick, Prefix: c.prefixOf(target, nick), Text: text, Time: ts, Self: isMe, Highlight: highlight}
+	ev.Extra = msgExtra(m)
 	if isPM && buffer != "*active*" {
-		ev.Extra = map[string]any{"query": true}
+		ev.Extra["query"] = true
 	}
 	c.emit(ev)
 	c.noteSeen(buffer, ts, isMe, text)
+	if skipPlugins {
+		return
+	}
 
 	if !isMe && (highlight || (isPM && kind != "notice")) {
 		c.app.notify(c, buffer, nick, text, isPM, highlight)
@@ -1229,4 +1301,16 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 			"isChannel": !isPM, "isPM": isPM,
 		})
 	}
+}
+
+// msgExtra carries per-message IRCv3 tags to the UI: msgid (for deleting) and account.
+func msgExtra(m *Message) map[string]any {
+	x := map[string]any{}
+	if id := m.Tags["msgid"]; id != "" {
+		x["msgid"] = id
+	}
+	if acc := m.Tags["account"]; acc != "" && acc != "*" {
+		x["account"] = acc
+	}
+	return x
 }

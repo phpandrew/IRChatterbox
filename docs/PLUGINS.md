@@ -21,6 +21,8 @@ Plugins are small JavaScript files that react to what happens on IRC: messages, 
 
 Every `.js` file in the folder is loaded at startup and on `/reload`. Files whose names start with `_` are skipped; `_example.js` is a ready-made example to copy. Plugins can be switched off entirely in **Settings → Plugins → Script plugins**.
 
+Coming from mIRC? `.mrc` scripts go in the same folder and run alongside these. See [mIRC scripts](MIRC-SCRIPTS.md).
+
 ## How plugins run
 
 - Each plugin runs in its own sandbox. Plugins can't see each other's variables, read files or start programs.
@@ -87,6 +89,32 @@ command("slap", function (e) {
 
 The command event has `command`, `args`, `argv`, `channel` (the window you typed in), `server`, `me` and `isChannel`.
 IRChatterbox's built-in commands (such as `/join` and `/kick`) take priority over plugin commands with the same name.
+
+## Right-click menus
+
+Add items to IRChatterbox's right-click menus. They appear at the bottom, after a separator.
+
+```js
+menu("nicklist", "Slap", function (e) {
+  action(e.channel, "slaps " + e.nick + " around a bit with a large trout");
+});
+menu("nicklist,query", "Fun/Hug", function (e) {   // "Fun/Hug" → a Fun submenu
+  action(e.channel || e.nick, "hugs " + e.nick);
+});
+menu("message", "Quote", function (e) {
+  reply("> " + e.nick + ": " + e.text);
+});
+```
+
+| Menu | Opens when you right-click | Event has |
+|---|---|---|
+| `nicklist` | a nick, in the user list or the chat | `nick`, `channel` |
+| `channel` | a channel in the sidebar | `channel` |
+| `query` | a private chat in the sidebar | `nick`, `channel` (the query) |
+| `status` | a server in the sidebar | — |
+| `message` | a message in the chat | `nick`, `text`, `channel` |
+
+Every event also has `menu`, `server`, `me` and `isChannel`. `reply()` answers in the window the menu was opened from. Use several menus at once with commas: `menu("nicklist,query", …)`.
 
 ## Sending
 

@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -23,6 +24,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -45,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var root: FrameLayout
     private val main = Handler(Looper.getMainLooper())
     private var pageReady = false
+    private var uiIsReady = false // main.js finished booting and listens for events
     private val pendingEvents = StringBuilder()
     private var flushScheduled = false
     private var pendingFocus: Pair<String, String>? = null
@@ -52,6 +55,27 @@ class MainActivity : ComponentActivity() {
     private var fullscreenView: View? = null
 
     private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    // The message box's attach button (<input type="file">): "Choose from gallery" opens the
+    // system photo picker, "Take photo" (an input with capture) opens the phone's camera app.
+    // Either way the image goes back to the page, which uploads it. Neither needs a permission.
+    private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private var cameraUri: Uri? = null
+    private val pickImage = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        answerFileChooser(if (uri != null) arrayOf(uri) else null)
+    }
+    private val pickImages = registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(10)) { uris ->
+        answerFileChooser(uris.takeIf { it.isNotEmpty() }?.toTypedArray())
+    }
+    private val takePhoto = registerForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        answerFileChooser(cameraUri?.takeIf { saved }?.let { arrayOf(it) })
+    }
+    private var pendingImages: List<SharedImages.Item> = emptyList()
+
+    private fun answerFileChooser(uris: Array<Uri>?) {
+        fileCallback?.onReceiveValue(uris)
+        fileCallback = null
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,12 +113,20 @@ class MainActivity : ComponentActivity() {
         }
         web.isVerticalScrollBarEnabled = false
         web.overScrollMode = View.OVER_SCROLL_NEVER
-        web.addJavascriptInterface(JsBridge(this), "IcbNative")
-
-        val bridge = assets("bridge.js")
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(web, bridge, setOf("https://$HOST"))
+        // The bridge and its message channel are limited to the app's own origin; embedded
+        // players in other frames get neither. Both need a WebView from 2020 or later.
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) ||
+            !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+        ) {
+            web.loadData(
+                "<p style='font:16px sans-serif;padding:24px'>IRChatterbox needs a newer Android System WebView. " +
+                    "Update it from the Play Store, then reopen the app.</p>", "text/html", "utf-8"
+            )
+            return
         }
+        val origin = setOf("https://$HOST")
+        WebViewCompat.addWebMessageListener(web, "IcbNative", origin, JsBridge(this))
+        WebViewCompat.addDocumentStartJavaScript(web, assets("bridge.js"), origin)
 
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
@@ -106,24 +138,57 @@ class MainActivity : ComponentActivity() {
                 return true
             }
 
-            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
-                // older WebViews without document-start scripts
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                    view.evaluateJavascript(bridge, null)
-                }
-            }
-
             override fun onPageFinished(view: WebView, url: String?) {
                 pageReady = true
                 flushEvents()
-                // let the UI load its state before jumping to a buffer
-                main.postDelayed({ deliverIntentExtras() }, 600)
+            }
+
+            // The WebView's renderer was killed (low memory while in the background) or crashed.
+            // Android's default is to kill the whole app, which would drop every connection; only
+            // the page needs rebuilding — the Go core lives on in the process.
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                Log.w(CoreHost.TAG, "WebView renderer gone (crashed: ${detail.didCrash()}); rebuilding the page")
+                pageReady = false
+                uiIsReady = false
+                root.removeView(view)
+                view.destroy()
+                if (!isFinishing) recreate()
+                return true
             }
         }
         web.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 Log.d(CoreHost.TAG, "js: ${m.message()} (${m.sourceId()}:${m.lineNumber()})")
                 return true
+            }
+
+            override fun onShowFileChooser(
+                view: WebView,
+                callback: ValueCallback<Array<Uri>>,
+                params: FileChooserParams,
+            ): Boolean {
+                fileCallback?.onReceiveValue(null) // a picker that never answered: let the page move on
+                fileCallback = callback
+                if (params.isCaptureEnabled) {
+                    try {
+                        val uri = SharedImages.newCameraFile(this@MainActivity)
+                        cameraUri = uri
+                        takePhoto.launch(uri)
+                        return true
+                    } catch (e: Exception) {
+                        // no camera app (or it can't be opened): fall back to the gallery
+                        Log.w(CoreHost.TAG, "couldn't open the camera", e)
+                    }
+                }
+                return try {
+                    val images = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    if (params.mode == FileChooserParams.MODE_OPEN_MULTIPLE) pickImages.launch(images) else pickImage.launch(images)
+                    true
+                } catch (e: Exception) {
+                    Log.w(CoreHost.TAG, "couldn't open the image picker", e)
+                    fileCallback = null
+                    false
+                }
             }
 
             // full-screen video from YouTube / Vimeo embeds
@@ -167,13 +232,33 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readIntent(intent)
-        if (pageReady) deliverIntentExtras()
+        if (uiIsReady) deliverIntentExtras()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        pushStatus() // back from Android's battery or notification settings
     }
 
     override fun onDestroy() {
         if (current === this) current = null
-        web.destroy()
+        runCatching { web.destroy() }
         super.onDestroy()
+    }
+
+    /** main.js has registered its event listeners: deliver what arrived with the launch. */
+    fun uiReady() {
+        uiIsReady = true
+        pushStatus()
+        deliverIntentExtras()
+    }
+
+    /** Battery and notification state for the settings page (window.icbAndroid). */
+    private fun pushStatus() {
+        if (!pageReady || isDestroyed) return
+        val battery = getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        val s = JSONObject().put("battery", battery).put("notifications", Notifications.allowed(this))
+        web.evaluateJavascript("window.__icb&&window.__icb.status($s)", null)
     }
 
     // ---- intents: notification taps and "Share to IRChatterbox" ----
@@ -186,9 +271,24 @@ class MainActivity : ComponentActivity() {
             pendingFocus = server to buffer
             Notifications.clear(this, server, buffer)
         }
-        if (i.action == Intent.ACTION_SEND) {
-            pendingShare = i.getStringExtra(Intent.EXTRA_TEXT)
+        if (i.action == Intent.ACTION_SEND || i.action == Intent.ACTION_SEND_MULTIPLE) {
+            if (i.type?.startsWith("image/") == true) {
+                // photos shared from the gallery or another app: copied in the background, then
+                // handed to the page (which uploads them) once it's ready
+                val uris = SharedImages.streams(i)
+                Thread {
+                    val items = SharedImages.copyIn(this, uris)
+                    runOnUiThread {
+                        pendingImages = pendingImages + items
+                        if (uiIsReady) deliverIntentExtras()
+                    }
+                }.start()
+            } else {
+                pendingShare = i.getStringExtra(Intent.EXTRA_TEXT)
+            }
         }
+        // a notification reply that couldn't be sent: put it back in the message box
+        i.getStringExtra(EXTRA_DRAFT)?.let { pendingShare = it }
     }
 
     private fun deliverIntentExtras() {
@@ -199,6 +299,14 @@ class MainActivity : ComponentActivity() {
         pendingShare?.let {
             pendingShare = null
             queueEvent("shareText", JSONObject().put("text", it).toString())
+        }
+        if (pendingImages.isNotEmpty()) {
+            val files = org.json.JSONArray()
+            pendingImages.forEach {
+                files.put(JSONObject().put("url", "https://$HOST/${SharedImages.PATH}/${it.name}").put("type", it.type).put("name", it.name))
+            }
+            pendingImages = emptyList()
+            queueEvent("shareImages", JSONObject().put("files", files).toString())
         }
     }
 
@@ -249,6 +357,7 @@ class MainActivity : ComponentActivity() {
         override fun handle(path: String): WebResourceResponse? {
             val clean = path.trimStart('/').ifEmpty { "index.html" }
             if (clean.contains("..")) return null
+            if (clean.startsWith(SharedImages.PATH + "/")) return SharedImages.serve(this@MainActivity, clean.substringAfter('/'))
             return try {
                 val stream = assets.open("web/$clean")
                 val mime = when {
@@ -293,6 +402,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val HOST = "appassets.androidplatform.net"
+        const val EXTRA_DRAFT = "draft"
         @Volatile var current: MainActivity? = null
             private set
     }

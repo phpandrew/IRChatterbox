@@ -24,8 +24,9 @@ type UpdateInfo struct {
 	Current   string `json:"current"`
 	Latest    string `json:"latest"`
 	Notes     string `json:"notes"`
-	URL       string `json:"url"`  // release page
-	Size      int64  `json:"size"` // exe size in bytes
+	URL       string `json:"url"`    // release page
+	Size      int64  `json:"size"`   // exe size in bytes
+	Manual    bool   `json:"manual"` // the download opens in the browser instead of installing in place (macOS, Android)
 	Error     string `json:"error,omitempty"`
 
 	assetURL string // this platform's download (IRChatterbox.exe / IRChatterbox.apk)
@@ -80,6 +81,7 @@ func fetchLatestRelease() (UpdateInfo, error) {
 		}
 	}
 	info.Available = info.assetURL != "" && compareVersions(info.Latest, appVersion) > 0
+	info.Manual = manualUpdate
 	return info, nil
 }
 

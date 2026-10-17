@@ -155,7 +155,8 @@ func (c *Conn) onReplayMessage(m *Message, nick string, isMe bool, ts int64) {
 		return
 	}
 	highlight := !isMe && c.app.isHighlight(c.Nick(), text)
-	extra := map[string]any{"replay": true}
+	extra := msgExtra(m)
+	extra["replay"] = true
 	if isPM {
 		extra["query"] = true
 	}

@@ -15,6 +15,7 @@ class IrcApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        Thread { SharedImages.clean(this) }.start() // photos left from the last run
         CoreHost.init(this)
         val dataDir = File(filesDir, "data").apply { mkdirs() }
         Mobile.start(dataDir.absolutePath, BuildConfig.VERSION_NAME, CoreHost)

@@ -33,6 +33,11 @@ func (a *App) InstallUpdate() string {
 	if !info.Available {
 		return "You're already on the latest version."
 	}
+	if manualUpdate {
+		// macOS: download the new .app in the browser; it replaces the old one in Applications
+		wruntime.BrowserOpenURL(a.ctx, info.assetURL)
+		return ""
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err.Error()
@@ -55,7 +60,7 @@ func (a *App) InstallUpdate() string {
 		return "Download failed: " + err.Error()
 	}
 	if info.sumsURL != "" {
-		want, err := expectedSum(info.sumsURL, "IRChatterbox.exe")
+		want, err := expectedSum(info.sumsURL, updateAsset)
 		if err != nil {
 			os.Remove(newPath)
 			return "Couldn't verify the download: " + err.Error()
@@ -65,6 +70,7 @@ func (a *App) InstallUpdate() string {
 			return "The download didn't match its checksum, so it wasn't installed. Try again later."
 		}
 	}
+	os.Chmod(newPath, 0o755) // Linux/macOS: keep it executable
 	if msg := a.swapAndRestart(exe, newPath); msg != "" {
 		return msg
 	}

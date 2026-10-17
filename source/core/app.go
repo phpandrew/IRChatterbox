@@ -51,6 +51,7 @@ type App struct {
 	bncOnline map[string]int64 // bouncer server id -> last online (ms), see bouncer.go
 	logLines  map[string]int   // path -> line count, for trimming
 	logOpened map[string]bool
+	lastCrash string // crash report from the previous run (crashlog.go)
 }
 
 func NewApp() *App {
@@ -109,7 +110,7 @@ func (a *App) emit(c *Conn, ev Event) {
 		a.testHook(ev)
 	}
 	a.emitUI("irc", ev)
-	if (ev.Type == "msg" || ev.Type == "event") && ev.Buffer != "" && ev.Buffer != "*active*" {
+	if (ev.Type == "msg" || ev.Type == "event" || ev.Type == "redact") && ev.Buffer != "" && ev.Buffer != "*active*" {
 		a.logEvent(c.cfg.Name, ev)
 	}
 }
@@ -249,6 +250,15 @@ func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 
 // notifyMissed is the one notification shown after a bouncer replays history containing
 // mentions or private messages, instead of a toast per line.
+// notifyPresence: a friend on the MONITOR list came online.
+func (a *App) notifyPresence(c *Conn, text string) {
+	set := a.store.Get().Settings
+	if !set.Notifications || !a.notifyOK {
+		return
+	}
+	a.pushToast("Friends", text+" on "+c.cfg.Name, map[string]any{"server": c.cfg.ID, "buffer": ""}, false)
+}
+
 func (a *App) notifyMissed(c *Conn, buffer string, n int) {
 	set := a.store.Get().Settings
 	a.mu.Lock()
@@ -533,10 +543,11 @@ func (a *App) Disconnect(id string) {
 func (a *App) SaveSettings(s Settings) string {
 	old := a.store.Get().Settings
 	a.store.Update(func(c *Config) { c.Settings = s })
+	a.updateMonitors(old.NotifyList, s.NotifyList)
 	if s.LogMaxLines > 0 && (old.LogMaxLines == 0 || s.LogMaxLines < old.LogMaxLines) {
 		go a.TrimAllLogs()
 	}
-	if s.TrayIcon && !a.trayStarted {
+	if hasTray && s.TrayIcon && !a.trayStarted {
 		a.trayStarted = true
 		a.startTray()
 	}

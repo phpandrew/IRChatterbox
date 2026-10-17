@@ -53,12 +53,13 @@ object Notifications {
 
     private fun isChannel(buffer: String) = buffer.isNotEmpty() && buffer[0] in "#&+!"
 
-    fun openIntent(ctx: Context, server: String, buffer: String): PendingIntent {
+    fun openIntent(ctx: Context, server: String, buffer: String, draft: String? = null): PendingIntent {
         val i = Intent(ctx, MainActivity::class.java)
             .setAction("open:$server:$buffer")
             .putExtra(EXTRA_SERVER, server)
             .putExtra(EXTRA_BUFFER, buffer)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (draft != null) i.putExtra(MainActivity.EXTRA_DRAFT, draft)
         return PendingIntent.getActivity(ctx, idFor(server, buffer), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
@@ -119,6 +120,28 @@ object Notifications {
             .setAllowGeneratedReplies(false)
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
             .build()
+    }
+
+    /**
+     * A reply from the notification couldn't be sent because that server isn't connected.
+     * The notification says so, and tapping it opens the buffer with the text ready to send.
+     */
+    fun replyFailed(ctx: Context, server: String, buffer: String, text: String) {
+        val n = NotificationCompat.Builder(ctx, if (isChannel(buffer)) CH_MENTIONS else CH_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_chat)
+            .setColor(ContextCompat.getColor(ctx, R.color.brand))
+            .setContentTitle("Not sent to $buffer")
+            .setContentText("Not connected. Tap to open; your message is waiting in the box.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Not connected. Tap to open; your message is waiting in the box:\n$text"))
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setGroup(GROUP)
+            .setContentIntent(openIntent(ctx, server, buffer, text))
+            .build()
+        try {
+            NotificationManagerCompat.from(ctx).notify(idFor(server, buffer), n)
+        } catch (_: SecurityException) {
+        }
     }
 
     /** The buffer is on screen now: drop its notification. */

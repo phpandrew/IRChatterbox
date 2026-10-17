@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=IRChatterbox
+GenericName=IRC Client
+Comment=A modern IRC client
+Exec=IRChatterbox %u
+Icon=irchatterbox
+Terminal=false
+Categories=Network;Chat;InstantMessaging;IRCClient;
+Keywords=irc;chat;soju;
+StartupWMClass=IRChatterbox

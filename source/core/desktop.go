@@ -7,6 +7,7 @@ package core
 
 import (
 	"context"
+	_ "embed"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -18,11 +19,14 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const updateAsset = "IRChatterbox.exe"
+//go:embed assets/icon-128.png
+var desktopIcon []byte
 
 // RunDesktop starts the Windows app. assets is the built frontend (frontend/dist).
 func RunDesktop(assets fs.FS) {
@@ -39,6 +43,7 @@ func RunDesktop(assets fs.FS) {
 		}
 	}
 	app := NewApp()
+	app.initLogs()
 	startState := options.Normal
 	for _, a := range os.Args[1:] {
 		if a == "--minimized" || a == "/minimized" {
@@ -72,6 +77,13 @@ func RunDesktop(assets fs.FS) {
 			UniqueId:               "irchatterbox-6f2c1e0a-3d4b-4c55-9f61-chatterbox",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) { app.secondInstance() },
 		},
+		Linux: &linux.Options{
+			ProgramName: "IRChatterbox", // window class, so the dock/taskbar groups it properly
+			Icon:        desktopIcon,
+		},
+		Mac: &mac.Options{
+			About: &mac.AboutInfo{Title: "IRChatterbox", Message: "A modern IRC client.\nhttps://github.com/phpandrew/IRChatterbox", Icon: desktopIcon},
+		},
 		Windows: &windows.Options{
 			Theme:                windows.SystemDefault, // title bar follows Windows light/dark
 			WebviewIsTransparent: false,
@@ -104,7 +116,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	cleanupOldExe()
 	a.plugins.LoadScripts()
-	if a.store.Get().Settings.TrayIcon {
+	if hasTray && a.store.Get().Settings.TrayIcon {
 		a.trayStarted = true
 		a.startTray()
 	}
@@ -296,9 +308,17 @@ func (a *App) PickSoundFile() string {
 	return p
 }
 
-func (a *App) OpenDataFolder() {
-	if runtime.GOOS == "windows" {
-		exec.Command("explorer", a.store.dir).Start()
+func (a *App) OpenDataFolder() { openFolder(a.store.dir) }
+
+// openFolder shows a folder in Explorer, Finder or the Linux file manager.
+func openFolder(dir string) {
+	switch runtime.GOOS {
+	case "windows":
+		exec.Command("explorer", dir).Start()
+	case "darwin":
+		exec.Command("open", dir).Start()
+	default:
+		exec.Command("xdg-open", dir).Start()
 	}
 }
 
@@ -306,9 +326,7 @@ func (a *App) OpenDataFolder() {
 func (a *App) OpenLogFolder() {
 	dir := a.textLogDir()
 	os.MkdirAll(dir, 0o755)
-	if runtime.GOOS == "windows" {
-		exec.Command("explorer", dir).Start()
-	}
+	openFolder(dir)
 }
 
 // emitUI sends an event to the frontend (window.runtime.EventsOn).

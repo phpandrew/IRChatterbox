@@ -67,7 +67,9 @@ func (a *App) connectionWatch() {
 		n := 0
 		a.mu.Lock()
 		for _, c := range a.conns {
-			if s := c.Status(); s == "connected" || s == "connecting" {
+			// running includes the wait between reconnect attempts, when Status() says
+			// "disconnected"; the keep-alive service must stay up through that
+			if c.isRunning() {
 				n++
 			}
 		}
@@ -101,7 +103,7 @@ func (a *App) SetBackground(bg bool) {
 		a.parked = map[string]bool{}
 		var conns []*Conn
 		for id, c := range a.conns {
-			if c.Status() != "disconnected" {
+			if c.isRunning() {
 				a.parked[id] = true
 				conns = append(conns, c)
 			}

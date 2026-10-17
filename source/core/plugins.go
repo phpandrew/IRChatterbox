@@ -23,6 +23,7 @@ type Plugins struct {
 	mu       sync.Mutex
 	cooldown map[string]time.Time
 	scripts  []*script
+	mirc     *mircEngine
 }
 
 // OnJoin is kept for the IRC layer; it's just a "join" plugin event.
@@ -31,7 +32,9 @@ func (p *Plugins) OnJoin(c *Conn, channel, nick string, self bool) {
 }
 
 func NewPlugins(a *App) *Plugins {
-	return &Plugins{app: a, cooldown: map[string]time.Time{}}
+	p := &Plugins{app: a, cooldown: map[string]time.Time{}}
+	p.mirc = newMircEngine(p)
+	return p
 }
 
 func (p *Plugins) ready(key string, secs int) bool {

@@ -6,3 +6,12 @@ IRChatterbox.exe.*
 *.exe
 gh-staging/
 IRChatterbox.exe
+
+# Android signing key: never commit it
+*.jks
+*.keystore
+keystore.properties
+*.bundle
+
+# Website (irchatterbox.com): kept locally, never published
+website/

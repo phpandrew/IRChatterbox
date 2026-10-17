@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +47,15 @@ type script struct {
 
 	storePath string
 	store     map[string]any
+
+	menus []jsMenu
+}
+
+// jsMenu is a right-click menu item added with menu(where, label, fn).
+type jsMenu struct {
+	kinds []string
+	path  []string // "Fun/Slap" → submenu Fun, item Slap
+	fn    goja.Callable
 }
 
 // pluginEvents is the list of events scripts can listen for (documented in docs/PLUGINS.md).
@@ -92,6 +102,12 @@ func (p *Plugins) LoadScripts() string {
 			s.enqueue(job{fn: fn, args: []any{map[string]any{}}})
 		}
 	}
+	mNames, mErrs := p.mirc.load(p.pluginDir())
+	names = append(names, mNames...)
+	errs = append(errs, mErrs...)
+	if len(mNames) > 0 {
+		p.mirc.runStart(p.firstConnected())
+	}
 	msg := fmt.Sprintf("Plugins loaded: %d script(s) %s", len(names), strings.Join(names, ", "))
 	if len(errs) > 0 {
 		msg += " — errors: " + strings.Join(errs, "; ")
@@ -124,6 +140,9 @@ func (p *Plugins) Emit(event string, c *Conn, target string, data map[string]any
 			s.enqueue(job{fn: fn, args: []any{data}, conn: c, target: target})
 		}
 	}
+	if p.mirc.nEvents.Load() > 0 {
+		p.mirc.dispatch(event, c, target, data)
+	}
 }
 
 func (p *Plugins) hasHandlers(event string) bool {
@@ -141,6 +160,9 @@ func (p *Plugins) hasHandlers(event string) bool {
 func (p *Plugins) RunCommand(c *Conn, buffer, name, args string) bool {
 	if !p.app.store.Get().Plugins.ScriptsEnabled {
 		return false
+	}
+	if p.mirc.runAlias(c, buffer, name, args) {
+		return true
 	}
 	p.mu.Lock()
 	scripts := append([]*script(nil), p.scripts...)
@@ -169,6 +191,7 @@ func (a *App) PluginCommands() []string {
 			out = append(out, name)
 		}
 	}
+	out = append(out, a.plugins.mirc.aliasNames()...)
 	sort.Strings(out)
 	return out
 }
@@ -300,6 +323,32 @@ func (p *Plugins) newScript(name, src string) (*script, error) {
 			panic(vm.NewTypeError("command(name, function)"))
 		}
 		s.commands[name] = fn
+		return goja.Undefined()
+	})
+
+	// menu("nicklist", "Fun/Slap", function (e) { … }): adds a right-click menu item.
+	// where: nicklist, channel, query, status, message, or several separated by commas.
+	vm.Set("menu", func(call goja.FunctionCall) goja.Value {
+		fn, ok := goja.AssertFunction(call.Argument(2))
+		label := strings.TrimSpace(call.Argument(1).String())
+		if !ok || label == "" {
+			panic(vm.NewTypeError("menu(where, label, function)"))
+		}
+		var kinds []string
+		for _, k := range strings.Split(call.Argument(0).String(), ",") {
+			k = strings.ToLower(strings.TrimSpace(k))
+			if !menuKinds[k] {
+				panic(vm.NewTypeError("unknown menu %q — use nicklist, channel, query, status or message", k))
+			}
+			kinds = append(kinds, k)
+		}
+		var path []string
+		for _, p := range strings.Split(label, "/") {
+			if p = strings.TrimSpace(p); p != "" {
+				path = append(path, p)
+			}
+		}
+		s.menus = append(s.menus, jsMenu{kinds: kinds, path: path, fn: fn})
 		return goja.Undefined()
 	})
 
@@ -525,5 +574,76 @@ func writeExamplePlugin(dir string) {
 	p := filepath.Join(dir, "_example.js")
 	if b, err := os.ReadFile(p); os.IsNotExist(err) || (err == nil && !strings.Contains(string(b), "docs/PLUGINS.md")) {
 		os.WriteFile(p, []byte(examplePlugin), 0o644)
+	}
+}
+
+// jsMenuItems lists the JS plugins' menu items for one kind of menu.
+func (p *Plugins) jsMenuItems(kind string) []MenuItem {
+	p.mu.Lock()
+	scripts := append([]*script(nil), p.scripts...)
+	p.mu.Unlock()
+	var out []MenuItem
+	for _, s := range scripts {
+		for i, m := range s.menus {
+			if !containsStr(m.kinds, kind) || len(m.path) == 0 {
+				continue
+			}
+			level := &out
+			for _, dir := range m.path[:len(m.path)-1] {
+				found := -1
+				for k, it := range *level {
+					if it.ID == "" && !it.Sep && it.Label == dir {
+						found = k
+					}
+				}
+				if found < 0 {
+					*level = append(*level, MenuItem{Label: dir})
+					found = len(*level) - 1
+				}
+				level = &(*level)[found].Items
+			}
+			*level = append(*level, MenuItem{ID: "js:" + s.name + ":" + strconv.Itoa(i), Label: m.path[len(m.path)-1]})
+		}
+	}
+	return out
+}
+
+func containsStr(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// runJSMenu runs a JS menu item; ref is "<script>:<index>".
+func (p *Plugins) runJSMenu(c *Conn, mc MenuContext, ref string) {
+	i := strings.LastIndexByte(ref, ':')
+	if i < 0 {
+		return
+	}
+	name := ref[:i]
+	n, err := strconv.Atoi(ref[i+1:])
+	if err != nil {
+		return
+	}
+	p.mu.Lock()
+	scripts := append([]*script(nil), p.scripts...)
+	p.mu.Unlock()
+	for _, s := range scripts {
+		if s.name != name || n < 0 || n >= len(s.menus) {
+			continue
+		}
+		e := map[string]any{
+			"menu": mc.Kind, "nick": mc.Nick, "channel": mc.Buffer, "target": mc.Buffer, "text": mc.Text,
+			"server": c.cfg.Name, "serverId": c.cfg.ID, "me": c.Nick(), "isChannel": c.isChannel(mc.Buffer),
+		}
+		target := mc.Buffer
+		if target == "" && mc.Kind == "nicklist" {
+			target = mc.Nick
+		}
+		s.enqueue(job{fn: s.menus[n].fn, args: []any{e}, conn: c, target: target})
+		return
 	}
 }

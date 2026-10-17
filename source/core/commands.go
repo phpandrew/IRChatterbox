@@ -11,12 +11,12 @@ var helpText = []string{
 	"Channel:  /join #chan [key] · /part [#chan] [msg] · /cycle · /topic [text] · /names · /invite nick [#chan] · /list",
 	"Messages: /msg nick text · /query nick [text] · /me action · /notice target text · /ctcp nick CMD · /ping nick · /say text",
 	"Ops:      /op /deop /voice /devoice /halfop /dehalfop nick… · /kick nick [reason] · /ban nick|mask · /unban mask · /kb nick [reason] · /mode [target] modes",
-	"User:     /nick name · /whois nick · /whowas nick · /who mask · /away [msg] · /back · /umode modes · /ignore nick|mask · /unignore nick|mask",
+	"User:     /nick name · /whois nick · /whowas nick · /who mask · /away [msg] · /back · /umode modes · /setname Real Name · /monitor [+|- nicks] · /ignore nick|mask · /unignore nick|mask",
 	"Server:   /connect · /reconnect · /disconnect [msg] · /quit [msg] · /server name · /raw LINE (alias /quote) · /motd · /lusers · /version",
 	"Services: /ns /cs /ms /hs /os text → NickServ, ChanServ, MemoServ, HostServ, OperServ",
 	"Music:    /np → \"* you is listening to Artist - Title\" · anyone typing !music gets the current song (Settings → Plugins)",
 	"Shortcut: /shortcut add $name text · /shortcut del $name · /shortcut list   (type $name in a message to insert the text)",
-	"Plugins:  /reload reloads scripts · commands added by plugins work like any other /command",
+	"Plugins:  /reload reloads .js and .mrc scripts · aliases and commands added by scripts work like any other /command",
 	"Client:   /color nick #hex|reset · /highlight add|del|list word · /clear · /close · /theme name · /reload (plugins) · /help",
 	"Anything else is sent raw to the server, e.g. /knock #chan or /sajoin nick #chan.",
 }
@@ -24,7 +24,16 @@ var helpText = []string{
 var hexColor = regexp.MustCompile(`^#?[0-9a-fA-F]{6}$|^#?[0-9a-fA-F]{3}$`)
 
 // runCommand executes one line of input typed into a buffer.
-func (a *App) runCommand(c *Conn, buffer, line string) {
+func (a *App) runCommand(c *Conn, buffer, line string) { a.runCommandFrom(c, buffer, line, false) }
+
+// runCommandFrom: fromScript is true for commands run by a mIRC script, which skip on INPUT
+// (a script's own /say would trigger it again).
+func (a *App) runCommandFrom(c *Conn, buffer, line string, fromScript bool) {
+	if !fromScript && a.store.Get().Plugins.ScriptsEnabled && a.plugins.mirc.hasInput() {
+		if a.plugins.mirc.onInput(c, buffer, line) {
+			return
+		}
+	}
 	if !strings.HasPrefix(line, "/") || strings.HasPrefix(line, "//") {
 		if strings.HasPrefix(line, "//") {
 			line = line[1:]
@@ -338,6 +347,20 @@ func (a *App) runCommand(c *Conn, buffer, line string) {
 		c.autoAway = false
 		c.mu.Unlock()
 		c.SendRaw("AWAY")
+	case "setname":
+		if rest == "" {
+			c.info("*active*", "error", "Usage: /setname Your Real Name")
+		} else if !c.hasCap("setname") {
+			c.info("*active*", "error", "This server doesn't support changing your real name while connected")
+		} else {
+			c.SendRaw("SETNAME :" + rest)
+		}
+	case "monitor":
+		if rest == "" {
+			c.SendRaw("MONITOR S") // who's online from the list
+		} else {
+			c.SendRaw("MONITOR " + rest)
+		}
 	case "raw", "quote":
 		if rest != "" {
 			c.SendRaw(rest)

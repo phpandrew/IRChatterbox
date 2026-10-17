@@ -15,15 +15,17 @@ A modern IRC client for Windows and Android. The backend is Go; on Windows the U
 - **Sidebar**: collapsible servers, unread and mention badges, drag to reorder
 - **Mentions you won't miss**: Windows toasts, custom sounds, tray and taskbar flashing
 - **Inline media**: images, GIFs, video and audio files, YouTube, Vimeo, Streamable and Spotify
-- **Themes**: follows Windows light/dark, built-in themes plus a theme editor
+- **Themes**: follows Windows light/dark; 26 built-in themes including Dracula, Nord, Catppuccin and throwbacks like Windows 98, XP and a CRT terminal; plus a theme editor
+- **Split view**: two or four channels on screen at once
 - **Nick colours**: automatic and stable (`Andrew` and `Andrew|away` match), with custom colours kept readable
 - **Emoji picker and text shortcuts**: `$shrug` → ¯\\_(ツ)_/¯
 - **Every IRC command**: mIRC colours and formatting, tab completion, input history
+- **Modern IRCv3**: typing indicators, friends online alerts, message deletion, automatic TLS upgrade, chat history
 - **Comfort features**: marker line, jump to latest, Ctrl+K channel switcher, spellcheck
 - **Logs**: history reloads per channel; optional plain-text `.txt` logs
 - **Older networks**: per-server text encoding (Cyrillic, Japanese, Western and more)
 - **Safe by design**: IRC text never runs as HTML, paste protection, every release security-scanned
-- **Plugins**: built-in temperature bot, `!music` now-playing, URL commands and JavaScript plugins
+- **Plugins**: built-in temperature bot, `!music` now-playing, URL commands, JavaScript plugins and **mIRC scripts** (`.mrc`)
 
 ## Screenshots
 <p align="center">
@@ -34,8 +36,13 @@ A modern IRC client for Windows and Android. The backend is Go; on Windows the U
 </p>
 
 ## Run it
-Double-click `IRChatterbox.exe`. No install is needed. It uses WebView2, which comes with Windows 10 and 11.
-Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings → Open data folder).
+- **Windows:** double-click `IRChatterbox.exe`. No install is needed. It uses WebView2, which comes with Windows 10 and 11.
+- **macOS:** unzip and drag `IRChatterbox.app` into Applications. The app isn't signed with an Apple Developer ID yet, so the first time, right-click it and choose **Open**, then **Open** again.
+- **Linux:** unpack the `.tar.gz` and run `./install.sh` to add it to your app menu, or just run `./IRChatterbox`. It needs WebKitGTK 4.1 (`sudo apt install libwebkit2gtk-4.1-0` on Debian/Ubuntu, `webkit2gtk4.1` on Fedora; usually already installed).
+
+Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` on Windows, `~/Library/Application Support/IRChatterbox` on macOS and `~/.config/IRChatterbox` on Linux (Settings → Open data folder).
+
+The tray icon, start-with-Windows and the MusicBee now-playing source are Windows-only; everything else works the same everywhere.
 
 ## Features
 - **Saved servers and auto-login.** Each server can use SASL PLAIN (recommended) or NickServ IDENTIFY, connect on startup, auto-join channels (with keys) and run commands on connect. It reconnects automatically with backoff.
@@ -45,8 +52,10 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Inline media.** Images (PNG, JPG, GIF, WEBP, AVIF, SVG, plus imgur and Giphy links) show in the chat. Video files (MP4, WEBM, MOV) and imgur GIFV get a player, and audio files (MP3, OGG, WAV, FLAC) get a play bar. YouTube, Vimeo, Streamable and Spotify links show a preview that plays in the chat when clicked. Each kind can be turned off in Settings → Media.
 - **Nick colours.** Colours are automatic per nick. Override one with `/color nick #ff8800`, `/color nick orange` or `/color nick reset`, or right-click a nick.
 - **Commands.** Every IRC command works, and `/help` lists the built-in ones. Anything the client doesn't recognise is sent to the server as-is (`/knock #chan` → `KNOCK #chan`).
-- **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes are Dark, Light, Midnight and Classic. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
+- **Themes.** Automatic mode follows Windows light/dark (Settings → Personalisation → Colours → app mode) and switches live. Built-in themes: Dark, Light, Midnight and Classic; popular palettes (Dracula, Nord, One Dark, Monokai, Gruvbox, Catppuccin, Tokyo Night, Solarized, GitHub, Rosé Pine, Everforest, High Contrast); and throwbacks with their own look: **Windows 98** (grey bevels, blue title bars), **Windows XP** (Luna blue), **mIRC Classic**, and green or amber **CRT terminal** with scanlines. Settings → Appearance has a theme editor, and you pick which light and dark theme auto mode uses.
 - **Logs and history.** Recent history reloads when you open a channel. You can also save plain-text `.txt` logs per channel (`[2026-10-16 09:41:22] <@Andrew> hello`) to a folder you choose, with a per-channel line limit (Settings → General).
+- **IRCv3.** SASL, server-time, message tags, batches, chat history and read markers, plus: your messages appear as the server confirmed them (echo-message, labeled-response); servers that require TLS are switched to it automatically (STS); "Bob is typing…" both ways (can be turned off in Settings → General → Sending); a friends list that tells you when people come online (MONITOR, Settings → Notifications); `/setname` to change your real name; logged-in account names on hover; and deleting your own messages (right-click → Delete message) where the server allows it.
+- **Split view.** Show two channels side by side, one above the other, or four in a 2 × 2 grid (the layout button in the header). Click a pane to type there, drag a channel from the sidebar onto a pane, or right-click a channel → Show in split view. F6 moves between panes.
 - **Remembers the window.** Size, position, monitor, maximised and full-screen state (F11) are restored on launch.
 - **Channel right-click.** "Join on connect" adds a channel to the auto-join list. "Show at startup" opens IRChatterbox on that channel instead of where you left off.
 - **Start with Windows.** Optionally start minimised (Settings → General).
@@ -79,8 +88,17 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 
 **JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. Plugins can react to messages, joins, parts, kicks, nick changes, topics and more, add their own `/commands`, use timers, store data and fetch web pages. **[Plugin guide and API reference →](../docs/PLUGINS.md)**
 
+**mIRC scripts.** Drop your `.mrc` files in the same folder and `/reload`. Aliases, `on TEXT`/`JOIN`/`KICK`/`INPUT` and other events, `raw`, `%variables`, `if`/`while`, hash tables, timers and the common identifiers work as in mIRC; dialogs and file access are skipped. **[What's supported →](../docs/MIRC-SCRIPTS.md)**
+
 ## Download
-Get `IRChatterbox.exe` (Windows) or `IRChatterbox.apk` (Android) from the [Releases](../../releases) page. Once it's installed, the app tells you about new versions.
+Get it from the [Releases](../../releases) page. Once it's installed, the app tells you about new versions.
+
+| Platform | Download |
+|---|---|
+| Windows 10/11 | `IRChatterbox.exe` |
+| macOS 11+ (Apple silicon and Intel) | `IRChatterbox-macos.zip` |
+| Linux (x86-64) | `IRChatterbox-…-linux-amd64.tar.gz` |
+| Android | `IRChatterbox.apk` |
 
 ### Releases
 Every push to `main` that passes the build and security checks is released automatically as the next patch version (`v0.3.1`, `v0.3.2`, …). To start a new minor or major version, change `source/VERSION` (for example to `0.4.0`) and push. Pull requests and other branches are built too; the exe is on the Actions run page for 30 days. See [docs/BUILDING.md](../docs/BUILDING.md#versions) for details.

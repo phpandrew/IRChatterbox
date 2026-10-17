@@ -22,7 +22,7 @@ object CoreHost : Host {
     // A few calls wait on the network and get their own threads.
     private val ordered = Executors.newSingleThreadExecutor()
     private val slow = Executors.newCachedThreadPool()
-    private val slowMethods = setOf("TestURLCommand", "CheckForUpdate", "InstallUpdate", "ReloadPlugins", "TestMusic")
+    private val slowMethods = setOf("TestURLCommand", "CheckForUpdate", "InstallUpdate", "ReloadPlugins", "TestMusic", "UploadImage")
 
     @Volatile var foreground = false
         private set
@@ -59,6 +59,9 @@ object CoreHost : Host {
     // ---- mobile.Host ----
 
     override fun emit(event: String, dataJSON: String) {
+        // In the background the notification makes the sound; the page playing its own
+        // chime as well would be heard twice.
+        if (event == "playSound" && !foreground) return
         MainActivity.current?.queueEvent(event, dataJSON)
     }
 

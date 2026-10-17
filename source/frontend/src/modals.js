@@ -5,11 +5,12 @@ import githubIcon from "./assets/github.png";
 import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
 import { showUpdateBar } from "./main.js";
 import { android } from "./mobile.js";
+import { os } from "./platform.js";
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
-import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes } from "./themes.js";
+import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions } from "./themes.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -319,11 +320,11 @@ export function openSettings(startTab) {
         <div style="display:flex;gap:8px"><input type="text" id="gFolder" value="${esc(set.logFolder || "")}" placeholder="Default: the IRChatterbox data folder\\logs" style="flex:1">
         <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div></div>`) +
       card("Startup & closing", "Configure how IRChatterbox starts and exits.", `
-      ${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
-      <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
+      <div class="win-only">${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
+      <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div></div>
       ${check("gConfirm", set.confirmOnClose, "Confirm before quitting when I close the window")}
-      ${check("gTray", set.trayIcon !== false, "Show an icon in the system tray")}
-      <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div>`, "desktop-only") +
+      <div class="win-only">${check("gTray", set.trayIcon !== false, "Show an icon in the system tray")}
+      <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div></div>`, "desktop-only") +
       card("Background", "What happens when you leave the app.", `
       ${check("gKeep", set.keepAlive !== false, "Keep connection live in background")}
       <div class="hint indent">Stays connected while the app is closed, with a small “Connected” notification. Off: disconnects in the background, and your bouncer replays what you missed when you come back.</div>
@@ -339,14 +340,17 @@ export function openSettings(startTab) {
       </div>
       <div class="hint">You're set back as soon as you ${android ? "open the app" : "use your PC"} again. A manual <code>/away</code> is never undone automatically.</div>`) +
       card("Sending", "Protection against flooding a channel by accident.", `
-      <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>`) +
+      <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>
+      <div class="set-sep"></div>
+      ${check("gTyping", set.sendTyping !== false, "Let others see when I'm typing")}
+      <div class="hint indent">Shows “Andrew is typing…” in clients that support it, on servers that allow it.</div>`) +
       card("Messages", "The default message sent when you quit or leave a channel.", `
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`);
     else if (tab === "appearance") drawAppearance();
     else if (tab === "highlights") body.innerHTML =
       card("Highlight words", "Lines containing your nick or these words are highlighted, badged in red and trigger a notification.", `
       ${field("Words", `<textarea id="hWords" placeholder="andrew&#10;tshirtgang">${esc((set.highlightWords || []).join("\n"))}</textarea>`, "One per line. Your current nick is always a highlight.")}`) +
-      card(android ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
+      card(android || os !== "windows" ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
       ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
       <div style="margin-top:10px"><button class="btn sm" id="hTest">Send a test notification</button></div>`) +
@@ -359,7 +363,10 @@ export function openSettings(startTab) {
       <div class="hint">Custom sounds can be .wav, .mp3, .ogg or .m4a. When a sound is set, the Windows notification itself stays silent so you don't hear two.</div>`) +
       card("Tray & taskbar", "Get your attention when you're in another app.", `
       ${check("hFlash", set.flashOnPing !== false, "Flash the tray icon and taskbar button when I'm mentioned or messaged")}
-      <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`, "desktop-only") +
+      <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`, "desktop-only win-only") +
+      card("Friends", "Get told when these people come online or go offline (on servers that support MONITOR).", `
+      ${field("Nicks to watch", `<textarea id="hFriends" placeholder="Caleo&#10;Kennyout">${esc((set.notifyList || []).join("\n"))}</textarea>`, "One per line.")}
+      ${check("hFriendsNotify", set.notifyFriends !== false, "Show a notification when one comes online")}`) +
       card("Ignore list", "Hide messages from these people entirely.", `
       ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`);
     else if (tab === "shortcuts") drawShortcuts();
@@ -368,13 +375,33 @@ export function openSettings(startTab) {
       ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF, SVG, imgur and Giphy links)")}
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
       ${check("mVid", set.inlineVideos ?? true, "Show video and audio players (MP4, WEBM, MOV, MP3, OGG, imgur GIFV) and Vimeo, Streamable or Spotify — click to play")}
-      <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`);
+      <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`) +
+      card("Image uploads", "Attach, paste or drop a JPG, PNG, WebP or BMP image in the message box to share it as a link.", `
+      ${field("Upload to", `<select id="uHost">
+        <option value="irchatterbox">IRChatterbox (i.irchatterbox.com)</option>
+        <option value="imgur" ${set.uploadHost === "imgur" ? "selected" : ""}>Imgur</option>
+      </select>`)}
+      <div id="uHostHint" class="hint"></div>
+      <div id="uImgurRow" style="margin-top:10px">
+        ${field("Imgur Client ID", text("uImgur", set.imgurClientId, "e.g. 1a2b3c4d5e6f7g8"), `Register an app at <a href="#" data-open="https://api.imgur.com/oauth2/addclient">api.imgur.com</a> (choose "without a callback URL") and paste its Client ID here.`)}
+      </div>`);
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
     wire();
   }
 
   function wire() {
+    if ($("uHost")) {
+      const sync = () => {
+        const imgur = $("uHost").value === "imgur";
+        $("uImgurRow").style.display = imgur ? "" : "none";
+        $("uHostHint").textContent = imgur
+          ? "Uploaded as-is to Imgur under your own Client ID. Imgur keeps images until they're deleted, and its own rules and limits apply."
+          : "Shrunk to fit 600×600 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
+      };
+      $("uHost").addEventListener("change", sync); sync();
+      document.querySelectorAll("#uImgurRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));
+    }
     if ($("gTxt")) {
       const sync = () => { $("gTxtRow").style.opacity = on("gTxt") ? 1 : 0.5; };
       $("gTxt").addEventListener("change", sync); sync();
@@ -412,12 +439,12 @@ export function openSettings(startTab) {
 
   function drawAppearance(selectTheme) {
     const themes = allThemes();
-    const opts = (sel) => Object.keys(themes).map((n) => `<option ${n === sel ? "selected" : ""}>${esc(n)}</option>`).join("");
+    const opts = (sel) => themeOptions(sel);
     body.innerHTML = card("Theme", "Pick a theme, or follow Windows light and dark mode automatically.", `
       <div class="fgrid">
         ${field("Mode", `<select id="aMode">
           <option value="auto" ${set.theme === "auto" ? "selected" : ""}>Automatic — follow Windows light/dark</option>
-          ${Object.keys(themes).map((n) => `<option value="${esc(n)}" ${set.theme === n ? "selected" : ""}>Always ${esc(n)}</option>`).join("")}</select>`, "", true)}
+          ${themeOptions(set.theme, (n) => "Always " + n)}</select>`, "", true)}
         ${field("Light theme (used in auto mode)", `<select id="aLight">${opts(set.lightTheme)}</select>`)}
         ${field("Dark theme (used in auto mode)", `<select id="aDark">${opts(set.darkTheme)}</select>`)}
       </div>`) + card("Theme editor", "Start from any theme, change its colours and save it as your own. Edits preview live.", `
@@ -522,7 +549,7 @@ export function openSettings(startTab) {
       <section class="set-card about">
         <img class="about-logo for-light" src="${wordmarkLight}" alt="IRChatterbox">
         <img class="about-logo for-dark" src="${wordmarkDark}" alt="IRChatterbox">
-        <p class="about-tag">A modern IRC client for Windows and Android.</p>
+        <p class="about-tag">A modern IRC client for Windows, macOS, Linux and Android.</p>
         <div class="about-ver">Version <b id="abVer">…</b></div>
         <p class="about-by">Created by <b>Andrew Lyle</b> · <a href="https://github.com/phpandrew" data-url="https://github.com/phpandrew">@phpandrew</a></p>
         <div class="about-actions">
@@ -538,9 +565,17 @@ export function openSettings(startTab) {
           <span id="abStatus" class="muted" style="font-size:12.5px"></span>
         </div>
         <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`)}
+      ${card("Troubleshooting", "Something went wrong? The logs help track it down.", `
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" id="abLogs">Open logs</button>
+          <button class="btn sm" id="abReport">Report a problem</button>
+        </div>
+        <div class="hint" style="margin-top:8px">“Report a problem” opens a new GitHub issue with your version and OS filled in. Attach <code>app.log</code> or a <code>crash-….log</code> from the logs folder if it helps — check it first, it can contain server and channel names.</div>`, "desktop-only")}
       <p class="about-foot">Built with Go and Wails · Emoji data from unicode-emoji-json (MIT)</p>`;
     body.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => Go.OpenURL(b.dataset.open)));
     $("abVer").textContent = (await Go.GetVersion()) || "dev";
+    $("abLogs").onclick = () => Go.OpenDiagnostics();
+    $("abReport").onclick = () => Go.ReportProblem();
     $("abCheck").onclick = async () => {
       const st = $("abStatus");
       st.className = "muted"; st.textContent = "Checking…";
@@ -549,6 +584,7 @@ export function openSettings(startTab) {
       if (!info.available) { st.className = "t-status ok"; st.textContent = `✓ You're on the latest version (${info.current}).`; return; }
       st.className = "t-status ok";
       st.innerHTML = `Version ${esc(info.latest)} is available. <button class="btn sm primary" id="abInstall">Update &amp; restart</button>`;
+      $("abInstall").textContent = info.manual ? "Download update" : "Update & restart";
       $("abInstall").onclick = () => { closeOverlay(); showUpdateBar(info); document.getElementById("ubInstall")?.click(); };
     };
   }
@@ -613,10 +649,10 @@ export function openSettings(startTab) {
       <p class="hint" style="margin:0 0 12px">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
       <button class="btn sm" id="ucAdd">+ Add command</button>`) +
-      card("Script plugins", "Your own JavaScript plugins from the plugins folder.", `
-      ${check("pScripts", plug.scriptsEnabled, "Run JavaScript plugins from the plugins folder")}
+      card("Script plugins", "Your own JavaScript plugins and mIRC scripts from the plugins folder.", `
+      ${check("pScripts", plug.scriptsEnabled, "Run JavaScript (.js) and mIRC (.mrc) scripts from the plugins folder")}
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm desktop-only" id="pOpen">Open data folder</button><button class="btn sm" id="pReload">Reload plugins</button><span class="muted" id="pReloadOut" style="align-self:center;font-size:12px"></span></div>
-      <div class="hint" style="margin-top:10px">See <code>plugins/_example.js</code> for the API (on, reply, say, httpGet…).</div>`, "desktop-only");
+      <div class="hint" style="margin-top:10px">See <code>plugins/_example.js</code> for the JavaScript API (on, reply, say, httpGet…) and <code>plugins/_example.mrc</code> for mIRC scripts. Type <code>/reload</code> after changing a file.</div>`, "desktop-only");
     const drawUc = () => {
       $("ucList").innerHTML = plug.urlCommands.map((u, i) => `
         <div class="urlcmd" data-i="${i}">
@@ -676,6 +712,7 @@ export function openSettings(startTab) {
       set.trayIcon = on("gTray"); set.closeToTray = on("gCloseTray");
       set.autoAway = on("gAway"); set.autoAwayMinutes = Math.max(1, parseInt(val("gAwayMin")) || 15); set.autoAwayMessage = val("gAwayMsg");
       set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
+      set.sendTyping = on("gTyping");
       if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
@@ -685,9 +722,11 @@ export function openSettings(startTab) {
       set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore");
       set.soundHighlight = readSound("sndHl"); set.soundPM = readSound("sndPm"); set.soundVolume = +$("sndVol").value;
       set.flashOnPing = on("hFlash");
+      set.notifyList = lines("hFriends"); set.notifyFriends = on("hFriendsNotify");
     }
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
     if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); }
+    if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;

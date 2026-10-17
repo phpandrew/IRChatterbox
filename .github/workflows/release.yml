@@ -1,7 +1,7 @@
 name: Build
 
-# Builds IRChatterbox.exe and IRChatterbox.apk, and on main publishes them as one release
-# once every check passes.
+# Builds IRChatterbox for Windows (.exe), macOS (.app, universal), Linux (amd64) and Android
+# (.apk), and on main publishes them as one release once every check passes.
 #
 #  - push to main  → build + security scans → if both pass, publish a release automatically.
 #                    The in-app updater offers it to everyone within a few hours.
@@ -219,6 +219,93 @@ jobs:
           retention-days: 30
           path: out/IRChatterbox.apk
 
+  # Linux: Wails needs GTK and WebKitGTK, so it's built natively (cgo) on Ubuntu.
+  linux:
+    needs: windows
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/frontend/package-lock.json
+
+      - name: Install GTK / WebKitGTK and Wails
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libgtk-3-dev libwebkit2gtk-4.1-dev
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: Build
+        run: |
+          v="${{ needs.windows.outputs.version }}"
+          jq --arg n "${v%%[-+]*}" '.info.productVersion = $n' wails.json > wails.tmp && mv wails.tmp wails.json
+          wails build -platform linux/amd64 -tags webkit2_41 -clean -trimpath -ldflags "-s -w -X main.appVersion=$v"
+
+      - name: Package
+        run: |
+          v="${{ needs.windows.outputs.version }}"
+          mkdir -p out pkg/IRChatterbox
+          cp build/bin/IRChatterbox out/IRChatterbox-linux-amd64      # the updater swaps this one in
+          cp build/bin/IRChatterbox build/linux/irchatterbox.desktop build/linux/install.sh pkg/IRChatterbox/
+          cp build/appicon.png pkg/IRChatterbox/irchatterbox.png
+          cp ../.github/README.md pkg/IRChatterbox/
+          tar -C pkg -czf "out/IRChatterbox-${v//+/_}-linux-amd64.tar.gz" IRChatterbox
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: IRChatterbox-linux-${{ needs.windows.outputs.version }}
+          retention-days: 30
+          path: source/out/*
+
+  # macOS: one universal app (Apple silicon + Intel). It isn't signed with an Apple Developer
+  # ID, so the first launch needs right-click → Open (see docs/BUILDING.md).
+  macos:
+    needs: windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: source/go.mod
+          cache-dependency-path: source/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/frontend/package-lock.json
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: Build
+        run: |
+          v="${{ needs.windows.outputs.version }}"
+          jq --arg n "${v%%[-+]*}" '.info.productVersion = $n' wails.json > wails.tmp && mv wails.tmp wails.json
+          wails build -platform darwin/universal -clean -trimpath -ldflags "-s -w -X main.appVersion=$v"
+
+      - name: Package
+        run: |
+          mkdir -p out
+          # ad-hoc signature: required for Apple silicon to run it at all
+          codesign --force --deep --sign - build/bin/IRChatterbox.app
+          ditto -c -k --keepParent build/bin/IRChatterbox.app out/IRChatterbox-macos.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: IRChatterbox-macos-${{ needs.windows.outputs.version }}
+          retention-days: 30
+          path: source/out/*
+
   # the same scans as the Security workflow; a release only goes out if they pass
   security:
     if: needs.windows.outputs.release == 'true'
@@ -230,7 +317,7 @@ jobs:
       security-events: write
 
   release:
-    needs: [windows, android, security]
+    needs: [windows, android, linux, macos, security]
     if: needs.windows.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -241,12 +328,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: IRChatterbox-${{ needs.windows.outputs.version }}
-          path: out
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: IRChatterbox-android-${{ needs.windows.outputs.version }}
+          pattern: IRChatterbox-*
+          merge-multiple: true
           path: out
 
       - name: Checksums for every file

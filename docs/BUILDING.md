@@ -29,7 +29,24 @@ The version comes from `source\VERSION` (embedded at build time), so a plain `wa
 wails build -ldflags "-X main.appVersion=0.3.0"
 ```
 
-You can cross-compile from Linux or macOS with `wails build -platform windows/amd64`. The Windows parts (tray, notifications, registry) are pure Go, so no C compiler is needed.
+You can cross-compile the Windows exe from Linux or macOS with `wails build -platform windows/amd64`. The Windows parts (tray, notifications, registry) are pure Go, so no C compiler is needed.
+
+### macOS and Linux
+
+These are built on their own OS (Wails uses the system web view through cgo):
+
+```bash
+# Linux (Debian/Ubuntu): GTK and WebKitGTK 4.1 headers first
+sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev
+cd source && wails build -platform linux/amd64 -tags webkit2_41   # → build/bin/IRChatterbox
+
+# macOS (Xcode command line tools installed)
+cd source && wails build -platform darwin/universal               # → build/bin/IRChatterbox.app
+```
+
+CI builds all of them (see Releases and CI below). The macOS app gets an ad-hoc signature only; signing and notarising with an Apple Developer ID would remove the "unidentified developer" prompt.
+
+On macOS the updater opens the new download instead of replacing the app in place (an `.app` is a folder, and macOS checks new apps on first launch). On Linux it swaps the binary like on Windows.
 
 ## Develop with live reload
 
