@@ -380,10 +380,14 @@ export function openSettings(startTab) {
       ${field("Upload to", `<select id="uHost">
         <option value="irchatterbox">IRChatterbox (i.irchatterbox.com)</option>
         <option value="imgur" ${set.uploadHost === "imgur" ? "selected" : ""}>Imgur</option>
+        <option value="custom" ${set.uploadHost === "custom" ? "selected" : ""}>My own server</option>
       </select>`)}
       <div id="uHostHint" class="hint"></div>
       <div id="uImgurRow" style="margin-top:10px">
         ${field("Imgur Client ID", text("uImgur", set.imgurClientId, "e.g. 1a2b3c4d5e6f7g8"), `Register an app at <a href="#" data-open="https://api.imgur.com/oauth2/addclient">api.imgur.com</a> (choose "without a callback URL") and paste its Client ID here.`)}
+      </div>
+      <div id="uCustomRow" style="margin-top:10px">
+        ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. The bundled PHP server is in <code>website/image-host</code> on GitHub.`)}
       </div>`);
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
@@ -394,9 +398,12 @@ export function openSettings(startTab) {
     if ($("uHost")) {
       const sync = () => {
         const imgur = $("uHost").value === "imgur";
+        const custom = $("uHost").value === "custom";
         $("uImgurRow").style.display = imgur ? "" : "none";
+        $("uCustomRow").style.display = custom ? "" : "none";
         $("uHostHint").textContent = imgur
           ? "Uploaded as-is to Imgur under your own Client ID. Imgur keeps images until they're deleted, and its own rules and limits apply."
+          : custom ? "Uploaded to your server, which decides the size, format and how long images are kept."
           : "Shrunk to fit 600×600 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
       };
       $("uHost").addEventListener("change", sync); sync();
@@ -617,7 +624,6 @@ export function openSettings(startTab) {
     body.innerHTML = card("Bot replies", "Applies to every automatic reply below.", `
       <div class="fgrid">
         ${field("Bot reply prefix", text("pPrefix", plug.botPrefix, "[Bot] "), "Put in front of every automatic reply. Messages starting with it are never answered (prevents bot loops).")}
-      </div>
       </div>`) + card("Temperature converter", "Replies with a °C ⇄ °F conversion when a message mentions a temperature.", `
       ${check("pW", plug.weatherEnabled, "Enabled")}
       <div class="indent">
@@ -642,13 +648,13 @@ export function openSettings(startTab) {
         ${field("Reply", text("muFmt", plug.music.format, "Now playing: {np}"), "{np} = Artist - Title · also {artist} {title} {album} {player}")}
         ${field("/np action", text("muNp", plug.music.npFormat, "is listening to {np}"), "Typing /np sends “* you is listening to …”")}
         ${field("Cooldown per channel (seconds)", text("muCd", plug.music.cooldown, "10", "number"))}
-        <div class="field" style="align-self:end"><button class="btn sm" id="muTest">Test now</button></div>
       </div>
+      <div class="btn-row"><button class="btn sm" id="muTest">Test</button></div>
       <div class="test-out hidden" id="muOut"></div>`, "desktop-only") +
       card("URL commands", "Typing the trigger fetches a web address and posts the result — like !solar.", `
-      <p class="hint" style="margin:0 0 12px">Typing the trigger fetches the URL and posts the result. Use <code>{args}</code> in the URL for text after the trigger. JSON responses can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</p>
       <div id="ucList"></div>
-      <button class="btn sm" id="ucAdd">+ Add command</button>`) +
+      <button class="btn sm" id="ucAdd">+ Add command</button>
+      <div class="hint" style="margin-top:10px">Use <code>{args}</code> in the URL for text typed after the trigger. JSON replies can be shaped with a template like <code>Solar: {{.power}} W, today {{round .today_kwh 1}} kWh</code>.</div>`) +
       card("Script plugins", "Your own JavaScript plugins and mIRC scripts from the plugins folder.", `
       ${check("pScripts", plug.scriptsEnabled, "Run JavaScript (.js) and mIRC (.mrc) scripts from the plugins folder")}
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn sm desktop-only" id="pOpen">Open data folder</button><button class="btn sm" id="pReload">Reload plugins</button><span class="muted" id="pReloadOut" style="align-self:center;font-size:12px"></span></div>
@@ -656,17 +662,16 @@ export function openSettings(startTab) {
     const drawUc = () => {
       $("ucList").innerHTML = plug.urlCommands.map((u, i) => `
         <div class="urlcmd" data-i="${i}">
-          <div class="row">
+          <label class="check"><input type="checkbox" data-f="enabled" ${u.enabled ? "checked" : ""}> Enabled</label>
+          <div class="indent"><label class="check"><input type="checkbox" data-f="onlyMe" ${u.onlyMe ? "checked" : ""}> Only I can trigger it</label></div>
+          <div class="fgrid" style="margin-top:8px">
             ${field("Trigger", `<input type="text" data-f="trigger" value="${esc(u.trigger)}" placeholder="!solar">`)}
-            <div class="field" style="flex:3"><label>URL</label><input type="text" data-f="url" value="${esc(u.url)}" placeholder="https://example.com/solar.json"></div>
-          </div>
-          ${field("Template (optional, for JSON)", `<input type="text" data-f="template" value="${esc(u.template)}" placeholder="Solar now: {{.power}} W">`)}
-          <div class="row" style="margin-top:8px">
+            ${field("Cooldown per channel (seconds)", `<input type="number" data-f="cooldown" value="${u.cooldown ?? 30}">`)}
+            ${field("URL", `<input type="text" data-f="url" value="${esc(u.url)}" placeholder="https://example.com/solar.json">`, "", true)}
+            ${field("Template (optional, for JSON)", `<input type="text" data-f="template" value="${esc(u.template)}" placeholder="Solar now: {{.power}} W">`, "", true)}
             ${field("Max lines", `<input type="number" data-f="maxLines" value="${u.maxLines || 3}">`)}
-            ${field("Cooldown (s)", `<input type="number" data-f="cooldown" value="${u.cooldown ?? 30}">`)}
-            <div class="field" style="flex:2"><label class="check"><input type="checkbox" data-f="enabled" ${u.enabled ? "checked" : ""}> Enabled</label><label class="check"><input type="checkbox" data-f="onlyMe" ${u.onlyMe ? "checked" : ""}> Only I can trigger it</label></div>
-            <div style="display:flex;gap:6px;padding-bottom:4px"><button class="btn sm" data-test="${i}">Test</button><button class="btn sm danger" data-rm="${i}">Remove</button></div>
           </div>
+          <div class="btn-row"><button class="btn sm" data-test="${i}">Test</button><button class="btn sm danger" data-rm="${i}">Remove</button></div>
           <div class="test-out hidden" id="ucOut${i}"></div>
         </div>`).join("");
     };
@@ -726,7 +731,7 @@ export function openSettings(startTab) {
     }
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
     if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); }
-    if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); }
+    if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); set.uploadURL = val("uURL"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;

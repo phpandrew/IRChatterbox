@@ -23,6 +23,7 @@ import (
 const (
 	UploadHostIRChatterbox = "irchatterbox"
 	UploadHostImgur        = "imgur"
+	UploadHostCustom       = "custom" // your own server with the same API (Settings → Media)
 
 	maxUploadBytes = 10 << 20 // also the limit on i.irchatterbox.com
 )
@@ -51,10 +52,19 @@ var uploadTypes = map[string]string{
 // UploadImage uploads one image (base64, as read by the UI) to the host chosen in Settings → Media.
 func (a *App) UploadImage(dataB64 string) (UploadResult, error) {
 	set := a.store.Get().Settings
+	if set.UploadHost == UploadHostCustom {
+		endpoint := strings.TrimSpace(set.UploadURL)
+		if p, err := url.Parse(endpoint); err != nil || p.Scheme != "https" || p.Host == "" {
+			return UploadResult{}, errors.New("Set your upload server's https:// address in Settings → Media.")
+		}
+		return uploadImage(set.UploadHost, endpoint, dataB64)
+	}
 	return uploadImage(set.UploadHost, set.ImgurClientID, dataB64)
 }
 
-func uploadImage(host, imgurClientID, dataB64 string) (UploadResult, error) {
+// uploadImage: for the custom host, extra is the server address; for Imgur, the Client ID.
+func uploadImage(host, extra, dataB64 string) (UploadResult, error) {
+	imgurClientID := extra
 	// accept a whole data: URL as well as bare base64
 	if i := strings.Index(dataB64, ";base64,"); i >= 0 && strings.HasPrefix(dataB64, "data:") {
 		dataB64 = dataB64[i+len(";base64,"):]
@@ -78,7 +88,9 @@ func uploadImage(host, imgurClientID, dataB64 string) (UploadResult, error) {
 	case UploadHostImgur:
 		return uploadToImgur(imgurClientID, data, ext)
 	case "", UploadHostIRChatterbox:
-		return uploadToIRChatterbox(data, ext)
+		return uploadToIRChatterbox(irchatterboxUploadURL, data, ext)
+	case UploadHostCustom:
+		return uploadToIRChatterbox(extra, data, ext)
 	default:
 		return UploadResult{}, fmt.Errorf("Unknown image host %q. Pick one in Settings → Media.", host)
 	}
@@ -131,12 +143,12 @@ func postUpload(endpoint string, body *bytes.Buffer, contentType string, headers
 	return resp, b, nil
 }
 
-func uploadToIRChatterbox(data []byte, ext string) (UploadResult, error) {
+func uploadToIRChatterbox(endpoint string, data []byte, ext string) (UploadResult, error) {
 	body, ct, err := multipartImage(data, ext, nil)
 	if err != nil {
 		return UploadResult{}, err
 	}
-	resp, b, err := postUpload(irchatterboxUploadURL, body, ct, nil)
+	resp, b, err := postUpload(endpoint, body, ct, nil)
 	if err != nil {
 		return UploadResult{}, err
 	}

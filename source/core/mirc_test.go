@@ -242,3 +242,20 @@ func TestMircExample(t *testing.T) {
 		t.Fatalf("example: warnings %v, %d events", w, len(e.events))
 	}
 }
+
+func TestMircCharCodes(t *testing.T) {
+	e := mircEngineFor(t, "")
+	for expr, want := range map[string]string{
+		"$chr(65)":                    "A",
+		"$chr(-1)":                    "",
+		"$chr(99999999999)":           "",
+		"$chr(abc)":                   "",
+		"$gettok(a.b.c,2,46)":         "b",
+		"$gettok(a b c,2,4294967328)": "b", // overflow falls back to a space
+		"$numtok(a b,-5)":             "2",
+	} {
+		if got := mircEval(e, expr); got != want {
+			t.Errorf("%s = %q, want %q", expr, got, want)
+		}
+	}
+}

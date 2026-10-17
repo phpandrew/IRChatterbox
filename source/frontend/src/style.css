@@ -296,6 +296,7 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .btn.sm { padding: 4px 10px; font-size: 12px; }
 .urlcmd { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
 .urlcmd .row { display: flex; gap: 10px; align-items: end; }
+.btn-row { display: flex; gap: 8px; margin-top: 10px; }
 .urlcmd .row .field { flex: 1; }
 .test-out { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; background: var(--bg-input); border-radius: 6px; padding: 8px; margin-top: 8px; color: var(--text-muted); }
 .theme-vars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; }

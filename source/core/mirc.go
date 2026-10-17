@@ -730,6 +730,25 @@ func atoi(s string) int {
 	return n
 }
 
+// mircChr turns a character code into the character, or "" for anything that isn't a
+// valid code point (negative, too large, not a number).
+func mircChr(s string) string {
+	n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 32)
+	if err != nil || n <= 0 || n > unicode.MaxRune {
+		return ""
+	}
+	return string(rune(n))
+}
+
+// tokSep is the separator for the token identifiers ($gettok(text, N, C)): character C,
+// or a space when C is missing or invalid.
+func tokSep(c string) string {
+	if sep := mircChr(c); sep != "" {
+		return sep
+	}
+	return " "
+}
+
 func atof(s string) float64 {
 	f, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	return f
@@ -744,10 +763,7 @@ func mFmtNum(f float64) string {
 
 // tokens for $gettok & co: c is an ASCII code
 func toks(text, c string) []string {
-	sep := string(rune(atoi(c)))
-	if atoi(c) == 0 {
-		sep = " "
-	}
+	sep := tokSep(c)
 	var out []string
 	for _, t := range strings.Split(text, sep) {
 		if t != "" {
@@ -992,7 +1008,7 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 	case "strip":
 		return stripFormatting(arg(a, 0))
 	case "chr":
-		return string(rune(atoi(arg(a, 0))))
+		return mircChr(arg(a, 0))
 	case "asc":
 		r := []rune(arg(a, 0))
 		if len(r) == 0 {
@@ -1029,7 +1045,7 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 		if to > len(t) {
 			to = len(t)
 		}
-		sep := string(rune(atoi(arg(a, 2))))
+		sep := tokSep(arg(a, 2))
 		return strings.Join(t[from-1:to], sep)
 	case "numtok":
 		return strconv.Itoa(len(toks(arg(a, 0), arg(a, 1))))
@@ -1054,7 +1070,7 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 				return arg(a, 0)
 			}
 		}
-		return strings.Join(append(t, arg(a, 1)), string(rune(atoi(arg(a, 2)))))
+		return strings.Join(append(t, arg(a, 1)), tokSep(arg(a, 2)))
 	case "deltok":
 		t := toks(arg(a, 0), arg(a, 2))
 		from, to := tokRange(arg(a, 1), len(t))
@@ -1064,7 +1080,7 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 		if to > len(t) {
 			to = len(t)
 		}
-		return strings.Join(append(append([]string{}, t[:from-1]...), t[to:]...), string(rune(atoi(arg(a, 2)))))
+		return strings.Join(append(append([]string{}, t[:from-1]...), t[to:]...), tokSep(arg(a, 2)))
 	case "remtok":
 		var keep []string
 		for _, v := range toks(arg(a, 0), arg(a, 2)) {
@@ -1072,7 +1088,7 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 				keep = append(keep, v)
 			}
 		}
-		return strings.Join(keep, string(rune(atoi(arg(a, 2)))))
+		return strings.Join(keep, tokSep(arg(a, 2)))
 	case "hget":
 		t := x.e.hash[strings.ToLower(arg(a, 0))]
 		if len(a) < 2 {
