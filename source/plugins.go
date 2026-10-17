@@ -9,8 +9,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -19,7 +17,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/dop251/goja"
 )
 
 type Plugins struct {
@@ -27,6 +24,11 @@ type Plugins struct {
 	mu       sync.Mutex
 	cooldown map[string]time.Time
 	scripts  []*script
+}
+
+// OnJoin is kept for the IRC layer; it's just a "join" plugin event.
+func (p *Plugins) OnJoin(c *Conn, channel, nick string, self bool) {
+	p.Emit("join", c, channel, map[string]any{"channel": channel, "nick": nick, "self": self, "isChannel": true})
 }
 
 func NewPlugins(a *App) *Plugins {
@@ -109,18 +111,10 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 	}
 
 	// --- JS scripts ---
-	if cfg.ScriptsEnabled {
-		p.dispatch("message", c, map[string]any{
-			"server": c.cfg.Name, "target": replyTo, "channel": replyTo, "nick": nick, "text": plain, "raw": text, "self": self,
-			"isChannel": c.isChannel(replyTo),
-		})
-	}
-}
-
-func (p *Plugins) OnJoin(c *Conn, channel, nick string, self bool) {
-	if p.app.store.Get().Plugins.ScriptsEnabled {
-		p.dispatch("join", c, map[string]any{"server": c.cfg.Name, "target": channel, "channel": channel, "nick": nick, "self": self, "isChannel": true})
-	}
+	p.Emit("message", c, replyTo, map[string]any{
+		"channel": replyTo, "nick": nick, "text": plain, "raw": text, "self": self,
+		"isChannel": c.isChannel(replyTo), "isPM": !c.isChannel(replyTo),
+	})
 }
 
 func channelAllowed(list []string, ch string) bool {
@@ -303,165 +297,3 @@ func flattenJSON(v any) string {
 	}
 }
 
-// ---------- JavaScript plugins ----------
-
-type script struct {
-	name     string
-	mu       sync.Mutex
-	vm       *goja.Runtime
-	handlers map[string][]goja.Callable
-	cur      *Conn
-	curTgt   string
-}
-
-func (p *Plugins) LoadScripts() string {
-	dir := filepath.Join(p.app.store.dir, "plugins")
-	files, _ := filepath.Glob(filepath.Join(dir, "*.js"))
-	var loaded []*script
-	var names, errs []string
-	for _, f := range files {
-		base := filepath.Base(f)
-		if strings.HasPrefix(base, "_") {
-			continue
-		}
-		src, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		s, err := p.newScript(base, string(src))
-		if err != nil {
-			errs = append(errs, base+": "+err.Error())
-			continue
-		}
-		loaded = append(loaded, s)
-		names = append(names, base)
-	}
-	p.mu.Lock()
-	p.scripts = loaded
-	p.mu.Unlock()
-	msg := fmt.Sprintf("Plugins loaded: %d script(s) %s", len(names), strings.Join(names, ", "))
-	if len(errs) > 0 {
-		msg += " — errors: " + strings.Join(errs, "; ")
-	}
-	return msg
-}
-
-func (p *Plugins) newScript(name, src string) (*script, error) {
-	s := &script{name: name, vm: goja.New(), handlers: map[string][]goja.Callable{}}
-	vm := s.vm
-	vm.SetFieldNameMapper(goja.TagFieldNameMapper("json", true))
-	cfg := p.app.store.Get().Plugins
-	vm.Set("prefix", cfg.BotPrefix)
-	vm.Set("on", func(call goja.FunctionCall) goja.Value {
-		ev := call.Argument(0).String()
-		if fn, ok := goja.AssertFunction(call.Argument(1)); ok {
-			s.handlers[ev] = append(s.handlers[ev], fn)
-		}
-		return goja.Undefined()
-	})
-	vm.Set("reply", func(text string) {
-		if s.cur != nil && s.curTgt != "" {
-			s.cur.Say(s.curTgt, text, true)
-		}
-	})
-	vm.Set("say", func(target, text string) {
-		if s.cur != nil {
-			s.cur.Say(target, text, true)
-		}
-	})
-	vm.Set("action", func(target, text string) {
-		if s.cur != nil {
-			s.cur.Action(target, text)
-		}
-	})
-	vm.Set("raw", func(line string) {
-		if s.cur != nil {
-			s.cur.SendRaw(line)
-		}
-	})
-	vm.Set("me", func() string {
-		if s.cur != nil {
-			return s.cur.Nick()
-		}
-		return ""
-	})
-	vm.Set("log", func(text string) {
-		if s.cur != nil {
-			s.cur.info("", "plugin", "["+name+"] "+text)
-		}
-	})
-	vm.Set("httpGet", func(u string) string {
-		resp, err := httpClient.Get(u)
-		if err != nil {
-			return ""
-		}
-		defer resp.Body.Close()
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
-		return string(b)
-	})
-	vm.Set("toF", func(c float64) float64 { return c*9/5 + 32 })
-	vm.Set("toC", func(f float64) float64 { return (f - 32) * 5 / 9 })
-	if _, err := vm.RunString(src); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func (p *Plugins) dispatch(event string, c *Conn, data map[string]any) {
-	p.mu.Lock()
-	scripts := append([]*script(nil), p.scripts...)
-	p.mu.Unlock()
-	for _, s := range scripts {
-		if len(s.handlers[event]) == 0 {
-			continue
-		}
-		go func(s *script) {
-			s.mu.Lock()
-			defer s.mu.Unlock()
-			defer func() {
-				if r := recover(); r != nil {
-					c.info("", "error", fmt.Sprintf("[%s] crashed: %v", s.name, r))
-				}
-			}()
-			s.cur, s.curTgt = c, fmt.Sprint(data["target"])
-			t := time.AfterFunc(15*time.Second, func() { s.vm.Interrupt("timeout") })
-			defer t.Stop()
-			obj := s.vm.ToValue(data)
-			for _, fn := range s.handlers[event] {
-				if _, err := fn(goja.Undefined(), obj); err != nil {
-					c.info("", "error", fmt.Sprintf("[%s] %v", s.name, err))
-					s.vm.ClearInterrupt()
-				}
-			}
-		}(s)
-	}
-}
-
-const examplePlugin = `// IRChatterbox plugin example.
-// Files in this folder ending in .js are loaded at startup (or with /reload).
-// Files starting with "_" (like this one) are skipped — copy it to e.g. "dice.js" to enable.
-//
-// API:
-//   on("message", fn)  fn(e) with e.server, e.channel, e.nick, e.text, e.self, e.isChannel
-//   on("join", fn)     fn(e) with e.channel, e.nick, e.self
-//   reply(text)        send to the channel/query the event came from
-//   say(target, text)  action(target, text)  raw("IRC LINE")
-//   httpGet(url)       returns the body as a string (blocking, 12s timeout)
-//   me()               your current nick
-//   log(text)          print to the server window
-//   prefix             your bot prefix from settings, e.g. "[Bot] "
-//   toF(c) / toC(f)    temperature helpers
-
-on("message", function (e) {
-  if (e.text === "!roll") {
-    reply(prefix + e.nick + " rolled " + (1 + Math.floor(Math.random() * 6)));
-  }
-});
-`
-
-func writeExamplePlugin(dir string) {
-	p := filepath.Join(dir, "_example.js")
-	if _, err := os.Stat(p); os.IsNotExist(err) {
-		os.WriteFile(p, []byte(examplePlugin), 0o644)
-	}
-}

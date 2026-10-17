@@ -31,6 +31,13 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 - **Remembers the window.** Size, position, monitor, maximised and full-screen state (F11) are restored on launch.
 - **Channel right-click.** "Join on connect" adds a channel to the auto-join list. "Show at startup" opens IRChatterbox on that channel instead of where you left off.
 - **Start with Windows.** Optionally start minimised (Settings → General).
+- **Auto-update.** New releases are found on GitHub and installed with one click. The download is checked against its SHA-256 sum, and the app restarts itself.
+- **System tray.** The tray icon and taskbar button flash when you're mentioned or messaged while in another app. Optionally, closing the window hides it to the tray.
+- **Notification sounds.** Five built-in sounds or your own .wav/.mp3/.ogg, set separately for highlights and private messages, with a volume control.
+- **Auto-away.** You're marked away on every network after a set number of idle minutes, and back when you return.
+- **Paste protection.** Before you send a big paste you can send it, join it into one line, or cancel.
+- **Older networks.** Text encoding can be set per server: automatic UTF-8 with a Western fallback, or Cyrillic, Central European, Greek, Turkish, Japanese, Chinese, Korean and more.
+- **Drag to reorder.** Drag servers and channels in the sidebar into any order. Channels are also joined in that order.
 - **Quit confirmation.** Closing the window asks before disconnecting you. Tick "Don't ask me again" or turn it off in Settings → General.
 - **Topics.** Double-click a channel topic to change it.
 - **Marker line.** A red line divides messages you've read from ones that arrived while you were in another channel or another app. You can turn it off in Settings → General.
@@ -51,7 +58,7 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 
 `{args}` in the URL is replaced by whatever follows the trigger (`!weather london`). Use the **Test** button to preview the output.
 
-**JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. `_example.js` documents the API: `on("message", fn)`, `reply()`, `say()`, `httpGet()`, `me()`, `log()`, `prefix`.
+**JavaScript plugins.** Put `.js` files in `%APPDATA%\IRChatterbox\plugins`, then type `/reload`. Plugins can react to messages, joins, parts, kicks, nick changes, topics and more, add their own `/commands`, use timers, store data and fetch web pages. **[Plugin guide and API reference →](../docs/PLUGINS.md)**
 
 ## Download
 Get `IRChatterbox.exe` from the [Releases](../../releases) page:
@@ -67,25 +74,7 @@ Push a version tag and GitHub builds the exe and publishes the release with note
 A tag with a suffix, such as `v0.3.0-beta1`, is published as a pre-release. Every other push or pull request is also built; the exe is on the Actions run page for 30 days.
 
 ## Build from source
-The project is in `source/`. Requires Go 1.26+, Node 18+ and `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.
+See **[docs/BUILDING.md](../docs/BUILDING.md)** for requirements, building, live-reload development, running the tests and how releases work.
 
-    wails build                 # on Windows
-    wails build -platform windows/amd64   # cross-compile from Linux/macOS
-    wails dev                   # live-reload development
-
-`source/frontend/src/mock.js` provides a fake backend, so the UI also runs in a normal browser (`cd source/frontend && npx vite`).
-
-## Layout
-Paths are relative to `source/`.
-
-| File | What |
-|---|---|
-| `../.github/workflows/release.yml` | Builds the Windows exe when a release is published |
-| `irc.go` | Connection, CAP/SASL, numerics, channel and user state |
-| `commands.go` | `/command` handling |
-| `plugins.go` | Temperature converter, URL commands, JS plugin runtime |
-| `app.go` | Methods the UI calls, notifications, logging |
-| `config.go` | `config.json`, themes |
-| `frontend/src/main.js` | UI: sidebar, chat, user list, input |
-| `frontend/src/modals.js` | Server editor, settings, theme editor |
-| `frontend/src/format.js` | mIRC colours and formatting, links, media, nick colours |
+    cd source
+    wails build

@@ -381,3 +381,20 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 :root[data-base="light"] .about-actions .gh img { filter: invert(1); }
 .about-url { display: inline-block; margin-top: 16px; font-size: 12.5px; font-family: var(--mono); }
 .about-foot { text-align: center; font-size: 11.5px; color: var(--text-faint); margin: 14px 0 0; }
+
+/* ---------- drag to reorder ---------- */
+.srv-head[draggable], .buf[draggable] { cursor: grab; }
+.dragging { opacity: .4; }
+.buf.drop-before, .srv.drop-before { box-shadow: 0 -2px 0 var(--accent); }
+.buf.drop-after, .srv.drop-after { box-shadow: 0 2px 0 var(--accent); }
+
+/* ---------- update banner ---------- */
+#updateBar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-bottom: 1px solid var(--border); font-size: 13px; }
+#updateBar .ub-text { flex: 1; }
+#updateBar .ub-progress { width: 160px; height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
+#updateBar .ub-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+#updateBar button:disabled { opacity: .5; cursor: default; }
+
+/* ---------- paste confirm ---------- */
+.paste-preview { margin: 0; max-height: 200px; overflow: auto; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; user-select: text; }
+input[type=range] { accent-color: var(--accent); }

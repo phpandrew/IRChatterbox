@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -30,6 +31,8 @@ type ServerConfig struct {
 	AutoJoin      []string `json:"autoJoin"`         // "#chan" or "#chan key"
 	RememberChans bool     `json:"rememberChannels"` // keep AutoJoin in sync with joins/parts
 	Perform       []string `json:"perform"`          // commands run after connect, e.g. "/mode $me +x"
+	Encoding      string   `json:"encoding"`         // "" / auto = UTF-8 with Windows-1252 fallback, or e.g. windows-1251, iso-8859-1
+	ChannelOrder  []string `json:"channelOrder"`     // sidebar order (lowercase names), set by dragging
 }
 
 // URLCommand is a trigger (like !solar) that fetches a URL and replies with the result.
@@ -94,6 +97,28 @@ type Settings struct {
 	ConfirmOnClose   bool   `json:"confirmOnClose"`
 	MarkerLine       bool   `json:"markerLine"`
 	Ignore         []string `json:"ignore"`
+
+	// updates
+	AutoUpdateCheck bool   `json:"autoUpdateCheck"`
+	SkippedVersion  string `json:"skippedVersion"`
+
+	// tray & attention
+	TrayIcon     bool `json:"trayIcon"`
+	FlashOnPing  bool `json:"flashOnPing"`  // flash tray + taskbar when highlighted / PM'd
+	CloseToTray  bool `json:"closeToTray"`  // closing the window hides it to the tray
+
+	// sending
+	PasteWarnLines int `json:"pasteWarnLines"` // confirm before sending this many lines or more; 0 = never
+
+	// auto-away
+	AutoAway        bool   `json:"autoAway"`
+	AutoAwayMinutes int    `json:"autoAwayMinutes"`
+	AutoAwayMessage string `json:"autoAwayMessage"`
+
+	// sounds: "" (none) | chime | ping | pop | bell | blip | file:<path>
+	SoundHighlight string `json:"soundHighlight"`
+	SoundPM        string `json:"soundPM"`
+	SoundVolume    int    `json:"soundVolume"` // 0-100
 }
 
 // Shortcut replaces a typed word such as "$shrug" with Text when a message is sent.
@@ -171,6 +196,9 @@ func defaultConfig() Config {
 			InlineImages: true, InlineYouTube: true, ShowJoinsParts: true,
 			TimeFormat: "24h", FontSize: 14, Logging: true, HistoryLines: 200, LogMaxLines: 10000,
 			ShowUserList: true, QuitMessage: "IRChatterbox", ConfirmOnClose: true, MarkerLine: true, Ignore: []string{},
+			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,
+			AutoAwayMinutes: 15, AutoAwayMessage: "Away from keyboard",
+			SoundHighlight: "chime", SoundPM: "ping", SoundVolume: 70,
 		},
 		NickColors: map[string]string{},
 		Shortcuts:  defaultShortcuts(),
@@ -349,4 +377,57 @@ func (s *Store) SaveTheme(t Theme) error {
 
 func (s *Store) DeleteTheme(name string) error {
 	return os.Remove(filepath.Join(s.dir, "themes", safeName(name)+".json"))
+}
+
+// ReorderServers saves the sidebar order of servers (dragged in the UI).
+func (s *Store) reorderServers(ids []string) {
+	s.Update(func(c *Config) {
+		pos := map[string]int{}
+		for i, id := range ids {
+			pos[id] = i
+		}
+		sort.SliceStable(c.Servers, func(i, j int) bool {
+			pi, oki := pos[c.Servers[i].ID]
+			pj, okj := pos[c.Servers[j].ID]
+			if !oki {
+				pi = len(ids) + i
+			}
+			if !okj {
+				pj = len(ids) + j
+			}
+			return pi < pj
+		})
+	})
+}
+
+// setChannelOrder saves a server's channel order and puts its auto-join list in the same
+// order, so channels are also joined in that order.
+func (s *Store) setChannelOrder(id string, order []string) {
+	s.Update(func(c *Config) {
+		for i := range c.Servers {
+			sv := &c.Servers[i]
+			if sv.ID != id {
+				continue
+			}
+			sv.ChannelOrder = nil
+			pos := map[string]int{}
+			for i, ch := range order {
+				l := strings.ToLower(ch)
+				sv.ChannelOrder = append(sv.ChannelOrder, l)
+				pos[l] = i
+			}
+			sort.SliceStable(sv.AutoJoin, func(a, b int) bool {
+				na, nb := strings.ToLower(strings.Fields(sv.AutoJoin[a] + " ")[0]), strings.ToLower(strings.Fields(sv.AutoJoin[b] + " ")[0])
+				pa, oka := pos[na]
+				pb, okb := pos[nb]
+				if !oka {
+					pa = 1 << 30
+				}
+				if !okb {
+					pb = 1 << 30
+				}
+				return pa < pb
+			})
+		}
+	})
 }

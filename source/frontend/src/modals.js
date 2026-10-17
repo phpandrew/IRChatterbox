@@ -2,6 +2,8 @@ import { Go } from "./api.js";
 import wordmarkLight from "./assets/wordmark-light.png";
 import wordmarkDark from "./assets/wordmark-dark.png";
 import githubIcon from "./assets/github.png";
+import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
+import { showUpdateBar } from "./main.js";
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
@@ -62,6 +64,24 @@ export function openColorPicker(nick, current, onPick) {
   $("cpHex").addEventListener("keydown", (e) => { if (e.key === "Enter") pick(); });
 }
 
+// ---------- big paste confirmation ----------
+export function openPasteConfirm(lines, target, done) {
+  const n = lines.length;
+  const secs = Math.max(0, Math.ceil((n - 5) / 2));
+  const preview = lines.slice(0, 6).map((l) => esc(l.length > 140 ? l.slice(0, 140) + "…" : l)).join("\n") + (n > 6 ? `\n… and ${n - 6} more` : "");
+  open(`<div class="modal-head">Send ${n} lines to ${esc(target)}?</div>
+    <div class="modal-body">
+      <p style="margin:0 0 10px" class="muted">Sending many lines at once can get you kicked for flooding.${secs ? ` IRChatterbox paces them, so this takes about ${secs} second${secs === 1 ? "" : "s"}.` : ""}</p>
+      <pre class="paste-preview">${preview}</pre>
+    </div>
+    <div class="modal-foot"><button class="btn left" id="pcCancel">Cancel</button><button class="btn" id="pcJoin">Join into one line</button><button class="btn primary" id="pcSend">Send ${n} lines</button></div>`, "sm", true);
+  const finish = (mode) => { closeOverlay(); done(mode); };
+  $("pcCancel").onclick = () => finish(null);
+  $("pcJoin").onclick = () => finish("join");
+  $("pcSend").onclick = () => finish("send");
+  $("pcSend").focus();
+}
+
 // ---------- quit confirmation ----------
 let quitKeys = null;
 export function openQuitConfirm(connected) {
@@ -109,6 +129,7 @@ export async function openServerEditor(cfg, onSaved) {
         <div class="field"><label>&nbsp;</label>${check("sTls", c.tls, "Use TLS (SSL)")}${check("sSkip", c.tlsSkipVerify, "Accept invalid certificates")}</div>
         ${field("Server password", text("sPass", c.password, "usually empty", "password"))}
         <div class="field"><label>&nbsp;</label>${check("sAuto", c.autoConnect, "Connect automatically on startup")}</div>
+        ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
       </div>
       <div class="section-title">Identity</div>
       <div class="fgrid">
@@ -148,6 +169,9 @@ export async function openServerEditor(cfg, onSaved) {
     document.querySelectorAll(".preset").forEach((x) => x.classList.toggle("on", x === b));
     $("sNick").focus();
   }));
+  Go.GetEncodings().then((list) => {
+    $("sEnc").innerHTML = (list || [["auto", "Automatic"]]).map(([v, l]) => `<option value="${v}" ${(c.encoding || "auto") === v ? "selected" : ""}>${esc(l)}</option>`).join("");
+  });
   const port = () => {
     if (!$("sPort").dataset.touched) $("sPort").value = on("sTls") ? 6697 : 6667;
   };
@@ -170,7 +194,7 @@ export async function openServerEditor(cfg, onSaved) {
       ...c, name: val("sName") || val("sHost"), host: val("sHost"), port: parseInt(val("sPort")) || 6697, tls: on("sTls"), tlsSkipVerify: on("sSkip"),
       password: $("sPass").value, nick: val("sNick"), altNick: val("sAlt"), username: val("sUser"), realname: val("sReal"),
       authMethod: $("sAuthM").value, authUser: val("sAuthU"), authPass: $("sAuthP").value, autoConnect: on("sAuto"),
-      rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"),
+      rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"), encoding: $("sEnc").value,
     };
     const saved = await Go.SaveServer(out);
     if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }
@@ -207,7 +231,7 @@ export function openSettings(startTab) {
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
   const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
-    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
@@ -231,6 +255,20 @@ export function openSettings(startTab) {
   };
 
   const body = $("stBody");
+  const soundPicker = (id, value) => `<div style="display:flex;gap:8px">
+        <select id="${id}" style="flex:1">
+          <option value="">None</option>
+          ${BUILTIN_SOUNDS.map(([v, l]) => `<option value="${v}" ${value === v ? "selected" : ""}>${l}</option>`).join("")}
+          <option value="file" ${(value || "").startsWith("file:") ? "selected" : ""}>Custom sound file…</option>
+        </select>
+        <button class="btn sm" data-test-sound="${id}">▶ Test</button></div>
+        <div class="snd-file ${(value || "").startsWith("file:") ? "" : "hidden"}" id="${id}File" style="display:flex;gap:8px;margin-top:6px">
+          <input type="text" id="${id}Path" value="${esc((value || "").startsWith("file:") ? value.slice(5) : "")}" placeholder="C:\\Sounds\\ping.wav" style="flex:1">
+          <button class="btn sm" data-browse-sound="${id}">Browse…</button></div>`;
+  const readSound = (id) => {
+    const v = $(id).value;
+    return v === "file" ? (val(id + "Path") ? "file:" + val(id + "Path") : "") : v;
+  };
   function draw() {
     if (tab === "general") body.innerHTML =
       card("Chat display", "Control how chats look and what information is shown.", `
@@ -260,7 +298,18 @@ export function openSettings(startTab) {
       card("Startup & closing", "Configure how IRChatterbox starts and exits.", `
       ${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
       <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div>
-      ${check("gConfirm", set.confirmOnClose, "Confirm before quitting when I close the window")}`) +
+      ${check("gConfirm", set.confirmOnClose, "Confirm before quitting when I close the window")}
+      ${check("gTray", set.trayIcon !== false, "Show an icon in the system tray")}
+      <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div>`) +
+      card("Away", "Mark yourself away on every network when you step away from your PC.", `
+      ${check("gAway", set.autoAway, "Set me away automatically when I'm idle")}
+      <div class="fgrid" style="margin-top:10px">
+        ${field("After this many minutes without keyboard or mouse input", text("gAwayMin", set.autoAwayMinutes ?? 15, "15", "number"))}
+        ${field("Away message", text("gAwayMsg", set.autoAwayMessage ?? "Away from keyboard", "Away from keyboard"))}
+      </div>
+      <div class="hint">You're set back as soon as you use your PC again. A manual <code>/away</code> is never undone automatically.</div>`) +
+      card("Sending", "Protection against flooding a channel by accident.", `
+      <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>`) +
       card("Messages", "The default message sent when you quit or leave a channel.", `
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`);
     else if (tab === "appearance") drawAppearance();
@@ -271,6 +320,16 @@ export function openSettings(startTab) {
       ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
       <div style="margin-top:10px"><button class="btn sm" id="hTest">Send a test notification</button></div>`) +
+      card("Sounds", "Play a sound when you're mentioned or messaged while looking elsewhere.", `
+      <div class="fgrid">
+        ${field("When I'm highlighted", soundPicker("sndHl", set.soundHighlight ?? "chime"))}
+        ${field("For private messages", soundPicker("sndPm", set.soundPM ?? "ping"))}
+        ${field("Volume", `<div style="display:flex;gap:10px;align-items:center"><input type="range" id="sndVol" min="0" max="100" value="${set.soundVolume ?? 70}" style="flex:1"><span id="sndVolOut" class="muted" style="width:36px">${set.soundVolume ?? 70}%</span></div>`)}
+      </div>
+      <div class="hint">Custom sounds can be .wav, .mp3, .ogg or .m4a. When a sound is set, the Windows notification itself stays silent so you don't hear two.</div>`) +
+      card("Tray & taskbar", "Get your attention when you're in another app.", `
+      ${check("hFlash", set.flashOnPing !== false, "Flash the tray icon and taskbar button when I'm mentioned or messaged")}
+      <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`) +
       card("Ignore list", "Hide messages from these people entirely.", `
       ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`);
     else if (tab === "shortcuts") drawShortcuts();
@@ -291,7 +350,18 @@ export function openSettings(startTab) {
       $("gBrowse").onclick = async () => { const f = await Go.PickFolder("Choose where to save text logs"); if (f) $("gFolder").value = f; };
       $("gOpenLogs").onclick = () => Go.OpenLogFolder();
     }
-    if ($("hTest")) $("hTest").onclick = () => Go.Notify("IRChatterbox", "This is what a highlight notification looks like.");
+    if ($("hTest")) $("hTest").onclick = () => { collect(); Go.SaveSettings(set); Go.Notify("IRChatterbox", "This is what a highlight notification looks like."); };
+    if ($("sndVol")) {
+      $("sndVol").oninput = () => ($("sndVolOut").textContent = $("sndVol").value + "%");
+      for (const id of ["sndHl", "sndPm"]) {
+        $(id).onchange = () => $(id + "File").classList.toggle("hidden", $(id).value !== "file");
+      }
+      body.querySelectorAll("[data-test-sound]").forEach((b) => (b.onclick = () => previewSound(readSound(b.dataset.testSound), +$("sndVol").value)));
+      body.querySelectorAll("[data-browse-sound]").forEach((b) => (b.onclick = async () => {
+        const f = await Go.PickSoundFile();
+        if (f) $(b.dataset.browseSound + "Path").value = f;
+      }));
+    }
   }
 
   function drawAppearance(selectTheme) {
@@ -414,9 +484,25 @@ export function openSettings(startTab) {
         </div>
         <a class="about-url" href="${REPO}" data-url="${REPO}">${REPO.replace("https://", "")}</a>
       </section>
+      ${card("Updates", "New versions are published on GitHub Releases.", `
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn sm" id="abCheck">Check for updates</button>
+          <span id="abStatus" class="muted" style="font-size:12.5px"></span>
+        </div>
+        <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`)}
       <p class="about-foot">Built with Go and Wails · Emoji data from unicode-emoji-json (MIT)</p>`;
     body.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => Go.OpenURL(b.dataset.open)));
     $("abVer").textContent = (await Go.GetVersion()) || "dev";
+    $("abCheck").onclick = async () => {
+      const st = $("abStatus");
+      st.className = "muted"; st.textContent = "Checking…";
+      const info = await Go.CheckForUpdate();
+      if (info.error) { st.className = "t-status bad"; st.textContent = info.error; return; }
+      if (!info.available) { st.className = "t-status ok"; st.textContent = `✓ You're on the latest version (${info.current}).`; return; }
+      st.className = "t-status ok";
+      st.innerHTML = `Version ${esc(info.latest)} is available. <button class="btn sm primary" id="abInstall">Update &amp; restart</button>`;
+      $("abInstall").onclick = () => { closeOverlay(); showUpdateBar(info); document.getElementById("ubInstall")?.click(); };
+    };
   }
 
   function drawShortcuts() {
@@ -539,11 +625,19 @@ export function openSettings(startTab) {
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");
+      set.trayIcon = on("gTray"); set.closeToTray = on("gCloseTray");
+      set.autoAway = on("gAway"); set.autoAwayMinutes = Math.max(1, parseInt(val("gAwayMin")) || 15); set.autoAwayMessage = val("gAwayMsg");
+      set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }
     if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; }
-    if (has("hWords")) { set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore"); }
+    if (has("hWords")) {
+      set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore");
+      set.soundHighlight = readSound("sndHl"); set.soundPM = readSound("sndPm"); set.soundVolume = +$("sndVol").value;
+      set.flashOnPing = on("hFlash");
+    }
+    if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
     if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");

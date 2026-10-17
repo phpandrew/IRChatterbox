@@ -64,6 +64,7 @@ type Conn struct {
 	wantQuit   bool
 	reconnectN int
 	away       bool
+	autoAway   bool // away was set by auto-away (so we also unset it)
 	lag        time.Duration
 	pingSent   time.Time
 
@@ -174,6 +175,7 @@ func (c *Conn) run() {
 		}
 		c.setStatus("disconnected")
 		c.emit(Event{Type: "reset"})
+		c.app.plugins.Emit("disconnect", c, "", map[string]any{"reason": fmt.Sprint(err)})
 		if quit {
 			return
 		}
@@ -262,7 +264,7 @@ func (c *Conn) session(addr string) error {
 		if err != nil {
 			return err
 		}
-		line = strings.ToValidUTF8(line, "�")
+		line = c.decode(line)
 		c.handle(ParseMessage(line))
 	}
 }
@@ -302,7 +304,7 @@ func mathMin(a, b float64) float64 {
 }
 
 func (c *Conn) SendRaw(line string) {
-	line = strings.NewReplacer("\r", "", "\n", " ").Replace(line)
+	line = c.encode(strings.NewReplacer("\r", "", "\n", " ").Replace(line))
 	c.mu.Lock()
 	out := c.out
 	c.mu.Unlock()
@@ -500,6 +502,7 @@ func (c *Conn) onRegistered() {
 	c.reconnectN = 0
 	c.mu.Unlock()
 	c.setStatus("connected")
+	c.app.plugins.Emit("connect", c, "", map[string]any{"nick": c.Nick()})
 	if c.cfg.AuthMethod == "nickserv" && c.cfg.AuthPass != "" {
 		user := c.cfg.AuthUser
 		if user != "" {
@@ -576,6 +579,9 @@ func (c *Conn) handle(m *Message) {
 	}
 	me := c.Nick()
 	isMe := strings.EqualFold(nick, me)
+	if c.app.plugins.hasHandlers("raw") {
+		c.app.plugins.Emit("raw", c, "", map[string]any{"command": m.Command, "params": m.Params, "nick": nick, "prefix": m.Prefix, "tags": m.Tags})
+	}
 
 	switch m.Command {
 	case "PING":
@@ -717,6 +723,7 @@ func (c *Conn) handle(m *Message) {
 			c.emitUsersSoon(ch)
 		}
 		c.emit(Event{Type: "rename", Nick: nick, Text: newNick, Self: isMe})
+		c.app.plugins.Emit("nick", c, "", map[string]any{"oldNick": nick, "newNick": newNick, "nick": newNick, "self": isMe, "channels": affected})
 		if isMe {
 			c.setStatus("connected")
 			c.info("", "info", "You are now known as "+newNick)
@@ -758,6 +765,7 @@ func (c *Conn) handle(m *Message) {
 			reason = m.Trailing()
 		}
 		c.emit(Event{Type: "event", Kind: "part", Buffer: chName, Nick: nick, Text: reason, Time: ts, Self: isMe, Extra: map[string]any{"host": m.UserHost()}})
+		c.app.plugins.Emit("part", c, chName, map[string]any{"channel": chName, "nick": nick, "reason": reason, "self": isMe, "isChannel": true})
 		if isMe {
 			c.emit(Event{Type: "buffer", Buffer: chName, Kind: "channel", Extra: map[string]any{"action": "parted"}})
 		} else {
@@ -776,6 +784,7 @@ func (c *Conn) handle(m *Message) {
 		c.mu.Unlock()
 		kickedMe := strings.EqualFold(victim, me)
 		c.emit(Event{Type: "event", Kind: "kick", Buffer: chName, Nick: nick, Text: m.Trailing(), Time: ts, Highlight: kickedMe, Extra: map[string]any{"victim": victim}})
+		c.app.plugins.Emit("kick", c, chName, map[string]any{"channel": chName, "nick": nick, "victim": victim, "reason": m.Trailing(), "self": kickedMe, "isChannel": true})
 		if kickedMe {
 			c.emit(Event{Type: "buffer", Buffer: chName, Kind: "channel", Extra: map[string]any{"action": "parted"}})
 		} else {
@@ -796,6 +805,7 @@ func (c *Conn) handle(m *Message) {
 		if c.hasQuery(nick) {
 			c.emit(Event{Type: "event", Kind: "quit", Buffer: nick, Nick: nick, Text: m.Trailing(), Time: ts})
 		}
+		c.app.plugins.Emit("quit", c, "", map[string]any{"nick": nick, "reason": m.Trailing(), "channels": affected})
 
 	case "AWAY":
 		away := len(m.Params) > 0
@@ -824,6 +834,7 @@ func (c *Conn) handle(m *Message) {
 		c.mu.Unlock()
 		c.emit(Event{Type: "topic", Buffer: chName, Text: m.Trailing(), Extra: map[string]any{"by": nick}})
 		c.emit(Event{Type: "event", Kind: "topic", Buffer: chName, Nick: nick, Text: m.Trailing(), Time: ts, Self: isMe})
+		c.app.plugins.Emit("topic", c, chName, map[string]any{"channel": chName, "nick": nick, "topic": m.Trailing(), "self": isMe, "isChannel": true})
 	case "332":
 		chName := m.Param(1)
 		c.mu.Lock()
@@ -881,6 +892,7 @@ func (c *Conn) handle(m *Message) {
 		if c.isChannel(target) {
 			c.applyChannelModes(target, m.Params[1:])
 			c.emit(Event{Type: "event", Kind: "mode", Buffer: target, Nick: nick, Text: modeStr, Time: ts, Self: isMe})
+			c.app.plugins.Emit("mode", c, target, map[string]any{"channel": target, "nick": nick, "modes": modeStr, "self": isMe, "isChannel": true})
 			c.SendRaw("MODE " + target)
 		} else {
 			c.info("", "info", fmt.Sprintf("%s sets mode %s on %s", nick, modeStr, target))
@@ -888,6 +900,7 @@ func (c *Conn) handle(m *Message) {
 
 	case "INVITE":
 		c.info("*active*", "highlight", fmt.Sprintf("%s invited %s to %s", nick, m.Param(0), m.Param(1)))
+		c.app.plugins.Emit("invite", c, "", map[string]any{"channel": m.Param(1), "nick": nick, "invited": m.Param(0)})
 
 	case "PRIVMSG", "NOTICE":
 		c.onMessage(m, nick, isMe, ts)
@@ -1056,5 +1069,14 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 			replyTo = nick
 		}
 		c.app.plugins.OnMessage(c, replyTo, nick, text, isMe)
+	} else if kind == "action" || kind == "notice" {
+		replyTo := target
+		if isPM {
+			replyTo = nick
+		}
+		c.app.plugins.Emit(kind, c, replyTo, map[string]any{
+			"channel": replyTo, "nick": nick, "text": stripFormatting(text), "raw": text, "self": isMe,
+			"isChannel": !isPM, "isPM": isPM,
+		})
 	}
 }

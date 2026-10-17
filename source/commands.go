@@ -18,6 +18,7 @@ var helpText = []string{
 	"Services: /ns /cs /ms /hs /os text → NickServ, ChanServ, MemoServ, HostServ, OperServ",
 	"Music:    /np → \"* you is listening to Artist - Title\" · anyone typing !music gets the current song (Settings → Plugins)",
 	"Shortcut: /shortcut add $name text · /shortcut del $name · /shortcut list   (type $name in a message to insert the text)",
+	"Plugins:  /reload reloads scripts · commands added by plugins work like any other /command",
 	"Client:   /color nick #hex|reset · /highlight add|del|list word · /clear · /close · /theme name · /reload (plugins) · /help",
 	"Anything else is sent raw to the server, e.g. /knock #chan or /sajoin nick #chan.",
 }
@@ -330,8 +331,14 @@ func (a *App) runCommand(c *Conn, buffer, line string) {
 		if rest == "" {
 			rest = "Away"
 		}
+		c.mu.Lock()
+		c.autoAway = false // a manual away isn't undone when you come back
+		c.mu.Unlock()
 		c.SendRaw("AWAY :" + rest)
 	case "back":
+		c.mu.Lock()
+		c.autoAway = false
+		c.mu.Unlock()
 		c.SendRaw("AWAY")
 	case "raw", "quote":
 		if rest != "" {
@@ -469,6 +476,10 @@ func (a *App) runCommand(c *Conn, buffer, line string) {
 		c.info(buffer, "info", a.plugins.LoadScripts())
 
 	default:
+		// a command registered by a plugin?
+		if a.plugins.RunCommand(c, buffer, cmd, rest) {
+			return
+		}
 		// pass through anything else as a raw command: /knock #chan → KNOCK #chan
 		if !requireConn() {
 			return

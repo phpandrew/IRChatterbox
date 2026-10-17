@@ -3,7 +3,8 @@ import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, findUrls, mediaF
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
-import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm } from "./modals.js";
+import { playSound } from "./sounds.js";
+import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm } from "./modals.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_LINES = 2000;
@@ -235,7 +236,9 @@ function allBuffers() {
 function sortedBuffers(srv) {
   const list = [...srv.buffers.values()];
   const rank = (b) => (b.type === "server" ? 0 : b.type === "channel" ? 1 : 2);
-  return list.sort((a, b) => rank(a) - rank(b) || a.key.localeCompare(b.key));
+  const order = srv.cfg.channelOrder || [];
+  const pos = (b) => { const i = order.indexOf(b.key); return i < 0 ? 1e6 : i; };
+  return list.sort((a, b) => rank(a) - rank(b) || (a.type === "channel" ? pos(a) - pos(b) : 0) || a.key.localeCompare(b.key));
 }
 
 function cycleBuffer(dir, unreadOnly) {
@@ -264,6 +267,7 @@ const ICONS = {
 };
 
 function renderTree() {
+  if (drag) { treeDirty = true; return; } // don't rebuild the list mid-drag
   const tree = $("tree");
   let html = "";
   for (const srv of S.servers) {
@@ -277,12 +281,12 @@ function renderTree() {
       const label = b.type === "server" ? "Server status" : b.type === "channel" ? esc(b.name.replace(/^#/, "")) : esc(b.name);
       const badge = b.hl ? `<span class="badge hl">${b.hl}</span>` : b.unread ? `<span class="badge">${b.unread > 999 ? "999+" : b.unread}</span>` : "";
       const x = b.type !== "server" ? `<span class="x" data-close="1" title="${b.type === "channel" ? "Leave" : "Close"}">✕</span>` : "";
-      kids += `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"><span class="ico">${ico}</span><span class="nm">${label}</span>${badge}${x}</div>`;
+      kids += `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${b.type === "channel" ? ` draggable="true"` : ""}><span class="ico">${ico}</span><span class="nm">${label}</span>${badge}${x}</div>`;
     }
     const stTxt = { connected: "Connected", connecting: "Connecting…", disconnected: "Disconnected" }[srv.status];
     const agg = srv.collapsed ? (aggH ? `<span class="badge hl">${aggH}</span>` : aggU ? `<span class="badge">${aggU}</span>` : "") : "";
     html += `<div class="srv ${srv.collapsed ? "collapsed" : ""}" data-srv="${srv.id}">
-      <div class="srv-head" data-head="${srv.id}">${ICONS.chev}
+      <div class="srv-head" data-head="${srv.id}" draggable="true">${ICONS.chev}
         <div style="flex:1;min-width:0"><div class="srv-name">${esc(srv.cfg.name || srv.cfg.host)}</div>
         <div class="srv-state"><i class="dot ${srv.status}"></i>${stTxt}${srv.status === "connected" && srv.nick ? " as " + esc(srv.nick) : ""}</div></div>${agg}
       </div>
@@ -300,6 +304,65 @@ function updateTitle() {
   const where = b ? (b.type === "server" ? srv.cfg.name : `${b.name} · ${srv.network || srv.cfg.name}`) : "";
   setTitle(`${total ? `(${total}) ` : ""}IRChatterbox${where ? " — " + where : ""}`);
 }
+
+// ---------- drag to reorder servers and channels ----------
+let drag = null, treeDirty = false;
+function clearDropMarks() {
+  document.querySelectorAll(".drop-before,.drop-after").forEach((el) => el.classList.remove("drop-before", "drop-after"));
+}
+$("tree").addEventListener("dragstart", (e) => {
+  const head = e.target.closest?.(".srv-head");
+  const row = e.target.closest?.(".buf[draggable]");
+  if (head) drag = { kind: "server", id: head.dataset.head, el: head.closest(".srv") };
+  else if (row) drag = { kind: "channel", srv: row.dataset.s, key: row.dataset.k, el: row };
+  else return;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", drag.kind);
+  requestAnimationFrame(() => drag?.el.classList.add("dragging"));
+});
+function dropTarget(e) {
+  if (!drag) return null;
+  if (drag.kind === "server") {
+    const srvEl = e.target.closest(".srv");
+    return srvEl && srvEl !== drag.el ? srvEl : null;
+  }
+  const row = e.target.closest(".buf[draggable]");
+  return row && row !== drag.el && row.dataset.s === drag.srv ? row : null;
+}
+$("tree").addEventListener("dragover", (e) => {
+  const t = dropTarget(e);
+  clearDropMarks();
+  if (!t) return;
+  e.preventDefault();
+  const r = t.getBoundingClientRect();
+  t.classList.add(e.clientY < r.top + r.height / 2 ? "drop-before" : "drop-after");
+});
+$("tree").addEventListener("drop", (e) => {
+  const t = dropTarget(e);
+  if (!t) return;
+  e.preventDefault();
+  const after = t.classList.contains("drop-after");
+  if (drag.kind === "server") {
+    const from = S.servers.findIndex((s) => s.id === drag.id);
+    const moved = S.servers.splice(from, 1)[0];
+    let to = S.servers.findIndex((s) => s.id === t.dataset.srv) + (after ? 1 : 0);
+    S.servers.splice(to, 0, moved);
+    Go.ReorderServers(S.servers.map((s) => s.id));
+  } else {
+    const srv = S.byId[drag.srv];
+    const names = sortedBuffers(srv).filter((b) => b.type === "channel").map((b) => b.key);
+    names.splice(names.indexOf(drag.key), 1);
+    names.splice(names.indexOf(t.dataset.k) + (after ? 1 : 0), 0, drag.key);
+    srv.cfg.channelOrder = names;
+    Go.SetChannelOrder(srv.id, names);
+  }
+});
+$("tree").addEventListener("dragend", () => {
+  drag?.el.classList.remove("dragging");
+  drag = null;
+  clearDropMarks();
+  renderTree();
+});
 
 $("tree").addEventListener("click", (e) => {
   const head = e.target.closest("[data-head]");
@@ -774,6 +837,35 @@ $("hTopic").addEventListener("dblclick", (e) => {
   }, "Set topic");
 });
 
+// ---------- update banner ----------
+export function showUpdateBar(info) {
+  const bar = $("updateBar");
+  bar.innerHTML = `<span class="ub-text"><b>IRChatterbox ${esc(info.latest)}</b> is available — you have ${esc(info.current)}.</span>
+    <span class="ub-progress hidden"><i></i></span>
+    <button class="btn sm primary" id="ubInstall">Update &amp; restart</button>
+    <button class="btn sm" id="ubNotes">What's new</button>
+    <button class="btn sm" id="ubSkip">Skip this version</button>
+    <button class="icon-btn" id="ubClose" title="Later">✕</button>`;
+  bar.classList.remove("hidden");
+  $("ubNotes").onclick = () => Go.OpenURL(info.url);
+  $("ubSkip").onclick = () => { Go.SkipUpdateVersion(info.latest); bar.classList.add("hidden"); };
+  $("ubClose").onclick = () => bar.classList.add("hidden");
+  $("ubInstall").onclick = async () => {
+    bar.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    bar.querySelector(".ub-progress").classList.remove("hidden");
+    bar.querySelector(".ub-text").innerHTML = `Downloading IRChatterbox ${esc(info.latest)}…`;
+    const err = await Go.InstallUpdate();
+    if (err) {
+      toast(err, "error");
+      bar.querySelector(".ub-text").textContent = err;
+      bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      bar.querySelector(".ub-progress").classList.add("hidden");
+    } else {
+      bar.querySelector(".ub-text").textContent = "Installed — restarting…";
+    }
+  };
+}
+
 // ---------- toast ----------
 let toastTimer;
 export function toast(msg, kind = "ok") {
@@ -825,6 +917,7 @@ const COMMANDS = [
 
 // Completion popup: "/" commands at the start of the line, "$" text shortcuts anywhere.
 let compSel = 0, compItems = [], compTyped = "";
+let pluginCommands = [];
 function shortcutWordBeforeCaret() {
   const before = input.value.slice(0, input.selectionStart);
   const m = /(^|\s)(\$[^\s$]*)$/.exec(before);
@@ -844,7 +937,8 @@ function updateCompletions() {
   if (v.startsWith("/") && !v.includes(" ") && !v.includes("\n")) {
     const q = v.slice(1).toLowerCase();
     compTyped = v;
-    compItems = COMMANDS.filter(([c]) => c.startsWith(q)).slice(0, 12).map(([c, d]) => ({
+    const all = [...COMMANDS, ...pluginCommands.filter((p) => !COMMANDS.some(([c]) => c === p)).map((p) => [p, "plugin command"])];
+    compItems = all.filter(([c]) => c.startsWith(q)).slice(0, 12).map(([c, d]) => ({
       label: "/" + c, desc: d, apply: () => { input.value = "/" + c + " "; },
     }));
   } else {
@@ -954,7 +1048,21 @@ function send() {
   if (!text.trim()) return;
   const srv = activeServer(), b = activeBuffer();
   if (!srv || !b) return;
-  S.inputHistory.unshift(text);
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  const warnAt = S.cfg.settings.pasteWarnLines ?? 5;
+  if (warnAt > 0 && lines.length >= warnAt && b.type !== "server" && !text.trim().startsWith("/")) {
+    // big paste: confirm first (sending lots of lines can get you kicked for flooding)
+    openPasteConfirm(lines, b.name, (mode) => {
+      if (!mode) { input.focus(); return; }
+      finishSend(srv, b, text, mode === "join" ? lines.map((l) => l.trim()).join(" ") : lines.join("\n"));
+    });
+    return;
+  }
+  finishSend(srv, b, text, text);
+}
+
+function finishSend(srv, b, original, text) {
+  S.inputHistory.unshift(original);
   S.inputHistory = S.inputHistory.slice(0, 100);
   S.histPos = -1;
   input.value = "";
@@ -970,6 +1078,7 @@ function clientCommand(srv, b, text) {
   switch (cmd.toLowerCase()) {
     case "/clear": b.lines = []; renderChat(); return true;
     case "/settings": openSettings(); return true;
+    case "/reload": setTimeout(() => Go.PluginCommands().then((l) => { pluginCommands = l || []; }), 500); return false;
     case "/theme": {
       if (!arg) { addLine(srv, b, { t: Date.now(), type: "info", kind: "help", text: "Usage: /theme auto|light|dark|<theme name>" }); return true; }
       S.cfg.settings.theme = arg.toLowerCase() === "auto" ? "auto" : arg;
@@ -1228,6 +1337,13 @@ async function boot() {
   }
   on("irc", onIrc);
   on("confirmClose", (d) => openQuitConfirm(d?.connected));
+  on("playSound", (d) => playSound(d.sound, d.volume));
+  on("updateAvailable", (info) => showUpdateBar(info));
+  on("updateProgress", (d) => {
+    const bar = document.querySelector("#updateBar .ub-progress i");
+    if (bar) bar.style.width = d.pct + "%";
+  });
+  Go.PluginCommands().then((list) => { pluginCommands = list || []; });
   on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
   on("focusBuffer", ({ server, buffer }) => {
     const srv = S.byId[server];

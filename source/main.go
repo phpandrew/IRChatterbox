@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"os"
+	"strconv"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -14,6 +15,15 @@ import (
 var assets embed.FS
 
 func main() {
+	// after an auto-update the new exe is started with --wait-pid <old pid>: wait for the old
+	// one to exit so the single-instance lock is free
+	for i, a := range os.Args[1:] {
+		if a == "--wait-pid" && i+2 < len(os.Args) {
+			if pid, err := strconv.Atoi(os.Args[i+2]); err == nil {
+				waitForPid(pid)
+			}
+		}
+	}
 	app := NewApp()
 	startState := options.Normal
 	for _, a := range os.Args[1:] {

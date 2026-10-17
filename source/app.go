@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -23,7 +25,7 @@ import (
 )
 
 // appVersion is overridden at build time: -ldflags "-X main.appVersion=1.2.3"
-var appVersion = "0.2.5"
+var appVersion = "0.3.0"
 
 type App struct {
 	ctx     context.Context
@@ -39,6 +41,10 @@ type App struct {
 	pendingFocus map[string]bool
 	notifyOK     bool
 	autoDone     bool
+	mentions     int
+	autoAwayOn   bool
+	lastUpdate   UpdateInfo
+	trayStarted  bool
 	startMinimized bool
 	windowShown  bool
 	allowQuit    bool
@@ -76,7 +82,12 @@ func (a *App) startup(ctx context.Context) {
 			wruntime.EventsEmit(ctx, "focusBuffer", map[string]any{"server": info["server"], "buffer": info["buffer"]})
 		})
 	}
+	cleanupOldExe()
 	a.plugins.LoadScripts()
+	if a.store.Get().Settings.TrayIcon {
+		a.trayStarted = true
+		a.startTray()
+	}
 	if set := a.store.Get().Settings; set.StartWithWindows {
 		setAutostart(true, set.StartMinimized)
 	}
@@ -100,6 +111,8 @@ func (a *App) domReady(ctx context.Context) {
 			}
 		}
 	}
+	go a.autoUpdateLoop()
+	go a.autoAwayLoop()
 	// keep the saved window state fresh in case of a crash or power loss
 	go func() {
 		for range time.Tick(30 * time.Second) {
@@ -173,6 +186,7 @@ func (a *App) AutoConnect() {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	stopTray()
 	msg := a.store.Get().Settings.QuitMessage
 	a.mu.Lock()
 	conns := make([]*Conn, 0, len(a.conns))
@@ -191,6 +205,17 @@ func (a *App) shutdown(ctx context.Context) {
 // beforeClose runs when the window's close button is pressed. Returning true keeps the
 // window open while the UI asks for confirmation.
 func (a *App) beforeClose(ctx context.Context) bool {
+	// "close to tray": hide instead of quitting (Quit from the tray menu exits)
+	if set := a.store.Get().Settings; set.CloseToTray && a.trayStarted {
+		a.mu.Lock()
+		allow := a.allowQuit
+		a.mu.Unlock()
+		if !allow {
+			a.saveWindow()
+			wruntime.WindowHide(ctx)
+			return true
+		}
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.allowQuit || !a.store.Get().Settings.ConfirmOnClose {
@@ -354,15 +379,30 @@ var fmtRe = regexp.MustCompile("\x03(\\d{1,2}(,\\d{1,2})?)?|[\x02\x0F\x16\x1D\x1
 
 func stripFormatting(s string) string { return fmtRe.ReplaceAllString(s, "") }
 
+// notify handles a highlight or private message the user isn't looking at:
+// plays the chosen sound, flashes the tray icon + taskbar, and shows a Windows toast.
 func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 	set := a.store.Get().Settings
-	if !set.Notifications || (isPM && !highlight && !set.NotifyPMs) {
+	a.mu.Lock()
+	focused := a.focused
+	visible := focused && a.activeServer == c.cfg.ID && strings.EqualFold(a.activeBuffer, buffer)
+	a.mu.Unlock()
+	if visible {
 		return
 	}
-	a.mu.Lock()
-	visible := a.focused && a.activeServer == c.cfg.ID && strings.EqualFold(a.activeBuffer, buffer)
-	a.mu.Unlock()
-	if visible || !a.notifyOK {
+	pmOnly := isPM && !highlight
+
+	sound := set.SoundHighlight
+	if pmOnly {
+		sound = set.SoundPM
+	}
+	if sound != "" && a.ctx != nil {
+		wruntime.EventsEmit(a.ctx, "playSound", map[string]any{"sound": sound, "volume": set.SoundVolume})
+	}
+	if set.FlashOnPing && !focused {
+		a.raiseAttention()
+	}
+	if !set.Notifications || (pmOnly && !set.NotifyPMs) || !a.notifyOK {
 		return
 	}
 	title := nick + " in " + buffer
@@ -373,12 +413,106 @@ func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 	if len(body) > 200 {
 		body = body[:200] + "…"
 	}
-	wruntime.SendNotification(a.ctx, wruntime.NotificationOptions{
-		ID:    newID(),
-		Title: title,
-		Body:  body,
-		Data:  map[string]any{"server": c.cfg.ID, "buffer": buffer},
-	})
+	// silence Windows' own toast sound when we're playing ours
+	a.pushToast(title, body, map[string]any{"server": c.cfg.ID, "buffer": buffer}, sound != "")
+}
+
+// raiseAttention flashes the tray icon and taskbar button until the window is focused.
+func (a *App) raiseAttention() {
+	a.mu.Lock()
+	a.mentions++
+	n := a.mentions
+	a.mu.Unlock()
+	tip := fmt.Sprintf("IRChatterbox — %d new mention", n)
+	if n != 1 {
+		tip += "s"
+	}
+	setTrayAttention(true, tip)
+	if n == 1 {
+		flashTaskbar(true)
+	}
+}
+
+func (a *App) clearAttention() {
+	a.mu.Lock()
+	had := a.mentions > 0
+	a.mentions = 0
+	a.mu.Unlock()
+	if had {
+		setTrayAttention(false, "IRChatterbox")
+		flashTaskbar(false)
+	}
+}
+
+func (a *App) showWindow() {
+	if a.ctx == nil {
+		return
+	}
+	wruntime.WindowShow(a.ctx)
+	wruntime.WindowUnminimise(a.ctx)
+	a.clearAttention()
+}
+
+// quitNow exits without asking (tray menu → Quit).
+func (a *App) quitNow() {
+	a.saveWindow()
+	a.mu.Lock()
+	a.allowQuit = true
+	a.mu.Unlock()
+	wruntime.Quit(a.ctx)
+}
+
+// autoAwayLoop marks you away on every connected network after the configured idle time
+// (no keyboard/mouse input anywhere in Windows), and back as soon as you return.
+func (a *App) autoAwayLoop() {
+	for range time.Tick(15 * time.Second) {
+		set := a.store.Get().Settings
+		idle := systemIdle()
+		a.mu.Lock()
+		on := a.autoAwayOn
+		conns := make([]*Conn, 0, len(a.conns))
+		for _, c := range a.conns {
+			conns = append(conns, c)
+		}
+		a.mu.Unlock()
+		limit := time.Duration(set.AutoAwayMinutes) * time.Minute
+		switch {
+		case !on && set.AutoAway && limit > 0 && idle >= limit:
+			msg := set.AutoAwayMessage
+			if msg == "" {
+				msg = "Away from keyboard"
+			}
+			for _, c := range conns {
+				c.mu.Lock()
+				ok := c.status == "connected" && !c.away
+				if ok {
+					c.autoAway = true
+				}
+				c.mu.Unlock()
+				if ok {
+					c.SendRaw("AWAY :" + msg)
+					c.info("", "info", fmt.Sprintf("Auto-away: no activity for %d minutes", set.AutoAwayMinutes))
+				}
+			}
+			a.mu.Lock()
+			a.autoAwayOn = true
+			a.mu.Unlock()
+		case on && (idle < 30*time.Second || !set.AutoAway):
+			for _, c := range conns {
+				c.mu.Lock()
+				was := c.autoAway
+				c.autoAway = false
+				c.mu.Unlock()
+				if was && c.Status() == "connected" {
+					c.SendRaw("AWAY")
+					c.info("", "info", "Welcome back — no longer away")
+				}
+			}
+			a.mu.Lock()
+			a.autoAwayOn = false
+			a.mu.Unlock()
+		}
+	}
 }
 
 // ---------- logging ----------
@@ -526,6 +660,10 @@ func (a *App) DeleteServer(id string) {
 	a.mu.Unlock()
 }
 
+func (a *App) ReorderServers(ids []string) { a.store.reorderServers(ids) }
+
+func (a *App) SetChannelOrder(server string, order []string) { a.store.setChannelOrder(server, order) }
+
 func (a *App) MoveServer(id string, delta int) {
 	a.store.Update(func(c *Config) {
 		for i := range c.Servers {
@@ -574,6 +712,10 @@ func (a *App) SaveSettings(s Settings) string {
 	a.store.Update(func(c *Config) { c.Settings = s })
 	if s.LogMaxLines > 0 && (old.LogMaxLines == 0 || s.LogMaxLines < old.LogMaxLines) {
 		go a.TrimAllLogs()
+	}
+	if s.TrayIcon && !a.trayStarted && a.ctx != nil {
+		a.trayStarted = true
+		a.startTray()
 	}
 	if err := setAutostart(s.StartWithWindows, s.StartMinimized); err != nil {
 		return "Couldn't change Windows startup: " + err.Error()
@@ -647,6 +789,9 @@ func (a *App) SetFocus(f bool) {
 	a.mu.Lock()
 	a.focused = f
 	a.mu.Unlock()
+	if f {
+		a.clearAttention()
+	}
 }
 
 func (a *App) SetActive(server, buffer string) {
@@ -804,8 +949,36 @@ func (a *App) PickFile(title string) string {
 
 func (a *App) Notify(title, body string) {
 	if a.notifyOK {
-		wruntime.SendNotification(a.ctx, wruntime.NotificationOptions{ID: newID(), Title: title, Body: body})
+		a.pushToast(title, body, nil, a.store.Get().Settings.SoundHighlight != "")
 	}
+	if snd := a.store.Get().Settings.SoundHighlight; snd != "" && a.ctx != nil {
+		wruntime.EventsEmit(a.ctx, "playSound", map[string]any{"sound": snd, "volume": a.store.Get().Settings.SoundVolume})
+	}
+}
+
+// GetSoundData returns a custom sound file as a data: URL so the UI can play it.
+func (a *App) GetSoundData(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, 8<<20))
+	if err != nil {
+		return ""
+	}
+	mime := map[string]string{".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".m4a": "audio/mp4", ".flac": "audio/flac"}[strings.ToLower(filepath.Ext(path))]
+	if mime == "" {
+		mime = "audio/wav"
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b)
+}
+
+// PickSoundFile opens a file chooser for a custom notification sound.
+func (a *App) PickSoundFile() string {
+	p, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "Choose a notification sound",
+		Filters: []wruntime.FileFilter{{DisplayName: "Sounds (*.wav;*.mp3;*.ogg;*.m4a)", Pattern: "*.wav;*.mp3;*.ogg;*.m4a"}}})
+	return p
 }
 
 var _ = fmt.Sprintf
