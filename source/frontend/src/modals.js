@@ -84,12 +84,12 @@ export function openPasteConfirm(lines, target, done) {
 
 // ---------- quit confirmation ----------
 let quitKeys = null;
-export function openQuitConfirm(connected) {
+export function openQuitConfirm(connected, bouncer) {
   if (quitKeys) document.removeEventListener("keydown", quitKeys, true);
-  const list = connected || [];
-  const what = list.length === 0 ? "You're not connected to any servers."
-    : list.length === 1 ? `You'll be disconnected from <b>${esc(list[0])}</b>.`
-    : `You'll be disconnected from <b>${list.slice(0, -1).map(esc).join("</b>, <b>")}</b> and <b>${esc(list[list.length - 1])}</b>.`;
+  const list = connected || [], kept = bouncer || [];
+  const names = (l) => l.length === 1 ? `<b>${esc(l[0])}</b>` : `<b>${l.slice(0, -1).map(esc).join("</b>, <b>")}</b> and <b>${esc(l[l.length - 1])}</b>`;
+  let what = list.length ? `You'll be disconnected from ${names(list)}.` : kept.length ? "" : "You're not connected to any servers.";
+  if (kept.length) what += `${what ? " " : ""}Your bouncer keeps you online on ${names(kept)} and saves what you miss.`;
   open(`<div class="modal-head">Quit IRChatterbox?</div>
     <div class="modal-body"><p style="margin:0 0 14px">${what}</p>${check("qNoAsk", false, "Don't ask me again")}</div>
     <div class="modal-foot"><button class="btn" id="qCancel">Cancel</button><button class="btn primary" id="qOk">Quit</button></div>`, "sm", true);
@@ -115,19 +115,29 @@ const PRESETS = [
 
 export async function openServerEditor(cfg, onSaved) {
   const isNew = !cfg?.id;
-  const c = { name: "", host: "", port: 6697, tls: true, nick: "", authMethod: "none", autoConnect: true, rememberChannels: true, autoJoin: [], perform: [], ...(cfg || {}) };
+  const c = { name: "", host: "", port: 6697, tls: true, nick: "", authMethod: "none", autoConnect: true, rememberChannels: true, autoJoin: [], perform: [], bouncer: "", ...(cfg || {}) };
   if (!c.nick) c.nick = S.servers.find((s) => s.cfg.nick)?.cfg.nick || (await Go.GetDefaultNick()) || "";
   open(`<div class="modal-head">${isNew ? "Add server" : "Edit " + esc(c.name)}</div>
-    <div class="modal-body">
-      ${isNew ? `<div class="section-title">Popular networks</div>
-      <div class="chips presets">${PRESETS.map(([n, h]) => `<button class="chip preset" data-host="${h}" data-name="${n}">${n}</button>`).join("")}</div>` : ""}
-      <div class="section-title">Connection</div>
+    <div class="modal-body ${c.bouncer ? "bnc-mode" : ""}" id="sBody">
+      <div class="conn-mode">
+        <button class="mode-opt ${c.bouncer ? "" : "on"}" data-mode="direct"><b>Direct</b><span>Connect straight to the network. You're online while IRChatterbox is open.</span></button>
+        <button class="mode-opt ${c.bouncer ? "on" : ""}" data-mode="bouncer"><b>Through a bouncer</b><span>soju or ZNC keeps you online 24/7 and gives you what you missed.</span></button>
+      </div>
+      ${isNew ? `<div class="only-direct"><div class="section-title">Popular networks</div>
+      <div class="chips presets">${PRESETS.map(([n, h]) => `<button class="chip preset" data-host="${h}" data-name="${n}">${n}</button>`).join("")}</div></div>` : ""}
+      <div class="section-title"><span class="only-direct">Connection</span><span class="only-bouncer">Bouncer</span></div>
       <div class="fgrid">
         ${field("Name", text("sName", c.name, "Libera.Chat"))}
         ${field("Host", text("sHost", c.host, "irc.libera.chat"))}
         ${field("Port", text("sPort", c.port, "6697", "number"))}
         <div class="field"><label>&nbsp;</label>${check("sTls", c.tls, "Use TLS (SSL)")}${check("sSkip", c.tlsSkipVerify, "Accept invalid certificates")}</div>
-        ${field("Server password", text("sPass", c.password, "usually empty", "password"))}
+        <div class="field only-bouncer"><label>Bouncer type</label><select id="sBnc">
+            <option value="soju" ${c.bouncer !== "znc" ? "selected" : ""}>soju</option>
+            <option value="znc" ${c.bouncer === "znc" ? "selected" : ""}>ZNC</option></select></div>
+        <div class="field only-bouncer"><label>Network</label>${text("sBncNet", c.bouncerNetwork, "libera")}<div class="hint">The network's name on your bouncer. Add one server here per network.</div></div>
+        <div class="field only-bouncer"><label>Bouncer username</label>${text("sBncUser", c.bouncerUser, "andrew")}</div>
+        <div class="field only-bouncer"><label>Bouncer password</label>${text("sBncPass", c.bouncerPass, "", "password")}</div>
+        <div class="field only-direct"><label>Server password</label>${text("sPass", c.password, "usually empty", "password")}</div>
         <div class="field"><label>&nbsp;</label>${check("sAuto", c.autoConnect, "Connect automatically on startup")}</div>
         ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
       </div>
@@ -135,11 +145,12 @@ export async function openServerEditor(cfg, onSaved) {
       <div class="fgrid">
         ${field("Nickname", text("sNick", c.nick, "Andrew"))}
         ${field("Alternate nickname", text("sAlt", c.altNick, "Andrew_"))}
-        ${field("Username (ident)", text("sUser", c.username, "same as nick"))}
+        <div class="field only-direct"><label>Username (ident)</label>${text("sUser", c.username, "same as nick")}</div>
         ${field("Real name", text("sReal", c.realname, "IRChatterbox user"))}
       </div>
-      <div class="section-title">Automatic login</div>
-      <div class="fgrid">
+      <div class="hint only-bouncer bnc-note">Logging in to the network itself (SASL or NickServ) is set up on the bouncer, not here.</div>
+      <div class="section-title only-direct">Automatic login</div>
+      <div class="fgrid only-direct">
         ${field("Method", `<select id="sAuthM">
             <option value="none" ${c.authMethod === "none" ? "selected" : ""}>None</option>
             <option value="sasl" ${c.authMethod === "sasl" ? "selected" : ""}>SASL PLAIN (recommended)</option>
@@ -169,6 +180,14 @@ export async function openServerEditor(cfg, onSaved) {
     document.querySelectorAll(".preset").forEach((x) => x.classList.toggle("on", x === b));
     $("sNick").focus();
   }));
+  const setMode = (bnc) => {
+    $("sBody").classList.toggle("bnc-mode", bnc);
+    document.querySelectorAll(".mode-opt").forEach((x) => x.classList.toggle("on", (x.dataset.mode === "bouncer") === bnc));
+    $("sHost").placeholder = bnc ? "bouncer.example.com" : "irc.libera.chat";
+    $("sName").placeholder = bnc ? "Libera (bouncer)" : "Libera.Chat";
+  };
+  document.querySelectorAll(".mode-opt").forEach((b) => (b.onclick = () => { setMode(b.dataset.mode === "bouncer"); $("sHost").focus(); }));
+  setMode(!!c.bouncer);
   Go.GetEncodings().then((list) => {
     $("sEnc").innerHTML = (list || [["auto", "Automatic"]]).map(([v, l]) => `<option value="${v}" ${(c.encoding || "auto") === v ? "selected" : ""}>${esc(l)}</option>`).join("");
   });
@@ -182,12 +201,14 @@ export async function openServerEditor(cfg, onSaved) {
   if (!isNew) $("sName").dataset.touched = 1;
   $("sCancel").onclick = closeOverlay;
   const save = async (connect) => {
-    const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : null;
+    const bnc = $("sBody").classList.contains("bnc-mode");
+    const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : bnc && !$("sBncPass").value ? "sBncPass" : null;
     document.querySelectorAll(".field input.invalid").forEach((x) => x.classList.remove("invalid"));
     if (missing) {
       $(missing).classList.add("invalid");
       $(missing).focus();
-      $("sErr").textContent = missing === "sHost" ? "Enter a server host (or pick a network above)" : "Enter a nickname";
+      $("sErr").textContent = missing === "sHost" ? (bnc ? "Enter your bouncer's host" : "Enter a server host (or pick a network above)")
+        : missing === "sNick" ? "Enter a nickname" : "Enter your bouncer password";
       return;
     }
     const out = {
@@ -195,6 +216,7 @@ export async function openServerEditor(cfg, onSaved) {
       password: $("sPass").value, nick: val("sNick"), altNick: val("sAlt"), username: val("sUser"), realname: val("sReal"),
       authMethod: $("sAuthM").value, authUser: val("sAuthU"), authPass: $("sAuthP").value, autoConnect: on("sAuto"),
       rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"), encoding: $("sEnc").value,
+      bouncer: bnc ? $("sBnc").value : "", bouncerUser: val("sBncUser"), bouncerPass: $("sBncPass").value, bouncerNetwork: val("sBncNet"),
     };
     const saved = await Go.SaveServer(out);
     if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }

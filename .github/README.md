@@ -7,6 +7,23 @@
 
 A modern IRC client for Windows. The backend is Go and the UI is built with Wails (WebView2).
 
+## Highlights
+- **Single exe**: no installer, starts with Windows if you want, updates itself from GitHub
+- **Saved servers**: SASL or NickServ login, auto-connect, auto-join and reconnect
+- **Bouncer support**: connect through soju or ZNC to stay online 24/7, get what you missed, and sync read status with your phone
+- **Sidebar**: collapsible servers, unread and mention badges, drag to reorder
+- **Mentions you won't miss**: Windows toasts, custom sounds, tray and taskbar flashing
+- **Inline media**: images, GIFs, video and audio files, YouTube, Vimeo, Streamable and Spotify
+- **Themes**: follows Windows light/dark, built-in themes plus a theme editor
+- **Nick colours**: automatic and stable (`Andrew` and `Andrew|away` match), with custom colours kept readable
+- **Emoji picker and text shortcuts**: `$shrug` → ¯\\_(ツ)_/¯
+- **Every IRC command**: mIRC colours and formatting, tab completion, input history
+- **Comfort features**: marker line, jump to latest, Ctrl+K channel switcher, spellcheck
+- **Logs**: history reloads per channel; optional plain-text `.txt` logs
+- **Older networks**: per-server text encoding (Cyrillic, Japanese, Western and more)
+- **Safe by design**: IRC text never runs as HTML, paste protection, every release security-scanned
+- **Plugins**: built-in temperature bot, `!music` now-playing, URL commands and JavaScript plugins
+
 ## Screenshots
 <p align="center">
   <img src="assets/screenshot.png" alt="IRChatterbox connected to Libera.Chat, showing the server MOTD and a highlighted NickServ notice" width="900">
@@ -21,6 +38,7 @@ Settings, logs, themes and plugins live in `%APPDATA%\IRChatterbox` (Settings �
 
 ## Features
 - **Saved servers and auto-login.** Each server can use SASL PLAIN (recommended) or NickServ IDENTIFY, connect on startup, auto-join channels (with keys) and run commands on connect. It reconnects automatically with backoff.
+- **Bouncers (soju, ZNC).** When adding a server, choose **Through a bouncer**. Missed messages load when you connect and are logged, but bots and CTCP never answer old messages; you get one "while you were away" notification instead of a toast per line. With soju, channels you read here also show as read on your other devices (and the other way round). Closing the app leaves you online.
 - **Sidebar.** Servers collapse to show the channels and queries under them. Unread counts appear in grey. Pings and PMs appear in red, and a collapsed server shows a combined badge.
 - **Highlights.** Your nick and any highlight words trigger three things: a coloured line, a red badge and a Windows toast. Clicking the toast opens that channel.
 - **Inline media.** Images (PNG, JPG, GIF, WEBP, AVIF, SVG, plus imgur and Giphy links) show in the chat. Video files (MP4, WEBM, MOV) and imgur GIFV get a player, and audio files (MP3, OGG, WAV, FLAC) get a play bar. YouTube, Vimeo, Streamable and Spotify links show a preview that plays in the chat when clicked. Each kind can be turned off in Settings → Media.
@@ -65,9 +83,6 @@ Get `IRChatterbox.exe` from the [Releases](../../releases) page. Once it's insta
 
 ### Releases
 Every push to `main` that passes the build and security checks is released automatically as the next patch version (`v0.3.1`, `v0.3.2`, …). To start a new minor or major version, change `source/VERSION` (for example to `0.4.0`) and push. Pull requests and other branches are built too; the exe is on the Actions run page for 30 days. See [docs/BUILDING.md](../docs/BUILDING.md#versions) for details.
-
-## Roadmap
-- **Bouncer support (soju).** Load missed messages and older history from an always-online bouncer through IRCv3 `chathistory`, and sync read markers so a channel read on another device shows as read here. This would also make an Android client practical, either Goguma or a future IRChatterbox app.
 
 ## Security
 IRC text is never rendered as HTML, and the app has a strict Content Security Policy. Dependencies and code are scanned daily, and findings are opened as issues automatically. To report a problem privately, see **[SECURITY.md](SECURITY.md)**.

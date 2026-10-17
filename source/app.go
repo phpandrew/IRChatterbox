@@ -49,6 +49,8 @@ type App struct {
 	testHook     func(Event) // used by tests only
 
 	logMu    sync.Mutex
+	bncMu     sync.Mutex
+	bncOnline map[string]int64 // bouncer server id -> last online (ms), see bouncer.go
 	logLines map[string]int // path -> line count, for trimming
 	logOpened map[string]bool
 }
@@ -227,15 +229,19 @@ func (a *App) beforeClose(ctx context.Context) bool {
 		return false
 	}
 	a.closeAsked = time.Now()
-	var connected []string
+	var connected, bounced []string
 	for _, s := range a.store.Get().Servers {
 		if c, ok := a.conns[s.ID]; ok && c.Status() != "disconnected" {
-			connected = append(connected, s.Name)
+			if s.Bouncer != "" {
+				bounced = append(bounced, s.Name) // the bouncer keeps these online
+			} else {
+				connected = append(connected, s.Name)
+			}
 		}
 	}
 	wruntime.WindowUnminimise(ctx)
 	wruntime.WindowShow(ctx)
-	wruntime.EventsEmit(ctx, "confirmClose", map[string]any{"connected": connected})
+	wruntime.EventsEmit(ctx, "confirmClose", map[string]any{"connected": connected, "bouncer": bounced})
 	return true
 }
 
@@ -415,6 +421,29 @@ func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 	a.pushToast(title, body, map[string]any{"server": c.cfg.ID, "buffer": buffer}, sound != "")
 }
 
+// notifyMissed is the one notification shown after a bouncer replays history containing
+// mentions or private messages, instead of a toast per line.
+func (a *App) notifyMissed(c *Conn, buffer string, n int) {
+	set := a.store.Get().Settings
+	a.mu.Lock()
+	focused := a.focused
+	a.mu.Unlock()
+	if set.SoundHighlight != "" && a.ctx != nil {
+		wruntime.EventsEmit(a.ctx, "playSound", map[string]any{"sound": set.SoundHighlight, "volume": set.SoundVolume})
+	}
+	if set.FlashOnPing && !focused {
+		a.raiseAttention()
+	}
+	if !set.Notifications || !a.notifyOK {
+		return
+	}
+	what := "1 mention or message"
+	if n > 1 {
+		what = fmt.Sprintf("%d mentions and messages", n)
+	}
+	a.pushToast("While you were away", fmt.Sprintf("%s on %s", what, c.cfg.Name), map[string]any{"server": c.cfg.ID, "buffer": buffer}, set.SoundHighlight != "")
+}
+
 // raiseAttention flashes the tray icon and taskbar button until the window is focused.
 func (a *App) raiseAttention() {
 	a.mu.Lock()
@@ -525,9 +554,14 @@ func (a *App) GetHistory(serverID, buffer string) []Event {
 	if n <= 0 {
 		return []Event{}
 	}
+	return a.historyTail(sv.Name, buffer, n)
+}
+
+// historyTail returns up to n of the newest logged lines for a buffer.
+func (a *App) historyTail(serverName, buffer string, n int) []Event {
 	a.logMu.Lock()
 	defer a.logMu.Unlock()
-	f, err := os.Open(a.logPath(sv.Name, buffer))
+	f, err := os.Open(a.logPath(serverName, buffer))
 	if err != nil {
 		return []Event{}
 	}
@@ -796,6 +830,14 @@ func (a *App) SetActive(server, buffer string) {
 	a.mu.Lock()
 	a.activeServer, a.activeBuffer = server, buffer
 	a.mu.Unlock()
+}
+
+// MarkRead is called by the UI when you've seen a buffer up to ms. Through a bouncer that
+// supports read markers, your other devices then show it as read too.
+func (a *App) MarkRead(server, buffer string, ms int64) {
+	if c := a.conn(server); c != nil && c.cfg.Bouncer != "" {
+		c.markRead(buffer, ms)
+	}
 }
 
 func (a *App) OpenQuery(server, nick string) {

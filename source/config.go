@@ -33,6 +33,26 @@ type ServerConfig struct {
 	Perform       []string `json:"perform"`          // commands run after connect, e.g. "/mode $me +x"
 	Encoding      string   `json:"encoding"`         // "" / auto = UTF-8 with Windows-1252 fallback, or e.g. windows-1251, iso-8859-1
 	ChannelOrder  []string `json:"channelOrder"`     // sidebar order (lowercase names), set by dragging
+
+	// Bouncer: "" connects straight to the network; "soju" or "znc" connects through a bouncer
+	// at Host:Port, which stays online and replays what you missed.
+	Bouncer        string `json:"bouncer"`
+	BouncerUser    string `json:"bouncerUser"`
+	BouncerPass    string `json:"bouncerPass"`
+	BouncerNetwork string `json:"bouncerNetwork"` // which of the bouncer's networks (optional)
+}
+
+// bouncerLogin is the bouncer username with the network appended (andrew/libera),
+// the form both soju and ZNC accept.
+func (s ServerConfig) bouncerLogin() string {
+	u := s.BouncerUser
+	if u == "" {
+		u = s.Nick
+	}
+	if s.BouncerNetwork != "" {
+		u += "/" + s.BouncerNetwork
+	}
+	return u
 }
 
 // URLCommand is a trigger (like !solar) that fetches a URL and replies with the result.

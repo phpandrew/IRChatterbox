@@ -99,6 +99,8 @@ The updater checks the latest non-pre-release release, downloads `IRChatterbox.e
 
 ## Security checks
 
+The full flow, with a diagram, is in **[SECURITY-FLOW.md](SECURITY-FLOW.md)**.
+
 The **Security** workflow (`.github/workflows/security.yml`) runs daily, on every push to `main` and on pull requests:
 
 | Scanner | Looks for |

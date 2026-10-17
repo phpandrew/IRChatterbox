@@ -66,7 +66,7 @@ async function loadHistory(srv, b) {
 function isActive(srv, b) { return S.active.server === srv.id && S.active.key === b.key; }
 
 function evToLine(ev) {
-  return { t: ev.time, kind: ev.kind || ev.type, type: ev.type, nick: ev.nick, prefix: ev.prefix, text: ev.text || "", self: ev.self, hl: ev.highlight, extra: ev.extra };
+  return { t: ev.time, kind: ev.kind || ev.type, type: ev.type, nick: ev.nick, prefix: ev.prefix, text: ev.text || "", self: ev.self, hl: ev.highlight, extra: ev.extra, replay: !!ev.extra?.replay };
 }
 
 function resolveBuffer(srv, name) {
@@ -78,13 +78,22 @@ function resolveBuffer(srv, name) {
 }
 
 function addLine(srv, b, line) {
-  b.lines.push(line);
+  // history from a bouncer can arrive after newer lines: keep the buffer in time order
+  const last = b.lines[b.lines.length - 1];
+  const outOfOrder = line.replay && last && line.t < last.t;
+  if (outOfOrder) {
+    let i = b.lines.length;
+    while (i > 0 && b.lines[i - 1].t > line.t) i--;
+    b.lines.splice(i, 0, line);
+  } else b.lines.push(line);
   if (b.lines.length > MAX_LINES) {
     const drop = b.lines.length - MAX_LINES;
     b.lines.splice(0, drop);
   }
-  const counts = ["privmsg", "action", "notice"].includes(line.kind) && !line.self;
+  // already read on another device (bouncer read marker)?
+  const counts = ["privmsg", "action", "notice"].includes(line.kind) && !line.self && !(b.readMark && line.t <= b.readMark);
   const visible = isActive(srv, b) && S.focused;
+  if (visible && counts) sendReadSoon(srv, b);
   // Marker line: the first message that arrives after you stopped looking at this buffer
   // (switched away or alt-tabbed) gets the divider above it.
   let moveMarker = false;
@@ -94,8 +103,11 @@ function addLine(srv, b, line) {
     moveMarker = true;
   }
   if (isActive(srv, b)) {
-    if (moveMarker) $("chat").querySelector(".marker-line")?.remove();
-    appendLineDom(b, line);
+    if (outOfOrder) rerenderSoon();
+    else {
+      if (moveMarker) $("chat").querySelector(".marker-line")?.remove();
+      appendLineDom(b, line);
+    }
   }
   if (!visible && counts) {
     b.unread++;
@@ -106,6 +118,45 @@ function addLine(srv, b, line) {
     b.activity = true;
     scheduleTree();
   }
+}
+
+let rerenderTimer = 0;
+function rerenderSoon() {
+  clearTimeout(rerenderTimer);
+  rerenderTimer = setTimeout(() => renderChat(), 60);
+}
+
+// ---------- read markers (bouncer) ----------
+// Tell the bouncer how far you've read, so your phone or other PC shows the same.
+function sendRead(srv, b) {
+  if (!srv?.cfg?.bouncer || !b || b.type === "server") return;
+  let t = 0;
+  for (let i = b.lines.length - 1; i >= 0; i--) if (b.lines[i].type === "msg") { t = b.lines[i].t; break; }
+  if (t > (b.readSent || 0) && t > (b.readMark || 0)) {
+    b.readSent = t;
+    Go.MarkRead(srv.id, b.name, t);
+  }
+}
+const readTimers = new Map();
+function sendReadSoon(srv, b) {
+  if (!srv?.cfg?.bouncer) return;
+  const k = srv.id + "\0" + b.key;
+  clearTimeout(readTimers.get(k));
+  readTimers.set(k, setTimeout(() => { readTimers.delete(k); if (isActive(srv, b) && S.focused) sendRead(srv, b); }, 1500));
+}
+// a read marker arrived (from this or another device): recount what's still unread
+function applyReadMark(srv, b, t) {
+  b.readMark = Math.max(b.readMark || 0, t);
+  if (isActive(srv, b) && S.focused) return;
+  let unread = 0, hl = 0;
+  for (const l of b.lines) {
+    if (l.t <= b.readMark || l.self || !["privmsg", "action", "notice"].includes(l.kind)) continue;
+    unread++;
+    if (l.hl || (b.type === "query" && l.kind !== "notice")) hl++;
+  }
+  b.unread = unread; b.hl = hl; b.activity = unread > 0;
+  if (!unread) { b.marker = null; b.markPending = true; }
+  scheduleTree();
 }
 
 // ---------- incoming events ----------
@@ -129,7 +180,15 @@ function onIrc(ev) {
     }
     case "msg": {
       const b = resolveBuffer(srv, ev.buffer);
+      if (b.readMark === undefined && srv.readMarks?.[b.key]) b.readMark = srv.readMarks[b.key];
       addLine(srv, b, evToLine(ev));
+      break;
+    }
+    case "read": {
+      const key = (ev.buffer || "").toLowerCase();
+      (srv.readMarks ||= {})[key] = Math.max(srv.readMarks[key] || 0, ev.time);
+      const b = srv.buffers.get(key);
+      if (b) applyReadMark(srv, b, ev.time);
       break;
     }
     case "info": {
@@ -222,6 +281,7 @@ function select(serverId, key) {
   b.markPending = false; // you're reading it now
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
+  if (S.focused) sendRead(srv, b);
   $("input").focus();
 }
 
@@ -421,7 +481,7 @@ $("tree").addEventListener("contextmenu", (e) => {
       toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
     }, "", isStart]);
     items.push("-");
-    items.push(["Mark as read", () => { b.unread = b.hl = 0; b.activity = false; scheduleTree(); }]);
+    items.push(["Mark as read", () => { b.unread = b.hl = 0; b.activity = false; scheduleTree(); sendRead(srv, b); }]);
     items.push(["Clear buffer", () => { b.lines = []; if (isActive(srv, b)) renderChat(); }]);
     items.push("-");
     items.push([b.type === "channel" ? "Leave & close" : "Close", () => closeBuffer(srv, b), "danger"]);
@@ -1228,6 +1288,7 @@ function setFocus(f) {
   } else {
     b.markPending = false;
     if (b.unread || b.hl) { b.unread = 0; b.hl = 0; b.activity = false; scheduleTree(); }
+    sendRead(activeServer(), b);
   }
 }
 window.addEventListener("focus", () => setFocus(true));
@@ -1380,7 +1441,7 @@ async function boot() {
     }
   }
   on("irc", onIrc);
-  on("confirmClose", (d) => openQuitConfirm(d?.connected));
+  on("confirmClose", (d) => openQuitConfirm(d?.connected, d?.bouncer));
   on("playSound", (d) => playSound(d.sound, d.volume));
   on("updateAvailable", (info) => showUpdateBar(info));
   on("localUpdateReady", () => {

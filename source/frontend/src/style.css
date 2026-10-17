@@ -405,3 +405,13 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 /* ---------- paste confirm ---------- */
 .paste-preview { margin: 0; max-height: 200px; overflow: auto; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; user-select: text; }
 input[type=range] { accent-color: var(--accent); }
+
+/* server editor: direct vs bouncer */
+.conn-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+.mode-opt { text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-input); display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.mode-opt b { font-size: 13.5px; }
+.mode-opt span { font-size: 12px; color: var(--text-faint); line-height: 1.35; }
+.mode-opt:hover { border-color: var(--text-faint); }
+.mode-opt.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.bnc-mode .only-direct, .modal-body:not(.bnc-mode) .only-bouncer { display: none !important; }
+.bnc-note { margin: 10px 0 0; }

@@ -70,6 +70,21 @@ type Conn struct {
 
 	userDebounce map[string]*time.Timer
 	stop         chan struct{}
+
+	// bouncer / history state (see bouncer.go)
+	connectedAt    time.Time
+	batches        map[string]string // open BATCH ref -> type
+	historyLimit   int               // ISUPPORT CHATHISTORY
+	histFetched    map[string]bool   // targets already fetched this connection
+	replayBase     map[string]int64  // lower target -> newest message we had when its history was requested
+	lastSeen       map[string]int64  // lower target -> newest non-self message time we have (ms)
+	recentSelf     map[string][]selfLine
+	readMarks      map[string]int64 // lower target -> read marker (ms)
+	replayMentions int
+	replayFirst    string // buffer of the first missed mention, opened by the summary toast
+	summaryTimer   *time.Timer
+	prevOnline     int64     // when this bouncer connection was last online (ms), loaded at connect
+	onlineSince    time.Time // set once registered
 }
 
 func newConn(app *App, cfg ServerConfig) *Conn {
@@ -163,6 +178,13 @@ func (c *Conn) run() {
 		c.info("", "info", fmt.Sprintf("Connecting to %s%s…", addr, map[bool]string{true: " (TLS)", false: ""}[c.cfg.TLS]))
 		err := c.session(addr)
 		c.mu.Lock()
+		wasOnline := !c.onlineSince.IsZero()
+		c.onlineSince = time.Time{}
+		c.mu.Unlock()
+		if wasOnline && c.cfg.Bouncer != "" {
+			c.app.setLastOnline(c.cfg.ID, time.Now().UnixMilli())
+		}
+		c.mu.Lock()
 		quit := c.wantQuit
 		c.registered = false
 		c.channels = map[string]*Channel{}
@@ -219,18 +241,35 @@ func (c *Conn) session(addr string) error {
 	c.nickTries = 0
 	c.caps = map[string]bool{}
 	c.capLS = nil
+	c.connectedAt = time.Now()
+	c.batches = map[string]string{}
+	c.histFetched = map[string]bool{}
+	c.replayBase = map[string]int64{}
+	c.prevOnline = c.app.lastOnline(c.cfg.ID)
+	c.historyLimit = 0
+	if c.lastSeen == nil {
+		c.lastSeen = map[string]int64{}
+		c.recentSelf = map[string][]selfLine{}
+		c.readMarks = map[string]int64{}
+	}
 	c.mu.Unlock()
 
 	done := make(chan struct{})
 	go c.writer(nc, out, done)
 	defer close(done)
 
-	if c.cfg.Password != "" {
+	switch {
+	case c.cfg.Bouncer == "znc" && c.cfg.BouncerPass != "":
+		c.SendRaw("PASS " + c.cfg.bouncerLogin() + ":" + c.cfg.BouncerPass)
+	case c.cfg.Bouncer == "" && c.cfg.Password != "":
 		c.SendRaw("PASS " + c.cfg.Password)
 	}
 	c.SendRaw("CAP LS 302")
 	c.SendRaw("NICK " + c.nick)
 	user := c.cfg.Username
+	if c.cfg.Bouncer != "" {
+		user = c.cfg.bouncerLogin()
+	}
 	if user == "" {
 		user = c.nick
 	}
@@ -253,6 +292,9 @@ func (c *Conn) session(addr string) error {
 				c.pingSent = time.Now()
 				c.mu.Unlock()
 				c.SendRaw("PING :lag" + strconv.FormatInt(time.Now().UnixMilli(), 10))
+				if c.cfg.Bouncer != "" && c.Status() == "connected" {
+					c.app.setLastOnline(c.cfg.ID, time.Now().UnixMilli()) // survives a crash or power cut
+				}
 			}
 		}
 	}()
@@ -278,6 +320,16 @@ func (c *Conn) writer(nc net.Conn, out chan string, done chan struct{}) {
 		case <-done:
 			return
 		case line := <-out:
+			if c.cfg.Bouncer != "" {
+				// the bouncer paces what it sends upstream itself (soju.im/SAFERATE), so don't
+				// hold back history requests behind our own flood protection
+				nc.SetWriteDeadline(time.Now().Add(30 * time.Second))
+				if _, err := nc.Write([]byte(line + "\r\n")); err != nil {
+					nc.Close()
+					return
+				}
+				continue
+			}
 			now := time.Now()
 			tokens = mathMin(5, tokens+now.Sub(last).Seconds()*2)
 			last = now
@@ -360,6 +412,7 @@ func (c *Conn) emitOwn(target, kind, text string) {
 		buf = "*active*"
 	}
 	c.emit(Event{Type: "msg", Buffer: buf, Kind: kind, Nick: c.Nick(), Prefix: c.prefixOf(target, c.Nick()), Text: text, Self: true})
+	c.noteSeen(buf, time.Now().UnixMilli(), true, text)
 }
 
 func (c *Conn) hasQuery(nick string) bool {
@@ -489,8 +542,12 @@ func (c *Conn) ChannelStates() []ChannelState {
 // ---------- auth & registration ----------
 
 func (c *Conn) wantedCaps() []string {
-	want := []string{"multi-prefix", "away-notify", "account-notify", "server-time", "extended-join", "chghost", "userhost-in-names", "message-tags", "invite-notify", "cap-notify"}
-	if c.cfg.AuthMethod == "sasl" && c.cfg.AuthPass != "" {
+	want := []string{"multi-prefix", "away-notify", "account-notify", "server-time", "extended-join", "chghost", "userhost-in-names", "message-tags", "invite-notify", "cap-notify",
+		"batch", "draft/chathistory", "draft/read-marker"}
+	switch {
+	case c.cfg.Bouncer == "soju" && c.cfg.BouncerPass != "":
+		want = append(want, "sasl")
+	case c.cfg.Bouncer == "" && c.cfg.AuthMethod == "sasl" && c.cfg.AuthPass != "":
 		want = append(want, "sasl")
 	}
 	return want
@@ -500,10 +557,14 @@ func (c *Conn) onRegistered() {
 	c.mu.Lock()
 	c.registered = true
 	c.reconnectN = 0
+	c.onlineSince = time.Now()
 	c.mu.Unlock()
 	c.setStatus("connected")
 	c.app.plugins.Emit("connect", c, "", map[string]any{"nick": c.Nick()})
-	if c.cfg.AuthMethod == "nickserv" && c.cfg.AuthPass != "" {
+	if c.cfg.Bouncer != "" {
+		c.fetchMissedQueries()
+	}
+	if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "nickserv" && c.cfg.AuthPass != "" {
 		user := c.cfg.AuthUser
 		if user != "" {
 			c.SendRaw("PRIVMSG NickServ :IDENTIFY " + user + " " + c.cfg.AuthPass)
@@ -512,7 +573,7 @@ func (c *Conn) onRegistered() {
 		}
 	}
 	go func() {
-		if c.cfg.AuthMethod == "nickserv" {
+		if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "nickserv" {
 			time.Sleep(2 * time.Second) // give services time to apply cloak before joining
 		}
 		cfg, _ := c.app.store.Server(c.cfg.ID)
@@ -552,11 +613,14 @@ func (c *Conn) onRegistered() {
 }
 
 func (c *Conn) saslPlain() {
-	user := c.cfg.AuthUser
+	user, pass := c.cfg.AuthUser, c.cfg.AuthPass
 	if user == "" {
 		user = c.cfg.Nick
 	}
-	payload := base64.StdEncoding.EncodeToString([]byte(user + "\x00" + user + "\x00" + c.cfg.AuthPass))
+	if c.cfg.Bouncer != "" {
+		user, pass = c.cfg.bouncerLogin(), c.cfg.BouncerPass
+	}
+	payload := base64.StdEncoding.EncodeToString([]byte(user + "\x00" + user + "\x00" + pass))
 	for len(payload) >= 400 {
 		c.SendRaw("AUTHENTICATE " + payload[:400])
 		payload = payload[400:]
@@ -579,7 +643,11 @@ func (c *Conn) handle(m *Message) {
 	}
 	me := c.Nick()
 	isMe := strings.EqualFold(nick, me)
-	if c.app.plugins.hasHandlers("raw") {
+	replay := c.isReplay(m)
+	if replay && m.Command != "PRIVMSG" && m.Command != "NOTICE" {
+		return // joins/parts etc. inside a history batch would corrupt the live channel state
+	}
+	if c.app.plugins.hasHandlers("raw") && !replay {
 		c.app.plugins.Emit("raw", c, "", map[string]any{"command": m.Command, "params": m.Params, "nick": nick, "prefix": m.Prefix, "tags": m.Tags})
 	}
 
@@ -596,6 +664,17 @@ func (c *Conn) handle(m *Message) {
 		}
 	case "ERROR":
 		c.info("", "error", m.Trailing())
+	case "BATCH":
+		c.onBatch(m)
+	case "MARKREAD":
+		c.onMarkRead(m)
+	case "CHATHISTORY":
+		c.onHistoryTargets(m)
+	case "FAIL":
+		if m.Param(0) == "CHATHISTORY" || m.Param(0) == "MARKREAD" {
+			return // history/read markers unavailable for that target; nothing to show
+		}
+		c.info("*active*", "error", strings.Join(m.Params[1:], " "))
 
 	case "CAP":
 		sub := strings.ToUpper(m.Param(1))
@@ -647,7 +726,11 @@ func (c *Conn) handle(m *Message) {
 		c.info("", "info", "SASL authentication successful")
 		c.SendRaw("CAP END")
 	case "902", "904", "905", "906", "907", "908":
-		c.info("", "error", "SASL: "+m.Trailing())
+		if c.cfg.Bouncer != "" {
+			c.info("", "error", "Bouncer login failed: "+m.Trailing()+" (check the bouncer username, password and network)")
+		} else {
+			c.info("", "error", "SASL: "+m.Trailing())
+		}
 		c.SendRaw("CAP END")
 
 	case "001":
@@ -677,6 +760,12 @@ func (c *Conn) handle(m *Message) {
 				parts := strings.Split(v, ",")
 				for i := 0; i < 4 && i < len(parts); i++ {
 					c.chanModes[i] = parts[i]
+				}
+			case "CHATHISTORY":
+				if n, err := strconv.Atoi(v); err == nil {
+					c.mu.Lock()
+					c.historyLimit = n
+					c.mu.Unlock()
 				}
 			case "NETWORK":
 				c.mu.Lock()
@@ -745,6 +834,7 @@ func (c *Conn) handle(m *Message) {
 			c.emit(Event{Type: "buffer", Buffer: chName, Kind: "channel", Extra: map[string]any{"action": "open", "focus": c.app.consumePendingFocus(c.cfg.ID, chName)}})
 			c.app.store.rememberChannel(c.cfg.ID, chName, true)
 			c.SendRaw("MODE " + chName)
+			c.fetchHistory(chName)
 		}
 		c.emit(Event{Type: "event", Kind: "join", Buffer: chName, Nick: nick, Text: m.UserHost(), Time: ts, Self: isMe})
 		c.emitUsersSoon(chName)
@@ -903,7 +993,11 @@ func (c *Conn) handle(m *Message) {
 		c.app.plugins.Emit("invite", c, "", map[string]any{"channel": m.Param(1), "nick": nick, "invited": m.Param(0)})
 
 	case "PRIVMSG", "NOTICE":
-		c.onMessage(m, nick, isMe, ts)
+		if replay {
+			c.onReplayMessage(m, nick, isMe, ts)
+		} else {
+			c.onMessage(m, nick, isMe, ts)
+		}
 
 	// whois & friends -> active buffer
 	case "311":
@@ -1059,6 +1153,7 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		ev.Extra = map[string]any{"query": true}
 	}
 	c.emit(ev)
+	c.noteSeen(buffer, ts, isMe, text)
 
 	if !isMe && (highlight || (isPM && kind != "notice")) {
 		c.app.notify(c, buffer, nick, text, isPM, highlight)

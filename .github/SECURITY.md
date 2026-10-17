@@ -21,6 +21,9 @@ Plugins you install yourself run with network access by design, so a plugin you 
 
 ## How the project checks itself
 
-- **Security workflow**, daily and on every push: `govulncheck` for Go modules, `npm audit` for frontend packages, and CodeQL for our own code. Findings are opened as issues with the `security` label automatically and closed when fixed.
+The full flow is in [docs/SECURITY-FLOW.md](../docs/SECURITY-FLOW.md). In short:
+
+
+- **Security workflow**, daily, on pull requests and before every release: `govulncheck` for Go modules, `npm audit` for frontend packages, and CodeQL for our own code. Findings are opened as issues with the `security` label automatically and closed when fixed.
 - **Dependabot** opens pull requests for dependency updates.
 - **Content Security Policy** in the app: even if a bug let IRC text through as HTML, it can't run script.

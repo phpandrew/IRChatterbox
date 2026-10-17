@@ -24,7 +24,12 @@ type rawClient struct {
 }
 
 func dialRaw(t *testing.T, nick string) *rawClient {
-	c, err := net.Dial("tcp", "127.0.0.1:6667")
+	return dialRawAt(t, "127.0.0.1:6667", nick, nick, "")
+}
+
+// dialRawAt connects a plain client; user and pass log in to a bouncer (soju: PASS + USER andrew/net).
+func dialRawAt(t *testing.T, addr, nick, user, pass string) *rawClient {
+	c, err := net.Dial("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,8 +46,11 @@ func dialRaw(t *testing.T, nick string) *rawClient {
 			r.mu.Unlock()
 		}
 	}()
+	if pass != "" {
+		r.send("PASS " + pass)
+	}
 	r.send("NICK " + nick)
-	r.send("USER " + nick + " 0 * :" + nick)
+	r.send("USER " + user + " 0 * :" + nick)
 	r.waitFor(t, " 001 ", 5*time.Second)
 	return r
 }
@@ -63,30 +71,6 @@ func (r *rawClient) waitFor(t *testing.T, sub string, d time.Duration) string {
 	}
 	t.Fatalf("timeout waiting for %q", sub)
 	return ""
-}
-
-type evLog struct {
-	mu  sync.Mutex
-	evs []Event
-}
-
-func (l *evLog) add(e Event) { l.mu.Lock(); l.evs = append(l.evs, e); l.mu.Unlock() }
-func (l *evLog) waitFor(t *testing.T, desc string, f func(Event) bool) Event {
-	end := time.Now().Add(6 * time.Second)
-	for time.Now().Before(end) {
-		l.mu.Lock()
-		for i, e := range l.evs {
-			if f(e) {
-				l.evs = l.evs[i+1:]
-				l.mu.Unlock()
-				return e
-			}
-		}
-		l.mu.Unlock()
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("timeout waiting for event: %s", desc)
-	return Event{}
 }
 
 func TestIntegration(t *testing.T) {
