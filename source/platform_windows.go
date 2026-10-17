@@ -168,8 +168,8 @@ func systemIdle() time.Duration {
 // ---------- update restart ----------
 
 // waitForPid blocks until the given process exits (used when an update restarts the app).
-func waitForPid(pid int) {
-	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+func waitForPid(pid uint32) {
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, pid)
 	if err != nil {
 		return
 	}

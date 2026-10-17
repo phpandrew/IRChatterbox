@@ -1,6 +1,6 @@
 module irchatterbox
 
-go 1.26.0
+go 1.26.9
 
 require (
 	fyne.io/systray v1.12.2

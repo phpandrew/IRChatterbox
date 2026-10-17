@@ -21,8 +21,9 @@ func main() {
 	// one to exit so the single-instance lock is free
 	for i, a := range os.Args[1:] {
 		if a == "--wait-pid" && i+2 < len(os.Args) {
-			if pid, err := strconv.Atoi(os.Args[i+2]); err == nil {
-				waitForPid(pid)
+			// PIDs are 32-bit on Windows; ParseUint rejects anything that doesn't fit
+			if pid, err := strconv.ParseUint(os.Args[i+2], 10, 32); err == nil {
+				waitForPid(uint32(pid))
 			}
 		}
 	}
