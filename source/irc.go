@@ -884,7 +884,11 @@ func (c *Conn) handle(m *Message) {
 			c.SendRaw("MODE " + chName)
 			c.fetchHistory(chName)
 		}
-		c.emit(Event{Type: "event", Kind: "join", Buffer: chName, Nick: nick, Text: m.UserHost(), Time: ts, Self: isMe})
+		// A bouncer re-sends JOIN for every channel it's already in each time you connect; those
+		// carry no timestamp (a real join does). Don't show "you joined" for them.
+		if !(isMe && c.cfg.Bouncer != "" && m.Tags["time"] == "") {
+			c.emit(Event{Type: "event", Kind: "join", Buffer: chName, Nick: nick, Text: m.UserHost(), Time: ts, Self: isMe})
+		}
 		c.emitUsersSoon(chName)
 		c.app.plugins.OnJoin(c, chName, nick, isMe)
 
@@ -982,6 +986,9 @@ func (c *Conn) handle(m *Message) {
 		c.mu.Unlock()
 		c.emit(Event{Type: "topic", Buffer: chName, Text: m.Trailing()})
 	case "333":
+		if c.cfg.Bouncer != "" && c.inBouncerSync() {
+			return // the bouncer re-sending channel state on connect, not news
+		}
 		by := m.Param(2)
 		if i := strings.IndexByte(by, '!'); i > 0 {
 			by = by[:i]

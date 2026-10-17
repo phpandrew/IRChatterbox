@@ -105,7 +105,9 @@ func (c *Conn) fetchMissedQueries() {
 		}
 		from := time.Now().Add(-14 * 24 * time.Hour).UnixMilli()
 		to := time.Now().Add(24 * time.Hour).UnixMilli()
-		c.SendRaw("CHATHISTORY TARGETS timestamp=" + isoTime(from) + " timestamp=" + isoTime(to) + " 50")
+		// newest first (the later timestamp goes first), so a busy past doesn't crowd out
+		// the conversations that matter: the 50 most recently active
+		c.SendRaw("CHATHISTORY TARGETS timestamp=" + isoTime(to) + " timestamp=" + isoTime(from) + " 50")
 	}()
 }
 
@@ -362,4 +364,12 @@ func (a *App) loadBouncerStateLocked() {
 	if b, err := os.ReadFile(filepath.Join(a.store.dir, "bouncer.json")); err == nil {
 		json.Unmarshal(b, &a.bncOnline)
 	}
+}
+
+// inBouncerSync reports whether we're in the first seconds after connecting to a bouncer,
+// while it re-sends the state of channels we're already in.
+func (c *Conn) inBouncerSync() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.onlineSince.IsZero() && time.Since(c.onlineSince) < 15*time.Second
 }

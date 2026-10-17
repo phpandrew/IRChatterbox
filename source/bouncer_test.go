@@ -51,6 +51,9 @@ func TestBouncer(t *testing.T) {
 	time.Sleep(800 * time.Millisecond)
 
 	// reopen: missed lines come back as replay
+	log.mu.Lock()
+	reconnectAt := len(log.all)
+	log.mu.Unlock()
 	a.Connect(sv.ID)
 	e := log.waitFor(t, "replayed weather line", func(e Event) bool { return e.Type == "msg" && strings.Contains(e.Text, "feels like 20c "+id) })
 	if e.Extra["replay"] != true || e.Buffer != ch {
@@ -96,6 +99,16 @@ func TestBouncer(t *testing.T) {
 	}
 	bob.waitFor(t, "[Bot] 68 F = 20 C", 4*time.Second)
 	phone.c.Close()
+
+	// reconnecting doesn't show "you joined" again for channels the bouncer was already in
+	log.mu.Lock()
+	for _, ev := range log.all[reconnectAt:] {
+		if ev.Type == "event" && ev.Kind == "join" && ev.Self {
+			log.mu.Unlock()
+			t.Fatalf("bouncer's re-sent JOIN shown as a join: %+v", ev)
+		}
+	}
+	log.mu.Unlock()
 
 	// read marker: mark as read, reconnect, the bouncer reports it back
 	a.MarkRead(sv.ID, ch, e.Time)
