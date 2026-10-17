@@ -6,7 +6,6 @@ updates:
   - package-ecosystem: gomod
     directory: /source
     schedule: { interval: weekly, day: monday }
-    labels: [dependencies]
     groups:
       go-minor:
         update-types: [minor, patch]
@@ -14,7 +13,6 @@ updates:
   - package-ecosystem: npm
     directory: /source/frontend
     schedule: { interval: weekly, day: monday }
-    labels: [dependencies]
     groups:
       npm-minor:
         update-types: [minor, patch]
@@ -22,4 +20,3 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly, day: monday }
-    labels: [dependencies]
