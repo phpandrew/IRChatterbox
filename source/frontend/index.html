@@ -69,6 +69,8 @@
         <input type="file" id="attachInput" accept="image/jpeg,image/png,image/webp,image/bmp" multiple hidden>
         <!-- Android: "Take photo" opens the phone's camera app (capture) -->
         <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+        <!-- phones: one + button opens camera / gallery / emoji instead of separate buttons -->
+        <button class="icon-btn m-only" id="moreBtn" title="Add a photo or emoji"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button>
         <button class="icon-btn" id="emojiBtn" title="Emoji (Ctrl+E)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.9 1.2 2.1 1.8 3.5 1.8s2.6-.6 3.5-1.8"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/></svg></button>
         <button class="icon-btn send" id="sendBtn" title="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-2.5-6.5z"/><path d="m11.5 13.5 3-3"/></svg></button>
       </div>

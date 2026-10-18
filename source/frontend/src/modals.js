@@ -10,7 +10,7 @@ import { os } from "./platform.js";
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
-import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions } from "./themes.js";
+import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -33,6 +33,14 @@ const check = (id, v, label) => `<label class="check"><input type="checkbox" id=
 const val = (id) => ($(id)?.value ?? "").trim();
 const on = (id) => !!$(id)?.checked;
 const lines = (id) => $(id).value.split("\n").map((s) => s.trim()).filter(Boolean);
+
+// In auto mode, the theme editor's "Start from" follows Windows light/dark too (until you pick one).
+onSystemThemeChange(() => {
+  const b = document.getElementById("tBase");
+  if (!b || b.dataset.touched) return;
+  b.value = resolveTheme(S.cfg.settings).name;
+  b.dispatchEvent(new Event("change"));
+});
 
 // ---------- simple prompt ----------
 export function openPrompt(title, placeholder, value, onOk, okLabel = "OK") {
@@ -82,6 +90,40 @@ export function openPasteConfirm(lines, target, done) {
   $("pcJoin").onclick = () => finish("join");
   $("pcSend").onclick = () => finish("send");
   $("pcSend").focus();
+}
+
+// ---------- report ----------
+// info: { nick, where, message }. send({reason, note, block}) resolves, or throws with a message.
+const REPORT_REASONS = [["spam", "Spam or scam"], ["harassment", "Harassment or bullying"], ["hate", "Hate speech"],
+  ["sexual", "Sexual content"], ["illegal", "Illegal content or threats"], ["other", "Something else"]];
+export function openReportDialog(info, send) {
+  open(`<div class="modal-head">Report ${esc(info.nick)}</div>
+    <div class="modal-body">
+      ${info.message ? `<div class="report-msg"><b>${esc(info.nick)}</b> in ${esc(info.where)}: ${esc(info.message.length > 300 ? info.message.slice(0, 300) + "…" : info.message)}</div>` : ""}
+      <div class="fgrid">
+        ${field("Reason", `<select id="rpReason">${REPORT_REASONS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`, "", true)}
+        ${field("Details (optional)", `<textarea id="rpNote" rows="3" maxlength="1000" placeholder="Anything that helps us understand what happened"></textarea>`, "", true)}
+      </div>
+      ${check("rpBlock", true, `Also block ${esc(info.nick)} (you won't see their messages)`)}
+      <p class="hint" style="margin:10px 0 0">The report, with the last few messages around it, goes to the IRChatterbox team for review. IRC networks are run independently, so the channel's operators and the network's staff can act on it too.</p>
+      <p class="hidden" id="rpErr"></p>
+    </div>
+    <div class="modal-foot"><button class="btn" id="rpCancel">Cancel</button><button class="btn primary" id="rpSend">Send report</button></div>`, "sm", true);
+  $("rpCancel").onclick = closeOverlay;
+  $("rpSend").onclick = async () => {
+    $("rpSend").disabled = true;
+    $("rpSend").textContent = "Sending…";
+    $("rpErr").classList.add("hidden");
+    try {
+      await send({ reason: $("rpReason").value, note: $("rpNote").value.trim(), block: on("rpBlock") });
+      closeOverlay();
+    } catch (e) {
+      $("rpErr").textContent = e.message || "The report couldn't be sent";
+      $("rpErr").classList.remove("hidden");
+      $("rpSend").disabled = false;
+      $("rpSend").textContent = "Try again";
+    }
+  };
 }
 
 // ---------- quit confirmation ----------
@@ -367,8 +409,10 @@ export function openSettings(startTab) {
       card("Friends", "Get told when these people come online or go offline (on servers that support MONITOR).", `
       ${field("Nicks to watch", `<textarea id="hFriends" placeholder="Caleo&#10;Kennyout">${esc((set.notifyList || []).join("\n"))}</textarea>`, "One per line.")}
       ${check("hFriendsNotify", set.notifyFriends !== false, "Show a notification when one comes online")}`) +
-      card("Ignore list", "Hide messages from these people entirely.", `
-      ${field("Ignored nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`);
+      card("Blocked people", "Hide everything from these people. Block someone from their nick's menu, or with /ignore.", `
+      ${field("Blocked nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`) +
+      card("Word filter", "Words you never want to see are replaced with •••• in chat, history and notifications.", `
+      ${field("Filtered words", `<textarea id="hFilter" placeholder="badword&#10;spam*">${esc((set.filterWords || []).join("\n"))}</textarea>`, "One per line. Whole words only, any capitalisation; * matches the rest of a word. Your logs keep the original text.")}`);
     else if (tab === "shortcuts") drawShortcuts();
     else if (tab === "media") body.innerHTML =
       card("Inline media", "Show pictures and videos right in the chat.", `
@@ -488,7 +532,7 @@ export function openSettings(startTab) {
       return { name: val("tName"), base: $("tB").value, vars };
     };
     const preview = () => applyTheme(current());
-    $("tBase").onchange = () => { $("tName").dataset.auto = 1; $("tName").value = ""; drawVars(); };
+    $("tBase").onchange = (e) => { if (e.isTrusted) $("tBase").dataset.touched = 1; $("tName").dataset.auto = 1; $("tName").value = ""; drawVars(); };
     $("tName").oninput = () => delete $("tName").dataset.auto;
     $("tVars").addEventListener("input", (e) => {
       const k = e.target.dataset.k || e.target.dataset.kt;
@@ -564,6 +608,7 @@ export function openSettings(startTab) {
           <button class="btn" data-open="${REPO}/releases">Releases</button>
           <button class="btn" data-open="${REPO}/issues">Report an issue</button>
         </div>
+        <p class="about-support">Help and support: <a href="${REPO}/issues" data-url="${REPO}/issues">GitHub issues</a>. To report abuse in a chat, right-click (or long-press) the message or nick and choose <b>Report…</b></p>
         <a class="about-url" href="${REPO}" data-url="${REPO}">${REPO.replace("https://", "")}</a>
       </section>
       ${card("Updates", "New versions are published on GitHub Releases.", `
@@ -724,7 +769,7 @@ export function openSettings(startTab) {
     }
     if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; set.nickContrast = on("aContrast"); }
     if (has("hWords")) {
-      set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore");
+      set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore"); set.filterWords = lines("hFilter");
       set.soundHighlight = readSound("sndHl"); set.soundPM = readSound("sndPm"); set.soundVolume = +$("sndVol").value;
       set.flashOnPing = on("hFlash");
       set.notifyList = lines("hFriends"); set.notifyFriends = on("hFriendsNotify");

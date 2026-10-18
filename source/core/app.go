@@ -109,7 +109,13 @@ func (a *App) emit(c *Conn, ev Event) {
 	if a.testHook != nil {
 		a.testHook(ev)
 	}
-	a.emitUI("irc", ev)
+	if ev.Type == "msg" && !ev.Self && ev.Text != "" {
+		ui := ev // the word filter applies to what's shown; logs keep the original
+		ui.Text = a.maskFiltered(ev.Text)
+		a.emitUI("irc", ui)
+	} else {
+		a.emitUI("irc", ev)
+	}
 	if (ev.Type == "msg" || ev.Type == "event" || ev.Type == "redact") && ev.Buffer != "" && ev.Buffer != "*active*" {
 		a.logEvent(c.cfg.Name, ev)
 	}
@@ -240,7 +246,7 @@ func (a *App) notify(c *Conn, buffer, nick, text string, isPM, highlight bool) {
 	if isPM {
 		title = "Message from " + nick
 	}
-	body := stripFormatting(text)
+	body := a.maskFiltered(stripFormatting(text))
 	if len(body) > 200 {
 		body = body[:200] + "…"
 	}
@@ -372,7 +378,13 @@ func (a *App) GetHistory(serverID, buffer string) []Event {
 	if n <= 0 {
 		return []Event{}
 	}
-	return a.historyTail(sv.Name, buffer, n)
+	lines := a.historyTail(sv.Name, buffer, n)
+	for i := range lines {
+		if lines[i].Type == "msg" && !lines[i].Self {
+			lines[i].Text = a.maskFiltered(lines[i].Text)
+		}
+	}
+	return lines
 }
 
 // historyTail returns up to n of the newest logged lines for a buffer.

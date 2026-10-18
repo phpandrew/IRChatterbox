@@ -1,10 +1,10 @@
 import { Go, on, initApi, setTitle } from "./api.js";
 import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
-import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange } from "./themes.js";
+import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange, systemIsDark } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
-import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm } from "./modals.js";
+import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog } from "./modals.js";
 import { detectOS, os } from "./platform.js";
 import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
 
@@ -596,7 +596,12 @@ function renderHeader() {
     topic.innerHTML = `<span class="muted">Server messages, MOTD and notices</span>`;
     meta.innerHTML = `<span><i class="dot ${srv.status}"></i> <b>${srv.status}</b></span>`;
   }
-  $("input").placeholder = b.type === "server" ? `Type a /command for ${srv.cfg.name}` : `Message ${b.name}`;
+  // one line only: a long nick or channel name wrapping the placeholder would leave the box
+  // two lines tall, even after switching to a buffer with a short name
+  const ph = b.type === "server" ? `Type a /command for ${srv.cfg.name}` : `Message ${b.name}`;
+  const maxPh = isMobile() ? 24 : 60;
+  $("input").placeholder = ph.length > maxPh ? ph.slice(0, maxPh - 1) + "…" : ph;
+  if (!$("input").value) autosize();
   const showUsers = b.type === "channel" && S.ui.users !== false;
   $("userlist").classList.toggle("off", !showUsers);
   $("userResizer").classList.toggle("off", !showUsers);
@@ -1110,6 +1115,7 @@ $("chat").addEventListener("contextmenu", (e) => {
     const err = await Go.Redact(srv.id, b.name, line.extra.msgid);
     if (err) toast(err, "error");
   }, "danger"]);
+  if (!line.self && line.nick) items.push(["Report…", () => reportUser(srv, b, line.nick, line)]);
   const x = e.clientX, y = e.clientY;
   withPluginItems(items, { server: srv.id, buffer: b.name, kind: "message", nick: line.nick || "", text: line.text || "" })
     .then((all) => showMenu(x, y, all));
@@ -1179,6 +1185,29 @@ $("ulBody").addEventListener("contextmenu", (e) => {
   if (u) { e.preventDefault(); userMenu(u.dataset.nick, e); }
 });
 
+// ---------- report ----------
+// Report someone (from their nick) or one message: blocks them if asked and sends the report,
+// with the lines around it, for review.
+function reportUser(srv, b, nick, line) {
+  const lines = (b?.lines || []).filter((l) => ["privmsg", "action", "notice"].includes(l.kind));
+  let end = line ? lines.indexOf(line) : -1;
+  if (end < 0) { // from a nick: their latest message
+    for (let i = lines.length - 1; i >= 0; i--) if ((lines[i].nick || "").toLowerCase() === nick.toLowerCase()) { end = i; break; }
+  }
+  const target = end >= 0 ? lines[end] : null;
+  const ctx = (end >= 0 ? lines.slice(Math.max(0, end - 9), end + 1) : []).map((l) => {
+    const d = new Date(l.t || Date.now());
+    const ts = d.toISOString().replace("T", " ").slice(0, 19);
+    return l.kind === "action" ? `[${ts}] * ${l.nick} ${stripCodes(l.text || "")}` : `[${ts}] <${l.nick}> ${stripCodes(l.text || "")}`;
+  });
+  openReportDialog({ nick, where: b?.name || srv.cfg.name, message: target ? stripCodes(target.text || "") : "" }, async ({ reason, note, block }) => {
+    const err = await Go.SendReport({ server: srv.id, buffer: b?.name || "", nick, reason, note, message: target ? stripCodes(target.text || "") : "", context: ctx });
+    if (err) throw new Error(err);
+    if (block) Go.SendInput(srv.id, b?.name || "", "/ignore " + nick);
+    toast(block ? `Reported and blocked ${nick}` : `Reported ${nick}`, "ok");
+  });
+}
+
 function userMenu(nick, e) {
   const srv = activeServer(), b = activeBuffer();
   if (!srv) return;
@@ -1202,7 +1231,8 @@ function userMenu(nick, e) {
   const custom = S.cfg.nickColors?.[nick.toLowerCase()] || S.cfg.nickColors?.[baseNick(nick)] || "";
   items.push(["Set nick colour…", () => openColorPicker(nick, custom, (c) => Go.SetNickColor(nick, c))]);
   if (custom) items.push(["Reset nick colour", () => Go.SetNickColor(nick, "")]);
-  items.push(["Ignore", () => send("/ignore " + nick), "danger"]);
+  items.push(["Report…", () => reportUser(srv, b, nick, null)]);
+  items.push(["Block / Ignore", () => send("/ignore " + nick), "danger"]);
   const x = e.clientX, y = e.clientY;
   withPluginItems(items.filter((i) => i !== "danger"), { server: srv.id, buffer: b?.name || "", kind: "nicklist", nick })
     .then((all) => showMenu(x, y, all, nick));
@@ -1234,7 +1264,8 @@ export function showUpdateBar(info) {
   $("ubSkip").onclick = () => { Go.SkipUpdateVersion(info.latest); bar.classList.add("hidden"); };
   $("ubClose").onclick = () => bar.classList.add("hidden");
   $("ubInstall").onclick = async () => {
-    bar.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    // ✕ always works, so the bar can be put away while (or after) the download runs
+    bar.querySelectorAll("button:not(#ubClose)").forEach((b) => (b.disabled = true));
     bar.querySelector(".ub-progress").classList.remove("hidden");
     bar.querySelector(".ub-text").innerHTML = android || info.manual ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
     const err = await Go.InstallUpdate();
@@ -1246,6 +1277,11 @@ export function showUpdateBar(info) {
     } else {
       bar.querySelector(".ub-text").textContent = android ? "Open the downloaded file to install it."
         : info.manual ? "Unzip the download and move IRChatterbox into Applications, replacing the old one." : "Installed — restarting…";
+      if (android || info.manual) {
+        // the download happens in the browser: nothing more to wait for here
+        bar.querySelector(".ub-progress").classList.add("hidden");
+        bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      }
     }
   };
 }
@@ -1552,6 +1588,7 @@ function insertLink(url) {
 function setUploading(delta) {
   uploading += delta;
   $("attachBtn").classList.toggle("busy", uploading > 0);
+  $("moreBtn").classList.toggle("busy", uploading > 0);
   $("attachBtn").title = uploading > 0 ? "Uploading…" : "Attach an image (or paste / drop one)";
 }
 
@@ -1587,6 +1624,17 @@ $("attachBtn").onclick = () => {
     ["Take photo", () => $("cameraInput").click()],
     ["Choose from gallery", () => $("attachInput").click()],
   ]);
+};
+// phones: a single + button in the message box with everything that used to be its own button
+$("moreBtn").onclick = () => {
+  const r = $("moreBtn").getBoundingClientRect();
+  const items = [];
+  if (!uploading) {
+    if (android) items.push(["Take photo", () => $("cameraInput").click()], ["Choose from gallery", () => $("attachInput").click()]);
+    else items.push(["Attach an image", () => $("attachInput").click()]);
+  }
+  items.push(["Emoji", () => openEmoji()]);
+  showMenu(r.left, r.top - 48 * items.length - 16, items);
 };
 for (const id of ["attachInput", "cameraInput"])
   $(id).addEventListener("change", (e) => { uploadFiles(e.target.files); e.target.value = ""; });
@@ -1919,7 +1967,16 @@ async function boot() {
   S.cfg = await Go.GetConfig();
   setCustomThemes(await Go.GetThemes());
   applySettings();
-  onSystemThemeChange(() => applySettings());
+  // Follow Windows light/dark. Besides the change event, re-check when the window comes back
+  // and once a minute: the web view can miss the event while the app is hidden in the tray.
+  let lastDark = systemIsDark();
+  const recheckTheme = (force) => {
+    if (force === true || systemIsDark() !== lastDark) { lastDark = systemIsDark(); applySettings(); }
+  };
+  onSystemThemeChange(() => recheckTheme(true));
+  addEventListener("focus", recheckTheme);
+  document.addEventListener("visibilitychange", recheckTheme);
+  setInterval(recheckTheme, 60000);
 
   for (const sc of S.cfg.servers) {
     const srv = makeServer(sc);

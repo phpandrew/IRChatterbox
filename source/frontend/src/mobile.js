@@ -109,7 +109,8 @@ export function initMobile(fns) {
   window.__icbBack = () => {
     if (!$("menu").classList.contains("hidden")) { ctx.hideMenu(); return true; }
     const picker = $("emojiPicker");
-    if (picker && picker.offsetParent !== null) { $("emojiBtn").click(); return true; }
+    // (a position:fixed element has no offsetParent, so check the class the picker toggles)
+    if (picker && !picker.classList.contains("hidden")) { picker.classList.add("hidden"); return true; }
     if (!$("overlay").classList.contains("hidden")) { ctx.closeOverlay(); return true; }
     if (drawerOpen()) { closeDrawers(); return true; }
     if (!$("findBar").classList.contains("hidden")) { ctx.closeFind(); return true; }

@@ -122,6 +122,7 @@ type Settings struct {
 	MarkerLine       bool     `json:"markerLine"`
 	NickContrast     bool     `json:"nickContrast"` // flip custom nick colours that are unreadable on the current theme
 	Ignore           []string `json:"ignore"`
+	FilterWords      []string `json:"filterWords"` // masked as ••• wherever they appear (Settings → Highlights)
 
 	// updates
 	AutoUpdateCheck bool   `json:"autoUpdateCheck"`
@@ -199,6 +200,9 @@ type Config struct {
 	Settings   Settings          `json:"settings"`
 	NickColors map[string]string `json:"nickColors"`
 	Plugins    PluginSettings    `json:"plugins"`
+	// InstallID is a random ID made once per install. Reports and uploads send it so the
+	// servers can rate-limit per install; it says nothing about who you are.
+	InstallID string `json:"installId"`
 }
 
 type Store struct {
@@ -274,6 +278,12 @@ func NewStore() *Store {
 			s.cfg = c
 		}
 	} else {
+		s.saveLocked()
+	}
+	if len(s.cfg.InstallID) != 32 {
+		b := make([]byte, 16)
+		rand.Read(b)
+		s.cfg.InstallID = hex.EncodeToString(b)
 		s.saveLocked()
 	}
 	if s.cfg.NickColors == nil {
