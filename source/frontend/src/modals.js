@@ -431,7 +431,7 @@ export function openSettings(startTab) {
         ${field("Imgur Client ID", text("uImgur", set.imgurClientId, "e.g. 1a2b3c4d5e6f7g8"), `Register an app at <a href="#" data-open="https://api.imgur.com/oauth2/addclient">api.imgur.com</a> (choose "without a callback URL") and paste its Client ID here.`)}
       </div>
       <div id="uCustomRow" style="margin-top:10px">
-        ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. The bundled PHP server is in <code>website/image-host</code> on GitHub.`)}
+        ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. Run your own with <a href="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting" data-url="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting">self-hosting/upload.php</a> on GitHub.`)}
       </div>`);
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
