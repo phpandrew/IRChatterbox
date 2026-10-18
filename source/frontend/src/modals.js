@@ -259,7 +259,10 @@ export async function openServerEditor(cfg, onSaved) {
   const c = { name: "", host: "", port: 6697, tls: true, nick: "", authMethod: "none", autoConnect: true, rememberChannels: true, autoJoin: [], perform: [], bouncer: "", ...(cfg || {}) };
   if (!c.nick) c.nick = S.servers.find((s) => s.cfg.nick)?.cfg.nick || (await Go.GetDefaultNick()) || "";
   open(`<div class="modal-head">${isNew ? "Add server" : "Edit " + esc(c.name)}</div>
-    <div class="modal-body ${c.bouncer ? "bnc-mode" : ""}" id="sBody">
+    <div class="tabs se-tabs">${[["conn", "Connection"], ["id", "Identity & login"], ["chan", "Channels"], ["adv", "Advanced"]]
+      .map(([k, l], i) => `<button class="tab ${i ? "" : "on"}" data-st="${k}">${l}</button>`).join("")}</div>
+    <div class="modal-body se-body ${c.bouncer ? "bnc-mode" : ""}" id="sBody">
+      <div class="st-panel" data-panel="conn">
       <div class="conn-mode">
         <button class="mode-opt ${c.bouncer ? "" : "on"}" data-mode="direct"><b>Direct</b><span>Connect straight to the network. You're online while IRChatterbox is open.</span></button>
         <button class="mode-opt ${c.bouncer ? "on" : ""}" data-mode="bouncer"><b>Through a bouncer</b><span>soju or ZNC keeps you online 24/7 and gives you what you missed.</span></button>
@@ -271,7 +274,7 @@ export async function openServerEditor(cfg, onSaved) {
         ${field("Name", text("sName", c.name, "Libera.Chat"))}
         ${field("Host", text("sHost", c.host, "irc.libera.chat"))}
         ${field("Port", text("sPort", c.port, "6697", "number"))}
-        <div class="field"><label>&nbsp;</label>${check("sTls", c.tls, "Use TLS (SSL)")}${check("sSkip", c.tlsSkipVerify, "Accept invalid certificates")}</div>
+        <div class="field"><label>&nbsp;</label>${check("sTls", c.tls, "Use TLS (SSL)")}</div>
         <div class="field only-bouncer"><label>Bouncer type</label><select id="sBnc">
             <option value="soju" ${c.bouncer !== "znc" ? "selected" : ""}>soju</option>
             <option value="znc" ${c.bouncer === "znc" ? "selected" : ""}>ZNC</option></select></div>
@@ -280,8 +283,9 @@ export async function openServerEditor(cfg, onSaved) {
         <div class="field only-bouncer"><label>Bouncer password</label>${text("sBncPass", c.bouncerPass, "", "password")}</div>
         <div class="field only-direct"><label>Server password</label>${text("sPass", c.password, "usually empty", "password")}</div>
         <div class="field"><label>&nbsp;</label>${check("sAuto", c.autoConnect, "Connect automatically on startup")}</div>
-        ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
       </div>
+      </div>
+      <div class="st-panel hidden" data-panel="id">
       <div class="section-title">Identity</div>
       <div class="fgrid">
         ${field("Nickname", text("sNick", c.nick, "Andrew"))}
@@ -300,11 +304,25 @@ export async function openServerEditor(cfg, onSaved) {
         ${field("Account name", text("sAuthU", c.authUser, "defaults to nickname"))}
         ${field("Password", text("sAuthP", c.authPass, "", "password"))}
       </div>
+      </div>
+      <div class="st-panel hidden" data-panel="chan">
       <div class="section-title">Channels & commands</div>
       <div class="fgrid">
         ${field("Auto-join channels", `<textarea id="sJoin" placeholder="#linux&#10;#secret key">${esc((c.autoJoin || []).join("\n"))}</textarea>`, "One per line. Add a key after a space for keyed channels.")}
         ${field("Perform on connect", `<textarea id="sPerform" placeholder="/mode $me +x&#10;/msg someone hello">${esc((c.perform || []).join("\n"))}</textarea>`, "Commands run after connecting. $me = your nick.")}
         <div class="full">${check("sRemember", c.rememberChannels, "Remember channels I join and leave (keeps the auto-join list up to date)")}</div>
+      </div>
+      </div>
+      <div class="st-panel hidden" data-panel="adv">
+      <div class="section-title">Server icon</div>
+      <div class="se-icon"><span class="se-icon-pic" id="sIconPic"></span>
+        <button class="btn sm" id="sIconPick">Choose…</button><button class="btn sm" id="sIconDel">Remove</button>
+        <span class="hint" style="margin:0">Shown in the sidebar. Only you can see it.</span></div>
+      <div class="section-title">Connection options</div>
+      <div class="fgrid">
+        ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
+        <div class="field full">${check("sSkip", c.tlsSkipVerify, "Accept invalid certificates")}<div class="hint indent">Only for servers with a self-signed certificate that you trust.</div></div>
+      </div>
       </div>
     </div>
     <div class="modal-foot">
@@ -314,6 +332,22 @@ export async function openServerEditor(cfg, onSaved) {
       <button class="btn" id="sSave">Save</button>
       <button class="btn primary" id="sSaveC">Save & connect</button>
     </div>`, "", true);
+  // tabs: every field stays in the form, only one panel shows at a time
+  const showTab = (k) => {
+    document.querySelectorAll(".se-tabs .tab").forEach((t) => t.classList.toggle("on", t.dataset.st === k));
+    document.querySelectorAll("#sBody .st-panel").forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== k));
+  };
+  document.querySelector(".se-tabs").onclick = (e) => { const t = e.target.closest("[data-st]"); if (t) showTab(t.dataset.st); };
+  // server icon: picked here, saved with the server
+  let icon; // undefined = unchanged, "" = remove, data URL = new
+  const drawIcon = () => {
+    const cur = icon !== undefined ? icon : (c.id ? S.icons?.[c.id + "/*"] || "" : "");
+    $("sIconPic").innerHTML = cur ? `<img src="${cur}" alt="">` : esc(((val("sName") || val("sHost") || "?")[0] || "?").toUpperCase());
+    $("sIconDel").classList.toggle("hidden", !cur);
+  };
+  $("sIconPick").onclick = () => pickSquareImage((url) => { icon = url; drawIcon(); });
+  $("sIconDel").onclick = () => { icon = ""; drawIcon(); };
+  drawIcon();
   document.querySelectorAll(".preset").forEach((b) => (b.onclick = () => {
     $("sHost").value = b.dataset.host; $("sName").value = b.dataset.name;
     $("sHost").classList.remove("invalid"); $("sErr").textContent = "";
@@ -346,6 +380,7 @@ export async function openServerEditor(cfg, onSaved) {
     const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : bnc && !val("sBncUser") ? "sBncUser" : bnc && !$("sBncPass").value ? "sBncPass" : null;
     document.querySelectorAll(".field input.invalid").forEach((x) => x.classList.remove("invalid"));
     if (missing) {
+      showTab($(missing).closest(".st-panel").dataset.panel);
       $(missing).classList.add("invalid");
       $(missing).focus();
       $("sErr").textContent = missing === "sHost" ? (bnc ? "Enter your bouncer's host" : "Enter a server host (or pick a network above)")
@@ -361,6 +396,7 @@ export async function openServerEditor(cfg, onSaved) {
     };
     const saved = await Go.SaveServer(out);
     if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }
+    if (icon !== undefined) await Go.SetChannelIcon(saved.id, "*", icon);
     closeOverlay();
     onSaved(saved, connect);
   };
@@ -375,6 +411,27 @@ export async function openServerEditor(cfg, onSaved) {
   $("sSaveC").onclick = () => save(true);
   if ($("sDel")) $("sDel").onclick = () => openPrompt(`Remove ${c.name}?`, "", null, async () => { await Go.DeleteServer(c.id); location.reload(); }, "Remove");
   (isNew ? $("sHost") : $("sNick")).focus();
+}
+
+// pickSquareImage lets you pick a picture and hands back a 128×128 PNG data URL, cropped to the middle.
+function pickSquareImage(done) {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = "image/png,image/jpeg,image/webp,image/gif,image/bmp";
+  inp.onchange = async () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    try {
+      const img = await createImageBitmap(f);
+      const side = Math.min(img.width, img.height), cv = document.createElement("canvas");
+      cv.width = cv.height = 128;
+      const ctx = cv.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 128, 128);
+      done(cv.toDataURL("image/png"));
+    } catch { toast("That picture couldn't be opened", "error"); }
+  };
+  inp.click();
 }
 
 function prettyName(host) {

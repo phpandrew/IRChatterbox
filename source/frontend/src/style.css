@@ -697,3 +697,21 @@ body.os-darwin .win-only, body.os-linux .win-only { display: none !important; }
 /* own avatar */
 #meAvatar { cursor: pointer; overflow: hidden; }
 #meAvatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* server editor tabs */
+.se-tabs { padding: 0 22px; }
+.se-body { padding-top: 16px; }
+.se-body { min-height: 430px; }
+.se-icon { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.se-icon-pic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--bg-hover); font-weight: 700; font-size: 18px; color: var(--text-muted); overflow: hidden; flex: none; }
+.se-icon-pic img { width: 100%; height: 100%; object-fit: cover; }
+
+/* server icons in the sidebar: shown when set; in the compact sidebar always (letter if none) */
+.srv-ico { display: none; }
+.srv-ico.pic { display: grid; width: 20px; height: 20px; border-radius: 6px; overflow: hidden; flex: none; }
+.srv-ico img { width: 100%; height: 100%; object-fit: cover; }
+@media (min-width: 760px) {
+  body.sb-mini .srv-head { flex-direction: column; gap: 3px; }
+  body.sb-mini .srv-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-weight: 700; font-size: 16px; overflow: hidden; }
+  body.sb-mini .srv-head > div { width: 100%; }
+}

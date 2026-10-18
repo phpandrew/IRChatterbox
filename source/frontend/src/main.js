@@ -369,7 +369,7 @@ const ICONS = {
 // ---------- channel icons and the compact sidebar ----------
 S.icons = {};
 function chanIcon(srv, b) {
-  const u = b && b.type !== "server" ? S.icons[srv.id + "/" + b.key] : "";
+  const u = !b ? "" : b.type === "server" ? S.icons[srv.id + "/*"] : S.icons[srv.id + "/" + b.key];
   return u && /^data:image\/(png|webp|jpeg);base64,/.test(u) ? u : "";
 }
 // Shrink a picked picture to a 128×128 square (cropped to the middle) and save it as the icon.
@@ -407,6 +407,14 @@ function setSidebarMini(on) {
   if (t) t.title = S.ui.sbMini ? "Expand sidebar" : "Collapse sidebar";
 }
 
+// The server's own icon (Edit server → Advanced, or its right-click menu), or its first letter.
+function srvIcon(srv) {
+  const u = S.icons[srv.id + "/*"];
+  const ok = u && /^data:image\/(png|webp|jpeg);base64,/.test(u);
+  const letter = esc(((srv.cfg.name || srv.cfg.host || "?")[0] || "?").toUpperCase());
+  return `<span class="srv-ico${ok ? " pic" : ""}" style="--tile:${nickColor(srv.cfg.name || srv.cfg.host || "")}">${ok ? `<img src="${u}" alt="">` : letter}</span>`;
+}
+
 function renderTree() {
   if (drag) { treeDirty = true; return; } // don't rebuild the list mid-drag
   const tree = $("tree");
@@ -431,7 +439,7 @@ function renderTree() {
     const agg = srv.collapsed ? (aggH ? `<span class="badge hl">${aggH}</span>` : aggU ? `<span class="badge">${aggU}</span>` : "") : "";
     html += `<div class="srv ${srv.collapsed ? "collapsed" : ""}" data-srv="${srv.id}">
       <div class="srv-head" data-head="${srv.id}" draggable="true">${ICONS.chev}
-        <div style="flex:1;min-width:0"><div class="srv-name">${esc(srv.cfg.name || srv.cfg.host)}</div>
+        ${srvIcon(srv)}<div style="flex:1;min-width:0"><div class="srv-name">${esc(srv.cfg.name || srv.cfg.host)}</div>
         <div class="srv-state"><i class="dot ${srv.status}"></i>${stTxt}${srv.status === "connected" && srv.nick ? " as " + esc(srv.nick) : ""}</div></div>${agg}
       </div>
       <div class="srv-kids">${kids}</div></div>`;
@@ -587,6 +595,9 @@ function serverMenu(srv, e) {
   items.push(["Join channel…", () => openPrompt("Join channel", "#channel", "", (v) => v && Go.SendInput(srv.id, "", "/join " + v))]);
   items.push("-");
   items.push(["Edit server…", () => editServer(srv.cfg)]);
+  const hasIcon = !!S.icons[srv.id + "/*"];
+  items.push([hasIcon ? "Change server icon…" : "Set server icon…", () => pickIcon(srv.id, "*", srv.cfg.name || srv.cfg.host)]);
+  if (hasIcon) items.push(["Remove server icon", () => Go.SetChannelIcon(srv.id, "*", "")]);
   items.push(["Move up", () => moveServer(srv, -1)], ["Move down", () => moveServer(srv, 1)]);
   items.push("-");
   items.push(["Remove server", () => {
@@ -636,7 +647,7 @@ function renderHeader() {
     topic.innerHTML = "";
     meta.innerHTML = "";
   } else {
-    name.textContent = srv.cfg.name || srv.cfg.host;
+    name.innerHTML = (chanIcon(srv, b) ? `<img class="h-ico" src="${chanIcon(srv, b)}" alt="">` : "") + esc(srv.cfg.name || srv.cfg.host);
     sub.textContent = `${srv.cfg.host}:${srv.cfg.port}${srv.cfg.tls ? " · TLS" : ""}`;
     topic.classList.remove("editable");
     topic.title = "";
