@@ -67,7 +67,7 @@ export const api = {
   SendInput: (s, b, t) => { if (!t.startsWith("/")) emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now(), extra: { msgid: "m" + Math.random().toString(36).slice(2) } }); },
   SendReply: (s, b, id, t) => emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now(), extra: { msgid: "m" + Math.random().toString(36).slice(2), reply: id } }),
   React: (s, b, id, e, remove) => { emit("irc", { type: "react", server: s, buffer: b, nick: "Andrew", text: e, self: true, time: Date.now(), extra: { msgid: id, remove } }); return ""; },
-  GetLinkPreview: (url) => new Promise((r) => setTimeout(() => r(url.includes("github.com")
+  GetLinkPreview: (url) => new Promise((r) => setTimeout(() => r(new URL(url).hostname === "github.com"
     ? { url, title: "phpandrew/IRChatterbox: A modern IRC client for Windows, macOS, Linux and Android", description: "Inline images, coloured nicks, plugins, mIRC scripts, bouncer history and 11 languages. Built with Go and Wails.", image: "https://picsum.photos/id/180/300/300", site: "GitHub" }
     : { url, error: "no preview" }), 300)),
   SetFavourite: (s, b, on) => {
