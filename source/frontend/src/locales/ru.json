@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ Батарея: без ограничений",
 "✓ Notifications allowed": "✓ Уведомления разрешены",
 "✓ Saved “{0}” — {1}": "✓ «{0}» сохранена — {1}",
-"✓ You're on the latest version ({0}).": "✓ У вас последняя версия ({0})."
+"✓ You're on the latest version ({0}).": "✓ У вас последняя версия ({0}).",
+"Desktop": "Рабочий стол",
+"History decryption key": "Ключ для расшифровки истории",
+"(optional)": "(необязательно)",
+"Generate a key": "Создать ключ",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "Нужен, только если ваш баунсер шифрует сохранённую историю. Этот закрытый ключ остаётся на этом устройстве и никуда не отправляется. Передайте баунсеру",
+"public": "открытый",
+"key shown above, on your account page or with": "ключ, показанный выше, на странице аккаунта или командой",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": ". Сохраните копию в надёжном месте: без неё зашифрованную историю прочитать нельзя.",
+"Public key:": "Открытый ключ:",
+"Copy": "Копировать",
+"Copied": "Скопировано",
+"(+{0} older)": "(+{0} старых)",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "Это не закрытый ключ age. Он начинается с AGE-SECRET-KEY-1.",
+"Fix the history decryption key, or clear it": "Исправьте ключ для расшифровки истории или удалите его"
 }

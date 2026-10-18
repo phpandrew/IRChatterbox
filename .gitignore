@@ -19,3 +19,4 @@ deploy/
 # self-hosting/ is public: generic copies anyone can run. Never commit a server's own settings or data.
 self-hosting/config.local.php
 self-hosting/i/
+_to_delete/

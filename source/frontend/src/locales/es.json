@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ Batería: sin restricciones",
 "✓ Notifications allowed": "✓ Notificaciones permitidas",
 "✓ Saved “{0}” — {1}": "✓ “{0}” guardado — {1}",
-"✓ You're on the latest version ({0}).": "✓ Tienes la última versión ({0})."
+"✓ You're on the latest version ({0}).": "✓ Tienes la última versión ({0}).",
+"Desktop": "Escritorio",
+"History decryption key": "Clave para descifrar el historial",
+"(optional)": "(opcional)",
+"Generate a key": "Generar una clave",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "Solo hace falta si tu bouncer cifra el historial guardado. Esta clave privada se queda en este dispositivo y nunca se envía a ningún sitio. Dale a tu bouncer la clave",
+"public": "pública",
+"key shown above, on your account page or with": "que se muestra arriba, en la página de tu cuenta o con",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": ". Guarda una copia en un lugar seguro: sin ella, el historial cifrado no se puede leer.",
+"Public key:": "Clave pública:",
+"Copy": "Copiar",
+"Copied": "Copiado",
+"(+{0} older)": "(+{0} anteriores)",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "Eso no es una clave privada de age. Empieza por AGE-SECRET-KEY-1.",
+"Fix the history decryption key, or clear it": "Corrige la clave para descifrar el historial o bórrala"
 }

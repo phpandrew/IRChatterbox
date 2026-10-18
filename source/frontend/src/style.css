@@ -715,3 +715,46 @@ body.os-darwin .win-only, body.os-linux .win-only { display: none !important; }
   body.sb-mini .srv-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-weight: 700; font-size: 16px; overflow: hidden; }
   body.sb-mini .srv-head > div { width: 100%; }
 }
+
+/* macOS-inspired themes */
+:root[data-style="mac"] body { -webkit-font-smoothing: antialiased; }
+:root[data-style="mac"] #sidebar { border-right: 1px solid var(--border); }
+:root[data-style="mac"] .buf, :root[data-style="mac"] .srv-head { border-radius: 6px; }
+:root[data-style="mac"] .buf.active { box-shadow: none; }
+:root[data-style="mac"] .modal { border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.28), 0 0 0 1px var(--border); }
+:root[data-style="mac"] .modal .tabs { justify-content: center; border-bottom: 0; padding: 6px 20px 10px; gap: 0; }
+:root[data-style="mac"] .modal .tab { border: 1px solid var(--border); border-radius: 0; margin: 0 -1px 0 0; padding: 4px 14px; font-size: 12.5px; background: var(--bg-input); }
+:root[data-style="mac"] .modal .tab:first-child { border-radius: 7px 0 0 7px; }
+:root[data-style="mac"] .modal .tab:last-child { border-radius: 0 7px 7px 0; }
+:root[data-style="mac"] .modal .tab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+:root[data-style="mac"] .btn, :root[data-style="mac"] .jump { border-radius: 6px; }
+:root[data-style="mac"] input, :root[data-style="mac"] select, :root[data-style="mac"] textarea { border-radius: 6px; }
+:root[data-style="mac"] input:focus, :root[data-style="mac"] select:focus, :root[data-style="mac"] textarea:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent); }
+:root[data-style="mac"] #menu { border-radius: 8px; padding: 5px; }
+:root[data-style="mac"] #menu .mi { border-radius: 4px; padding: 4px 10px; }
+:root[data-style="mac"] #menu .mi:hover { background: var(--accent); color: var(--accent-text); }
+:root[data-style="mac"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-style="mac"] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 25%, transparent); border-radius: 4px; }
+:root[data-style="mac"] ::-webkit-scrollbar-track { background: transparent; }
+
+/* Ubuntu (Yaru)-inspired themes */
+:root[data-style="yaru"] #header { background: var(--bg-sidebar); }
+:root[data-style="yaru"] .buf { border-radius: 5px; }
+:root[data-style="yaru"] .buf.active { background: var(--accent); color: var(--accent-text); box-shadow: none; }
+:root[data-style="yaru"] .buf.active .nm, :root[data-style="yaru"] .buf.active .ico { color: var(--accent-text); }
+:root[data-style="yaru"] .modal { border-radius: 10px; }
+:root[data-style="yaru"] .modal-head { background: var(--bg-sidebar); border-radius: 10px 10px 0 0; }
+:root[data-style="yaru"] .btn { border-radius: 5px; font-weight: 500; }
+:root[data-style="yaru"] .tab.on { color: var(--accent); }
+:root[data-style="yaru"] #menu .mi:hover { background: var(--accent); color: var(--accent-text); }
+:root[data-style="yaru"] .me-card { border-top-color: transparent; }
+:root[data-style="yaru"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-style="yaru"] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 30%, transparent); border-radius: 4px; }
+:root[data-style="yaru"] ::-webkit-scrollbar-track { background: transparent; }
+:root[data-style="mac"] #input:focus { box-shadow: none; }
+
+/* server editor: history decryption key */
+.enc-field textarea { font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 52px; }
+.enc-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+.enc-row code { font-family: var(--mono); font-size: 11px; word-break: break-all; user-select: all; }
+.enc-row .err, #sEncPub.err { color: var(--danger); }

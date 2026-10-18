@@ -42,3 +42,9 @@ Rate limiting is up to your web server; the public host allows 10 uploads a minu
     415 {"ok":false,"error":"Only JPG, PNG, WebP and BMP images can be uploaded."}
 
 Check GD: `php -r 'var_dump(gd_info()["WebP Support"], gd_info()["BMP Support"]);'`
+
+## Encrypted bouncer history
+
+`soju/` builds the soju bouncer with encrypted message history: each user gives it an age public
+key, and only IRChatterbox with the matching private key can read stored messages. See
+`soju/README.md`.

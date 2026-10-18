@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ Pil: kısıtlamasız",
 "✓ Notifications allowed": "✓ Bildirimlere izin verildi",
 "✓ Saved “{0}” — {1}": "✓ “{0}” kaydedildi — {1}",
-"✓ You're on the latest version ({0}).": "✓ En son sürümü kullanıyorsunuz ({0})."
+"✓ You're on the latest version ({0}).": "✓ En son sürümü kullanıyorsunuz ({0}).",
+"Desktop": "Masaüstü",
+"History decryption key": "Geçmiş şifre çözme anahtarı",
+"(optional)": "(isteğe bağlı)",
+"Generate a key": "Anahtar oluştur",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "Yalnızca bouncer'ınız kayıtlı geçmişi şifreliyorsa gerekir. Bu özel anahtar bu cihazda kalır ve hiçbir yere gönderilmez. Bouncer'ınıza",
+"public": "açık",
+"key shown above, on your account page or with": "anahtarı (yukarıda gösterilen) hesap sayfanızdan ya da şu komutla verin:",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": ". Bir kopyasını güvenli bir yerde saklayın: o olmadan şifreli geçmiş okunamaz.",
+"Public key:": "Açık anahtar:",
+"Copy": "Kopyala",
+"Copied": "Kopyalandı",
+"(+{0} older)": "(+{0} eski)",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "Bu bir age özel anahtarı değil. AGE-SECRET-KEY-1 ile başlar.",
+"Fix the history decryption key, or clear it": "Geçmiş şifre çözme anahtarını düzeltin ya da silin"
 }

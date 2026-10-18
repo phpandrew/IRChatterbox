@@ -1,0 +1,131 @@
+package core
+
+// Encrypted bouncer history. A soju bouncer with IRChatterbox's encryption (or the hosted
+// bouncer) stores message text encrypted with the user's age public key. When it replays that
+// history, each line carries the ciphertext in the encTag tag and a placeholder as its text.
+// The matching private key lives only here, in the server's settings, and never leaves the device.
+
+import (
+	"bytes"
+	"encoding/base64"
+	"errors"
+	"io"
+	"strings"
+	"sync"
+
+	"filippo.io/age"
+)
+
+const (
+	encTag            = "irchatterbox.com/enc"
+	encMaxPlaintext   = 64 << 10
+	encNoKeyText      = "[Encrypted message. Add your private key in this server's settings (Bouncer tab) to read it.]"
+	encWrongKeyText   = "[Encrypted message. The private key in this server's settings doesn't open it.]"
+	encDamagedText    = "[Encrypted message. It couldn't be read: the stored copy is damaged.]"
+)
+
+var identityCache sync.Map // key text → []age.Identity
+
+// parseIdentities reads one or more age private keys (AGE-SECRET-KEY-1..., one per line;
+// blank lines and # comments are fine, so an age-keygen file can be pasted as it is).
+func parseIdentities(keys string) ([]age.Identity, error) {
+	keys = strings.TrimSpace(keys)
+	if keys == "" {
+		return nil, nil
+	}
+	if v, ok := identityCache.Load(keys); ok {
+		return v.([]age.Identity), nil
+	}
+	ids, err := age.ParseIdentities(strings.NewReader(keys))
+	if err != nil {
+		return nil, errors.New("that isn't an age private key (it starts with AGE-SECRET-KEY-1)")
+	}
+	identityCache.Store(keys, ids)
+	return ids, nil
+}
+
+// decryptText opens one encTag value.
+func decryptText(tag string, ids []age.Identity) (string, error) {
+	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimRight(tag, "="))
+	if err != nil {
+		return "", errDamaged
+	}
+	r, err := age.Decrypt(bytes.NewReader(raw), ids...)
+	if err != nil {
+		var noMatch *age.NoIdentityMatchError
+		if errors.As(err, &noMatch) {
+			return "", errWrongKey
+		}
+		return "", errDamaged
+	}
+	b, err := io.ReadAll(io.LimitReader(r, encMaxPlaintext))
+	if err != nil {
+		return "", errDamaged
+	}
+	return string(b), nil
+}
+
+var (
+	errWrongKey = errors.New("wrong key")
+	errDamaged  = errors.New("damaged")
+)
+
+// decryptStored replaces an encrypted history line's placeholder with its real text, or with
+// a short explanation when it can't be opened. Runs on every incoming line before it's handled.
+func (c *Conn) decryptStored(m *Message) {
+	tag, ok := m.Tags[encTag]
+	if !ok || len(m.Params) == 0 {
+		return
+	}
+	delete(m.Tags, encTag)
+	last := len(m.Params) - 1
+	keys := ""
+	if sv, ok := c.app.store.Server(c.cfg.ID); ok {
+		keys = sv.EncryptionKey
+	}
+	ids, err := parseIdentities(keys)
+	if err != nil || len(ids) == 0 {
+		m.Params[last] = encNoKeyText
+		return
+	}
+	text, err := decryptText(tag, ids)
+	switch {
+	case err == nil:
+		m.Params[last] = text
+	case errors.Is(err, errWrongKey):
+		m.Params[last] = encWrongKeyText
+	default:
+		m.Params[last] = encDamagedText
+	}
+}
+
+// EncryptionKeyPair is a new key for the server settings: the private half stays in the app,
+// the public half goes to the bouncer (the account page, or /msg BouncerServ user update -encryption-key).
+type EncryptionKeyPair struct {
+	PrivateKey string `json:"privateKey"`
+	PublicKey  string `json:"publicKey"`
+}
+
+func (a *App) GenerateEncryptionKey() (EncryptionKeyPair, error) {
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		return EncryptionKeyPair{}, err
+	}
+	return EncryptionKeyPair{PrivateKey: id.String(), PublicKey: id.Recipient().String()}, nil
+}
+
+// EncryptionPublicKeys returns the public key for each private key in keys, so the settings can
+// show what to give the bouncer. An error means the text isn't a valid private key.
+func (a *App) EncryptionPublicKeys(keys string) ([]string, error) {
+	ids, err := parseIdentities(keys)
+	if err != nil {
+		return nil, err
+	}
+	out := []string{}
+	for _, id := range ids {
+		if x, ok := id.(*age.X25519Identity); ok {
+			out = append(out, x.Recipient().String())
+		}
+	}
+	return out, nil
+}

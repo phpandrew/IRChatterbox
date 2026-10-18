@@ -3,6 +3,7 @@ module irchatterbox
 go 1.26.9
 
 require (
+	filippo.io/age v1.2.1
 	fyne.io/systray v1.12.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/dop251/goja v0.0.0-20261016120441-313b6b662e53

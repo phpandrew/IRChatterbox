@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ 電池: 制限なし",
 "✓ Notifications allowed": "✓ 通知は許可されています",
 "✓ Saved “{0}” — {1}": "✓ 「{0}」を保存しました — {1}",
-"✓ You're on the latest version ({0}).": "✓ 最新バージョンです（{0}）。"
+"✓ You're on the latest version ({0}).": "✓ 最新バージョンです（{0}）。",
+"Desktop": "デスクトップ",
+"History decryption key": "履歴の復号キー",
+"(optional)": "（任意）",
+"Generate a key": "キーを生成",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "バウンサーが保存済みの履歴を暗号化している場合にのみ必要です。この秘密鍵はこの端末に保存され、どこにも送信されません。バウンサーには",
+"public": "公開鍵",
+"key shown above, on your account page or with": "（上に表示）を、アカウントページで、または次のコマンドで登録してください：",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": "。安全な場所に控えを保管してください。これがないと暗号化された履歴は読めません。",
+"Public key:": "公開鍵：",
+"Copy": "コピー",
+"Copied": "コピーしました",
+"(+{0} older)": "（ほか古いキー {0} 件）",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "age の秘密鍵ではありません。秘密鍵は AGE-SECRET-KEY-1 で始まります。",
+"Fix the history decryption key, or clear it": "履歴の復号キーを修正するか、空にしてください"
 }

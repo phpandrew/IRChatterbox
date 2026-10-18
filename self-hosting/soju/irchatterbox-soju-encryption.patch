@@ -1,0 +1,615 @@
+From 1e44463d76ed02dbcbb2000432a747c278348c41 Mon Sep 17 00:00:00 2001
+From: IRChatterbox <noreply@irchatterbox.com>
+Date: Sun, 18 Oct 2026 12:15:37 -0400
+Subject: [PATCH] Encrypt stored message history with a per-user age public key
+
+---
+ database/database.go       |   5 +
+ database/encryptionkey.go  | 185 +++++++++++++++++++++++++++++++++++++
+ database/sqlite_mattn.go   |   2 +-
+ database/sqlite_modernc.go |   2 +-
+ downstream.go              |   6 ++
+ go.mod                     |   1 +
+ go.sum                     |   2 +
+ msgstore/db.go             |  22 +++++
+ msgstore/encrypt.go        |  64 +++++++++++++
+ service.go                 |  29 +++++-
+ user.go                    |   8 +-
+ user_encrypt.go            |  88 ++++++++++++++++++
+ 12 files changed, 410 insertions(+), 4 deletions(-)
+ create mode 100644 database/encryptionkey.go
+ create mode 100644 msgstore/encrypt.go
+ create mode 100644 user_encrypt.go
+
+diff --git a/database/database.go b/database/database.go
+index ec23b3c..07febc4 100644
+--- a/database/database.go
++++ b/database/database.go
+@@ -76,6 +76,11 @@ type Database interface {
+ 	ListMessageLastPerTarget(ctx context.Context, networkID int64, options *MessageOptions) ([]MessageTargetLast, error)
+ 	ListMessages(ctx context.Context, networkID int64, name string, options *MessageOptions) ([]*irc.Message, error)
+ 	DeleteMessagesBefore(ctx context.Context, before time.Time) error
++
++	// IRChatterbox: per-user public key for encrypting stored message text (see encryptionkey.go)
++	GetEncryptionKey(ctx context.Context, userID int64) (string, error)
++	StoreEncryptionKey(ctx context.Context, userID int64, recipient string) error
++	TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error)
+ }
+ 
+ type MetricsCollectorDatabase interface {
+diff --git a/database/encryptionkey.go b/database/encryptionkey.go
+new file mode 100644
+index 0000000..97600df
+--- /dev/null
++++ b/database/encryptionkey.go
+@@ -0,0 +1,185 @@
++package database
++
++// IRChatterbox addition: a per-user age public key ("recipient"). When a user has one, the
++// message store encrypts the text of stored PRIVMSG/NOTICE lines with it. The key lives in its
++// own table, created on demand, so the upstream schema and migration numbering are untouched.
++
++import (
++	"context"
++	"database/sql"
++	"errors"
++	"fmt"
++	"time"
++
++	"gopkg.in/irc.v4"
++)
++
++const sqliteEncryptionKeySchema = `
++CREATE TABLE IF NOT EXISTS EncryptionKey (
++	user INTEGER PRIMARY KEY,
++	recipient TEXT NOT NULL,
++	updated TEXT NOT NULL,
++	FOREIGN KEY(user) REFERENCES User(id) ON DELETE CASCADE
++)`
++
++const postgresEncryptionKeySchema = `
++CREATE TABLE IF NOT EXISTS "EncryptionKey" (
++	"user" INTEGER PRIMARY KEY REFERENCES "User"(id) ON DELETE CASCADE,
++	recipient TEXT NOT NULL,
++	updated TIMESTAMP WITH TIME ZONE NOT NULL
++)`
++
++// MessageTransform rewrites one stored message. It returns false to leave the row as it is.
++type MessageTransform func(msg *irc.Message) (*irc.Message, bool, error)
++
++func (db *SqliteDB) ensureEncryptionKeyTable(ctx context.Context) error {
++	_, err := db.db.ExecContext(ctx, sqliteEncryptionKeySchema)
++	return err
++}
++
++func (db *SqliteDB) GetEncryptionKey(ctx context.Context, userID int64) (string, error) {
++	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
++	defer cancel()
++	if err := db.ensureEncryptionKeyTable(ctx); err != nil {
++		return "", err
++	}
++	var r string
++	err := db.db.QueryRowContext(ctx, `SELECT recipient FROM EncryptionKey WHERE user = ?`, userID).Scan(&r)
++	if errors.Is(err, sql.ErrNoRows) {
++		return "", nil
++	}
++	return r, err
++}
++
++func (db *SqliteDB) StoreEncryptionKey(ctx context.Context, userID int64, recipient string) error {
++	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
++	defer cancel()
++	if err := db.ensureEncryptionKeyTable(ctx); err != nil {
++		return err
++	}
++	if recipient == "" {
++		_, err := db.db.ExecContext(ctx, `DELETE FROM EncryptionKey WHERE user = ?`, userID)
++		return err
++	}
++	_, err := db.db.ExecContext(ctx, `
++		INSERT INTO EncryptionKey(user, recipient, updated) VALUES (?, ?, ?)
++		ON CONFLICT(user) DO UPDATE SET recipient = excluded.recipient, updated = excluded.updated`,
++		userID, recipient, sqliteTime{time.Now()})
++	return err
++}
++
++// TransformUserMessages rewrites every stored message of a user's networks, in batches so the
++// bouncer stays responsive. Afterwards it merges the full-text index and checkpoints the WAL so
++// the old text doesn't linger in the database files (secure_delete zeroes freed space).
++func (db *SqliteDB) TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error) {
++	const batch = 500
++	changed := 0
++	lastID := int64(0)
++	for {
++		rows, err := db.db.QueryContext(ctx, `
++			SELECT m.id, m.raw FROM Message m
++			JOIN MessageTarget t ON t.id = m.target
++			JOIN Network n ON n.id = t.network
++			WHERE n.user = ? AND m.id > ?
++			ORDER BY m.id LIMIT ?`, userID, lastID, batch)
++		if err != nil {
++			return changed, err
++		}
++		type row struct {
++			id  int64
++			raw string
++		}
++		var list []row
++		for rows.Next() {
++			var r row
++			if err := rows.Scan(&r.id, &r.raw); err != nil {
++				rows.Close()
++				return changed, err
++			}
++			list = append(list, r)
++		}
++		rows.Close()
++		if err := rows.Err(); err != nil {
++			return changed, err
++		}
++		if len(list) == 0 {
++			break
++		}
++
++		tx, err := db.db.BeginTx(ctx, nil)
++		if err != nil {
++			return changed, err
++		}
++		for _, r := range list {
++			lastID = r.id
++			msg, err := irc.ParseMessage(r.raw)
++			if err != nil {
++				continue
++			}
++			out, ok, err := transform(msg)
++			if err != nil {
++				tx.Rollback()
++				return changed, err
++			}
++			if !ok {
++				continue
++			}
++			var text sql.NullString
++			if (out.Command == "PRIVMSG" || out.Command == "NOTICE") && len(out.Params) > 1 {
++				text = sql.NullString{String: stripANSI(out.Params[1]), Valid: true}
++			}
++			if _, err := tx.ExecContext(ctx, `UPDATE Message SET raw = ?, text = ? WHERE id = ?`, out.String(), text, r.id); err != nil {
++				tx.Rollback()
++				return changed, err
++			}
++			changed++
++		}
++		if err := tx.Commit(); err != nil {
++			return changed, err
++		}
++	}
++	if changed > 0 {
++		if _, err := db.db.ExecContext(ctx, `INSERT INTO MessageFTS(MessageFTS) VALUES ('optimize')`); err != nil {
++			return changed, fmt.Errorf("optimize search index: %w", err)
++		}
++		if _, err := db.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
++			return changed, fmt.Errorf("checkpoint: %w", err)
++		}
++	}
++	return changed, nil
++}
++
++func (db *PostgresDB) GetEncryptionKey(ctx context.Context, userID int64) (string, error) {
++	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, postgresEncryptionKeySchema); err != nil {
++		return "", err
++	}
++	var r string
++	err := db.db.QueryRowContext(ctx, `SELECT recipient FROM "EncryptionKey" WHERE "user" = $1`, userID).Scan(&r)
++	if errors.Is(err, sql.ErrNoRows) {
++		return "", nil
++	}
++	return r, err
++}
++
++func (db *PostgresDB) StoreEncryptionKey(ctx context.Context, userID int64, recipient string) error {
++	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, postgresEncryptionKeySchema); err != nil {
++		return err
++	}
++	if recipient == "" {
++		_, err := db.db.ExecContext(ctx, `DELETE FROM "EncryptionKey" WHERE "user" = $1`, userID)
++		return err
++	}
++	_, err := db.db.ExecContext(ctx, `
++		INSERT INTO "EncryptionKey"("user", recipient, updated) VALUES ($1, $2, NOW())
++		ON CONFLICT ("user") DO UPDATE SET recipient = EXCLUDED.recipient, updated = EXCLUDED.updated`,
++		userID, recipient)
++	return err
++}
++
++func (db *PostgresDB) TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error) {
++	return 0, errors.New("encrypting existing history is only supported with the SQLite database")
++}
+diff --git a/database/sqlite_mattn.go b/database/sqlite_mattn.go
+index b9d22e0..3268b46 100644
+--- a/database/sqlite_mattn.go
++++ b/database/sqlite_mattn.go
+@@ -13,7 +13,7 @@ var sqliteDriver = "sqlite3"
+ 
+ // See https://kerkour.com/sqlite-for-servers
+ // Keep in sync with modernc counterpart.
+-const sqliteOptions = "_foreign_keys=true&_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_txlock=immediate"
++const sqliteOptions = "_foreign_keys=true&_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL&_secure_delete=true&_txlock=immediate"
+ 
+ func isSqliteErrUnique(err error) bool {
+ 	var sqliteErr *sqlite3.Error
+diff --git a/database/sqlite_modernc.go b/database/sqlite_modernc.go
+index c868cba..550bf89 100644
+--- a/database/sqlite_modernc.go
++++ b/database/sqlite_modernc.go
+@@ -12,7 +12,7 @@ import (
+ var sqliteDriver = "sqlite"
+ 
+ // Keep in sync with mattn counterpart.
+-const sqliteOptions = "_pragma=foreign_keys(true)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_txlock=immediate"
++const sqliteOptions = "_pragma=foreign_keys(true)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=secure_delete(true)&_txlock=immediate"
+ 
+ func isSqliteErrUnique(err error) bool {
+ 	var sqliteErr *sqlite.Error
+diff --git a/downstream.go b/downstream.go
+index 4269eba..3aaa293 100644
+--- a/downstream.go
++++ b/downstream.go
+@@ -269,6 +269,10 @@ var permanentDownstreamCaps = map[string]string{
+ 	"soju.im/no-implicit-names":       "",
+ 	"soju.im/read":                    "",
+ 	"soju.im/webpush":                 "",
++
++	// IRChatterbox: stored history arrives with its ciphertext in a tag. Offered on every
++	// network, since many networks lack message-tags and soju would otherwise drop the tag.
++	msgstore.EncryptedCap: "",
+ }
+ 
+ // passthroughDownstreamCaps is the list of downstream capabilities that
+@@ -555,6 +559,8 @@ func (dc *downstreamConn) SendMessage(ctx context.Context, msg *irc.Message) {
+ 				supported = dc.caps.IsEnabled("account-tag")
+ 			case "batch":
+ 				supported = dc.caps.IsEnabled("batch")
++			case msgstore.EncryptedTag:
++				supported = dc.caps.IsEnabled(msgstore.EncryptedCap)
+ 			}
+ 			if !supported {
+ 				delete(msg.Tags, name)
+diff --git a/go.mod b/go.mod
+index 5f54175..d90de73 100644
+--- a/go.mod
++++ b/go.mod
+@@ -22,6 +22,7 @@ require (
+ )
+ 
+ require (
++	filippo.io/age v1.2.1 // indirect
+ 	github.com/beorn7/perks v1.0.1 // indirect
+ 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+ 	github.com/dustin/go-humanize v1.0.1 // indirect
+diff --git a/go.sum b/go.sum
+index 3dc14cd..a13eb86 100644
+--- a/go.sum
++++ b/go.sum
+@@ -2,6 +2,8 @@ codeberg.org/emersion/go-scfg v0.1.0 h1:6dnGU0ZI4gX+O5rMjwhoaySItzHG710eXL5TIQKl
+ codeberg.org/emersion/go-scfg v0.1.0/go.mod h1:0nooW1ufBB4SlJEdTtiVN9Or+bnNM1icOkQ6Tbrq6O0=
+ codeberg.org/emersion/go-sqlite3-fts5 v0.0.0-20260220133449-ece3e19d8830 h1:/deCT8/S8Z/woYXelRpaG9DK8jygdyA5N/WGqRPcT2g=
+ codeberg.org/emersion/go-sqlite3-fts5 v0.0.0-20260220133449-ece3e19d8830/go.mod h1:H3JuMUqkn14273r7jKZ5ELUGvAi20XSzl2pt6rFHOGM=
++filippo.io/age v1.2.1 h1:X0TZjehAZylOIj4DubWYU1vWQxv9bJpo+Uu2/LGhi1o=
++filippo.io/age v1.2.1/go.mod h1:JL9ew2lTN+Pyft4RiNGguFfOpewKwSHm5ayKD/A4004=
+ git.sr.ht/~sircmpwn/getopt v0.0.0-20191230200459-23622cc906b3/go.mod h1:wMEGFFFNuPos7vHmWXfszqImLppbc0wEhh6JBfJIUgw=
+ git.sr.ht/~sircmpwn/go-bare v0.0.0-20260710064527-109149d5bf76 h1:O8N/nNjpQBptKX6im+6HerVDMGautxCT6BCfRVZz820=
+ git.sr.ht/~sircmpwn/go-bare v0.0.0-20260710064527-109149d5bf76/go.mod h1:BVJwbDfVjCjoFiKrhkei6NdGcZYpkDkdyCdg1ukytRA=
+diff --git a/msgstore/db.go b/msgstore/db.go
+index 823a63d..248ba59 100644
+--- a/msgstore/db.go
++++ b/msgstore/db.go
+@@ -2,8 +2,11 @@ package msgstore
+ 
+ import (
+ 	"context"
++	"fmt"
+ 	"time"
+ 
++	"filippo.io/age"
++
+ 	"codeberg.org/emersion/soju/database"
+ 	"git.sr.ht/~sircmpwn/go-bare"
+ 	"gopkg.in/irc.v4"
+@@ -35,6 +38,14 @@ func formatDBMsgID(netID int64, target string, msgID int64) string {
+ // stores messages in the soju database.
+ type dbMessageStore struct {
+ 	db database.Database
++
++	// IRChatterbox: when set, returns the recipient to encrypt stored text with (nil = don't).
++	recipient func() age.Recipient
++}
++
++// SetEncryption makes Append encrypt message text with the recipient f returns (see encrypt.go).
++func (ms *dbMessageStore) SetEncryption(f func() age.Recipient) {
++	ms.recipient = f
+ }
+ 
+ var (
+@@ -81,6 +92,17 @@ func (ms *dbMessageStore) LoadLatestID(ctx context.Context, id string, options *
+ }
+ 
+ func (ms *dbMessageStore) Append(ctx context.Context, network *database.Network, entity string, msg *irc.Message) (string, error) {
++	if ms.recipient != nil {
++		if r := ms.recipient(); r != nil {
++			enc, ok, err := EncryptMessage(msg, r)
++			if err != nil {
++				return "", fmt.Errorf("encrypt message: %w", err)
++			}
++			if ok {
++				msg = enc
++			}
++		}
++	}
+ 	ids, err := ms.db.StoreMessages(ctx, network.ID, entity, []*irc.Message{msg})
+ 	if err != nil {
+ 		return "", err
+diff --git a/msgstore/encrypt.go b/msgstore/encrypt.go
+new file mode 100644
+index 0000000..b5e757a
+--- /dev/null
++++ b/msgstore/encrypt.go
+@@ -0,0 +1,64 @@
++package msgstore
++
++// IRChatterbox addition: encrypt the text of stored messages with the user's age public key.
++//
++// Only what's written to disk changes. Live messages reach connected clients as usual; when a
++// stored one is replayed later (CHATHISTORY, backlog) it carries the age ciphertext in the
++// EncryptedTag message tag, and its text is a placeholder. A client holding the private key
++// decrypts the tag and shows the original text. The sender, target and time stay readable to
++// the bouncer, since it needs them to file and replay history.
++
++import (
++	"bytes"
++	"encoding/base64"
++	"fmt"
++	"io"
++	"strings"
++
++	"filippo.io/age"
++	"gopkg.in/irc.v4"
++)
++
++const (
++	EncryptedTag         = "irchatterbox.com/enc"
++	EncryptedCap         = "irchatterbox.com/enc" // lets a client receive the tag without message-tags
++	EncryptedPlaceholder = "[encrypted message: add your private key in IRChatterbox to read it]"
++)
++
++// ParseRecipient checks an age X25519 public key (age1...).
++func ParseRecipient(s string) (*age.X25519Recipient, error) {
++	r, err := age.ParseX25519Recipient(strings.TrimSpace(s))
++	if err != nil {
++		return nil, fmt.Errorf("not a valid age public key (age1...): %v", err)
++	}
++	return r, nil
++}
++
++// EncryptMessage returns an encrypted copy of a PRIVMSG/NOTICE, or ok=false when there's
++// nothing to encrypt (other commands, no text, or already encrypted). msg itself is untouched.
++func EncryptMessage(msg *irc.Message, r age.Recipient) (out *irc.Message, ok bool, err error) {
++	if r == nil || (msg.Command != "PRIVMSG" && msg.Command != "NOTICE") || len(msg.Params) < 2 {
++		return msg, false, nil
++	}
++	if _, done := msg.Tags[EncryptedTag]; done {
++		return msg, false, nil
++	}
++	var buf bytes.Buffer
++	w, err := age.Encrypt(&buf, r)
++	if err != nil {
++		return nil, false, err
++	}
++	if _, err := io.WriteString(w, msg.Params[len(msg.Params)-1]); err != nil {
++		return nil, false, err
++	}
++	if err := w.Close(); err != nil {
++		return nil, false, err
++	}
++	out = msg.Copy()
++	if out.Tags == nil {
++		out.Tags = irc.Tags{}
++	}
++	out.Tags[EncryptedTag] = base64.RawStdEncoding.EncodeToString(buf.Bytes())
++	out.Params[len(out.Params)-1] = EncryptedPlaceholder
++	return out, true, nil
++}
+diff --git a/service.go b/service.go
+index d41500b..3ee2d9d 100644
+--- a/service.go
++++ b/service.go
+@@ -301,7 +301,7 @@ func init() {
+ 					global: true,
+ 				},
+ 				"update": {
+-					usage:  "[username] [-password <password>] [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false] [-max-networks <max-networks>]",
++					usage:  "[username] [-password <password>] [-disable-password] [-admin true|false] [-nick <nick>] [-realname <realname>] [-enabled true|false] [-max-networks <max-networks>] [-encryption-key <age1...>]",
+ 					desc:   "update a user",
+ 					handle: handleUserUpdate,
+ 					global: true,
+@@ -1093,6 +1093,8 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
+ 	fs.Var(boolPtrFlag{&admin}, "admin", "")
+ 	fs.Var(boolPtrFlag{&enabled}, "enabled", "")
+ 	fs.Var(intPtrFlag{&maxNetworks}, "max-networks", "")
++	var encryptionKey *string
++	fs.Var(stringPtrFlag{&encryptionKey}, "encryption-key", "")
+ 
+ 	username, params := popArg(params)
+ 	if err := fs.Parse(params); err != nil {
+@@ -1109,6 +1111,31 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
+ 		return fmt.Errorf("flags -password and -disable-password are mutually exclusive")
+ 	}
+ 
++	// IRChatterbox: -encryption-key age1... (or "" to remove) for yourself, or for anyone as admin
++	if encryptionKey != nil {
++		target := ctx.user
++		if username != "" && (ctx.user == nil || username != ctx.user.Username) {
++			if !ctx.admin {
++				return fmt.Errorf("you must be an admin to update other users")
++			}
++			target = ctx.srv.getUser(username)
++			if target == nil {
++				return fmt.Errorf("unknown username %q", username)
++			}
++		}
++		if target == nil {
++			return fmt.Errorf("cannot determine the user to update")
++		}
++		reply, err := target.setEncryptionKey(ctx, *encryptionKey)
++		if err != nil {
++			return err
++		}
++		ctx.print(reply)
++		if password == nil && !disablePassword && nick == nil && realname == nil && admin == nil && enabled == nil && maxNetworks == nil {
++			return nil
++		}
++	}
++
+ 	if username != "" && (ctx.user == nil || username != ctx.user.Username) {
+ 		if !ctx.admin {
+ 			return fmt.Errorf("you must be an admin to update other users")
+diff --git a/user.go b/user.go
+index 58bbda7..a111253 100644
+--- a/user.go
++++ b/user.go
+@@ -6,6 +6,7 @@ import (
+ 	"encoding/binary"
+ 	"encoding/hex"
+ 	"errors"
++	"filippo.io/age"
+ 	"fmt"
+ 	"math/big"
+ 	"net"
+@@ -588,6 +589,9 @@ type user struct {
+ 	networks        []*network
+ 	downstreamConns []*downstreamConn
+ 	msgStore        msgstore.Store
++
++	// IRChatterbox: public key that stored message text is encrypted with (nil = none)
++	encRecipient atomic.Pointer[age.X25519Recipient]
+ }
+ 
+ func newUser(srv *Server, record *database.User) *user {
+@@ -603,7 +607,7 @@ func newUser(srv *Server, record *database.User) *user {
+ 		msgStore = msgstore.NewMemoryStore()
+ 	}
+ 
+-	return &user{
++	u := &user{
+ 		User:     *record,
+ 		srv:      srv,
+ 		logger:   logger,
+@@ -611,6 +615,8 @@ func newUser(srv *Server, record *database.User) *user {
+ 		done:     make(chan struct{}),
+ 		msgStore: msgStore,
+ 	}
++	u.initEncryption()
++	return u
+ }
+ 
+ func (u *user) forEachUpstream(f func(uc *upstreamConn)) {
+diff --git a/user_encrypt.go b/user_encrypt.go
+new file mode 100644
+index 0000000..392d0f3
+--- /dev/null
++++ b/user_encrypt.go
+@@ -0,0 +1,88 @@
++package soju
++
++// IRChatterbox addition: per-user encryption of stored message text. See msgstore/encrypt.go.
++
++import (
++	"context"
++	"fmt"
++	"time"
++
++	"filippo.io/age"
++	"gopkg.in/irc.v4"
++
++	"codeberg.org/emersion/soju/msgstore"
++)
++
++type encryptingStore interface {
++	SetEncryption(func() age.Recipient)
++}
++
++// initEncryption loads the user's public key and points the message store at it.
++func (u *user) initEncryption() {
++	es, ok := u.msgStore.(encryptingStore)
++	if !ok {
++		return
++	}
++	es.SetEncryption(func() age.Recipient {
++		if r := u.encRecipient.Load(); r != nil {
++			return r
++		}
++		return nil
++	})
++	if u.ID == 0 {
++		return
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
++	defer cancel()
++	s, err := u.srv.db.GetEncryptionKey(ctx, u.ID)
++	if err != nil {
++		u.logger.Printf("failed to load encryption key: %v", err)
++		return
++	}
++	if s == "" {
++		return
++	}
++	r, err := msgstore.ParseRecipient(s)
++	if err != nil {
++		u.logger.Printf("stored encryption key is invalid: %v", err)
++		return
++	}
++	u.encRecipient.Store(r)
++}
++
++// setEncryptionKey saves (or, with "", removes) the user's public key. Setting a key also
++// encrypts the history already stored, in the background. Returns a line for the reply.
++func (u *user) setEncryptionKey(ctx context.Context, key string) (string, error) {
++	if _, ok := u.msgStore.(encryptingStore); !ok {
++		return "", fmt.Errorf("encryption needs \"message-store db\" in the soju config")
++	}
++	var r *age.X25519Recipient
++	if key != "" {
++		var err error
++		if r, err = msgstore.ParseRecipient(key); err != nil {
++			return "", err
++		}
++		key = r.String()
++	}
++	if err := u.srv.db.StoreEncryptionKey(ctx, u.ID, key); err != nil {
++		return "", err
++	}
++	u.encRecipient.Store(r)
++	if r == nil {
++		return "encryption key removed: new messages are stored unencrypted, older ones stay encrypted", nil
++	}
++
++	go func() {
++		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
++		defer cancel()
++		n, err := u.srv.db.TransformUserMessages(ctx, u.ID, func(msg *irc.Message) (*irc.Message, bool, error) {
++			return msgstore.EncryptMessage(msg, r)
++		})
++		if err != nil {
++			u.logger.Printf("encrypting stored history stopped after %d messages: %v", n, err)
++			return
++		}
++		u.logger.Printf("encrypted %d stored messages", n)
++	}()
++	return "encryption key set: new messages are stored encrypted, and stored history is being encrypted now", nil
++}
+-- 
+2.43.0
+

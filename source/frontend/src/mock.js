@@ -27,6 +27,13 @@ export const api = {
     { id: "neo", status: "connected", nick: "Andrew", network: "Neowin", channels: [{ name: "#neowin", topic: "Welcome to #Neowin | Stats: \x02https://flawlesscowboy.xyz/ircstats\x02 | <Andrew> LTT screwdrivers, UNITE!", modes: "+cCfnstT", users }, { name: "#lounge", topic: "", users: users.slice(0, 6) }] },
   ],
   GetHistory: () => [],
+  // stand-ins for the age key helpers: not real keys, just the right shape for the settings UI
+  GenerateEncryptionKey: () => { const r = Array.from(crypto.getRandomValues(new Uint8Array(29)), (b) => "qpzry9x8gf2tvdw0s3jn54khce6mua7l"[b & 31]).join(""); return { privateKey: "AGE-SECRET-KEY-1" + r.toUpperCase().padEnd(58, "Q"), publicKey: "age1" + r.padEnd(58, "q") }; },
+  EncryptionPublicKeys: (keys) => {
+    const ks = keys.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    if (ks.some((k) => !/^AGE-SECRET-KEY-1[0-9A-Z]{58}$/.test(k))) throw new Error("not an age private key");
+    return ks.map((k) => "age1" + k.slice(16).toLowerCase());
+  },
   PluginMenu: (ctx) => (ctx.kind === "nicklist" ? [{ id: "mirc:0", label: "Slap" }, { label: "Fun", items: [{ id: "js:fun.js:0", label: "Wave" }, { id: "js:fun.js:1", label: "Hug" }] }] : []),
   RunPluginMenu: (ctx, id) => console.log("menu", id, ctx.nick),
   GetDiagnostics: () => (new URLSearchParams(location.search).has("crash") ? { lastCrash: "crash-2026-10-17.log", version: "0.4.0-dev", os: "windows/amd64" } : { lastCrash: "" }),

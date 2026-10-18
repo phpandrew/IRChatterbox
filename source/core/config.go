@@ -40,6 +40,8 @@ type ServerConfig struct {
 	BouncerUser    string `json:"bouncerUser"`
 	BouncerPass    string `json:"bouncerPass"`
 	BouncerNetwork string `json:"bouncerNetwork"` // which of the bouncer's networks (optional)
+	// age private key(s) for reading encrypted bouncer history; never sent anywhere
+	EncryptionKey string `json:"encryptionKey,omitempty"`
 }
 
 // bouncerLogin is the bouncer username with the network appended (andrew/libera),

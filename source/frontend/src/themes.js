@@ -667,6 +667,52 @@ Object.assign(BUILTIN, {
   }
 });
 
+// Desktop-inspired themes: the look of macOS and of Ubuntu's Yaru (Linux).
+Object.assign(BUILTIN, {
+  "macOS Light": {
+    name: "macOS Light", base: "light", builtin: true, group: "Desktop", style: "mac",
+    font: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", \"Segoe UI\", sans-serif",
+    vars: {
+      "bg": "#ffffff", "bg-sidebar": "#ebebef", "bg-elev": "#ffffff", "bg-input": "#ffffff", "bg-hover": "#dfdfe5",
+      "bg-active": "#d3d3da", "border": "#d1d1d6", "text": "#1d1d1f", "text-muted": "#55555c", "text-faint": "#8e8e93",
+      "accent": "#007aff", "accent-text": "#ffffff", "hl-bg": "#fff5d9", "hl-border": "#ff9500", "mention-bg": "#d9e9ff",
+      "link": "#0066cc", "danger": "#ff3b30", "success": "#28a745", "warn": "#ff9500",
+    },
+  },
+  "macOS Dark": {
+    name: "macOS Dark", base: "dark", builtin: true, group: "Desktop", style: "mac",
+    font: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", \"Segoe UI\", sans-serif",
+    vars: {
+      "bg": "#1e1e1e", "bg-sidebar": "#2a2a2c", "bg-elev": "#2c2c2e", "bg-input": "#1c1c1e", "bg-hover": "#38383b",
+      "bg-active": "#46464a", "border": "#3a3a3d", "text": "#f5f5f7", "text-muted": "#b0b0b5", "text-faint": "#78787e",
+      "accent": "#0a84ff", "accent-text": "#ffffff", "hl-bg": "#3b3118", "hl-border": "#ff9f0a", "mention-bg": "#1d3a5e",
+      "link": "#4aa3ff", "danger": "#ff453a", "success": "#30d158", "warn": "#ff9f0a",
+    },
+  },
+  "Ubuntu Light": {
+    name: "Ubuntu Light", base: "light", builtin: true, group: "Desktop", style: "yaru",
+    font: "\"Ubuntu\", \"Ubuntu Sans\", \"Cantarell\", \"Segoe UI\", sans-serif",
+    chatFont: "\"Ubuntu\", \"Ubuntu Sans\", \"Cantarell\", \"Segoe UI\", sans-serif",
+    vars: {
+      "bg": "#ffffff", "bg-sidebar": "#f6f6f6", "bg-elev": "#ffffff", "bg-input": "#ffffff", "bg-hover": "#e9e9e9",
+      "bg-active": "#e95420", "border": "#d8d8d8", "text": "#3d3d3d", "text-muted": "#5e5e5e", "text-faint": "#8b8b8b",
+      "accent": "#e95420", "accent-text": "#ffffff", "hl-bg": "#fdeee8", "hl-border": "#e95420", "mention-bg": "#f2dce9",
+      "link": "#c34113", "danger": "#c7162b", "success": "#0e8420", "warn": "#f99b11",
+    },
+  },
+  "Ubuntu Dark": {
+    name: "Ubuntu Dark", base: "dark", builtin: true, group: "Desktop", style: "yaru",
+    font: "\"Ubuntu\", \"Ubuntu Sans\", \"Cantarell\", \"Segoe UI\", sans-serif",
+    chatFont: "\"Ubuntu\", \"Ubuntu Sans\", \"Cantarell\", \"Segoe UI\", sans-serif",
+    vars: {
+      "bg": "#2c2c2c", "bg-sidebar": "#242424", "bg-elev": "#363636", "bg-input": "#1e1e1e", "bg-hover": "#3a3a3a",
+      "bg-active": "#e95420", "border": "#3f3f3f", "text": "#f7f7f7", "text-muted": "#c8c8c8", "text-faint": "#8d8d8d",
+      "accent": "#e95420", "accent-text": "#ffffff", "hl-bg": "#40291f", "hl-border": "#f27f53", "mention-bg": "#5e2750",
+      "link": "#ff8e5e", "danger": "#ef3f4f", "success": "#3eb34f", "warn": "#f99b11",
+    },
+  },
+});
+
 let custom = {};
 export function setCustomThemes(list) {
   custom = {};
@@ -716,6 +762,6 @@ export function themeOptions(selected, label = (n) => n) {
   const groups = {};
   for (const [n, t] of Object.entries(allThemes())) (groups[t.builtin ? t.group || "IRChatterbox" : "Custom"] ||= []).push(n);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  return ["IRChatterbox", "Popular", "Throwback", "Custom"].filter((g) => groups[g]).map((g) =>
+  return ["IRChatterbox", "Popular", "Desktop", "Throwback", "Custom"].filter((g) => groups[g]).map((g) =>
     `<optgroup label="${g}">${groups[g].map((n) => `<option value="${esc(n)}" ${n === selected ? "selected" : ""}>${esc(label(n))}</option>`).join("")}</optgroup>`).join("");
 }

@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ Akku: uneingeschränkt",
 "✓ Notifications allowed": "✓ Benachrichtigungen erlaubt",
 "✓ Saved “{0}” — {1}": "✓ „{0}“ gespeichert — {1}",
-"✓ You're on the latest version ({0}).": "✓ Du hast die neueste Version ({0})."
+"✓ You're on the latest version ({0}).": "✓ Du hast die neueste Version ({0}).",
+"Desktop": "Desktop",
+"History decryption key": "Schlüssel zum Entschlüsseln des Verlaufs",
+"(optional)": "(optional)",
+"Generate a key": "Schlüssel erzeugen",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "Nur nötig, wenn dein Bouncer den gespeicherten Verlauf verschlüsselt. Dieser private Schlüssel bleibt auf diesem Gerät und wird nirgendwohin gesendet. Gib deinem Bouncer den",
+"public": "öffentlichen",
+"key shown above, on your account page or with": "Schlüssel von oben, auf deiner Kontoseite oder mit",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": ". Bewahre eine Kopie sicher auf: Ohne ihn lässt sich der verschlüsselte Verlauf nicht lesen.",
+"Public key:": "Öffentlicher Schlüssel:",
+"Copy": "Kopieren",
+"Copied": "Kopiert",
+"(+{0} older)": "(+{0} ältere)",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "Das ist kein privater age-Schlüssel. Er beginnt mit AGE-SECRET-KEY-1.",
+"Fix the history decryption key, or clear it": "Korrigiere den Schlüssel zum Entschlüsseln des Verlaufs oder lösche ihn"
 }

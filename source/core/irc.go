@@ -608,7 +608,8 @@ func (c *Conn) ChannelStates() []ChannelState {
 func (c *Conn) wantedCaps() []string {
 	want := []string{"multi-prefix", "away-notify", "account-notify", "server-time", "extended-join", "chghost", "userhost-in-names", "message-tags", "invite-notify", "cap-notify",
 		"batch", "draft/chathistory", "draft/read-marker",
-		"echo-message", "labeled-response", "setname", "account-tag", "extended-monitor", "draft/message-redaction", "standard-replies"}
+		"echo-message", "labeled-response", "setname", "account-tag", "extended-monitor", "draft/message-redaction", "standard-replies",
+		encTag} // encTag: our soju build sends encrypted history even on networks without message-tags
 	switch {
 	case c.cfg.Bouncer == "soju" && c.cfg.BouncerPass != "":
 		want = append(want, "sasl")
@@ -704,6 +705,7 @@ func (c *Conn) saslPlain() {
 // ---------- incoming ----------
 
 func (c *Conn) handle(m *Message) {
+	c.decryptStored(m)
 	nick := m.Nick()
 	ts := m.Time().UnixMilli()
 	if uh := m.UserHost(); uh != "" {

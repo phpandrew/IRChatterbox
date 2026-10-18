@@ -584,5 +584,19 @@
 "✓ Battery: unrestricted": "✓ 电池：不受限制",
 "✓ Notifications allowed": "✓ 已允许通知",
 "✓ Saved “{0}” — {1}": "✓ 已保存“{0}”——{1}",
-"✓ You're on the latest version ({0}).": "✓ 你使用的是最新版本（{0}）。"
+"✓ You're on the latest version ({0}).": "✓ 你使用的是最新版本（{0}）。",
+"Desktop": "桌面系统",
+"History decryption key": "历史记录解密密钥",
+"(optional)": "（可选）",
+"Generate a key": "生成密钥",
+"Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the": "仅当你的 bouncer 加密已存储的历史记录时才需要。此私钥只保存在本设备上，绝不会发送到任何地方。请把",
+"public": "公钥",
+"key shown above, on your account page or with": "（显示在上方）提供给你的 bouncer：在账户页面上，或使用",
+". Keep a copy somewhere safe: without it, encrypted history can't be read.": "。请把副本保存在安全的地方：没有它，就无法读取加密的历史记录。",
+"Public key:": "公钥：",
+"Copy": "复制",
+"Copied": "已复制",
+"(+{0} older)": "（另有 {0} 个旧密钥）",
+"That isn't an age private key. It starts with AGE-SECRET-KEY-1.": "这不是 age 私钥。私钥以 AGE-SECRET-KEY-1 开头。",
+"Fix the history decryption key, or clear it": "请修正历史记录解密密钥，或将其清空"
 }

@@ -281,6 +281,10 @@ export async function openServerEditor(cfg, onSaved) {
         <div class="field only-bouncer"><label>Network</label>${text("sBncNet", c.bouncerNetwork, "libera")}<div class="hint">The network's name on your bouncer. Add one server here per network.</div></div>
         <div class="field only-bouncer"><label>Bouncer username</label>${text("sBncUser", c.bouncerUser, "your bouncer login")}</div>
         <div class="field only-bouncer"><label>Bouncer password</label>${text("sBncPass", c.bouncerPass, "", "password")}</div>
+        <div class="field full only-bouncer enc-field"><label for="sEncKey">History decryption key <span class="muted">(optional)</span></label>
+          <textarea id="sEncKey" rows="2" spellcheck="false" autocomplete="off" placeholder="AGE-SECRET-KEY-1…">${esc(c.encryptionKey || "")}</textarea>
+          <div class="enc-row"><button type="button" class="btn sm" id="sEncGen">Generate a key</button><span id="sEncPub"></span></div>
+          <div class="hint">Only needed if your bouncer encrypts stored history. This private key stays on this device and is never sent anywhere. Give your bouncer the <b>public</b> key shown above, on your account page or with <code>/msg BouncerServ user update -encryption-key age1…</code>. Keep a copy somewhere safe: without it, encrypted history can't be read.</div></div>
         <div class="field only-direct"><label>Server password</label>${text("sPass", c.password, "usually empty", "password")}</div>
         <div class="field"><label>&nbsp;</label>${check("sAuto", c.autoConnect, "Connect automatically on startup")}</div>
       </div>
@@ -375,7 +379,44 @@ export async function openServerEditor(cfg, onSaved) {
   $("sName").oninput = () => ($("sName").dataset.touched = 1);
   if (!isNew) $("sName").dataset.touched = 1;
   $("sCancel").onclick = closeOverlay;
+  // ---- history decryption key ----
+  const encSync = async () => {
+    const k = $("sEncKey").value.trim();
+    const out = $("sEncPub");
+    out.textContent = "";
+    out.className = "";
+    if (!k) return true;
+    try {
+      const pubs = (await Go.EncryptionPublicKeys(k)) || [];
+      out.innerHTML = `Public key: <code id="sEncPubKey">${esc(pubs[pubs.length - 1] || "")}</code> <button type="button" class="btn sm" id="sEncCopy">Copy</button>`
+        + (pubs.length > 1 ? ` <span class="muted">(+${pubs.length - 1} older)</span>` : "");
+      $("sEncCopy").onclick = async () => {
+        try { await navigator.clipboard.writeText($("sEncPubKey").textContent); $("sEncCopy").textContent = "Copied"; } catch {}
+      };
+      return true;
+    } catch (e) {
+      out.className = "err";
+      out.textContent = "That isn't an age private key. It starts with AGE-SECRET-KEY-1.";
+      return false;
+    }
+  };
+  $("sEncKey").addEventListener("change", encSync);
+  $("sEncGen").onclick = async () => {
+    const pair = await Go.GenerateEncryptionKey();
+    if (!pair?.privateKey) return;
+    // keep any existing key on its own line, so history encrypted with it stays readable
+    const cur = $("sEncKey").value.trim();
+    $("sEncKey").value = cur ? cur + "\n" + pair.privateKey : pair.privateKey;
+    await encSync();
+  };
+  encSync();
+
   const save = async (connect) => {
+    if (!(await encSync())) {
+      showTab($("sEncKey").closest(".st-panel").dataset.panel);
+      $("sErr").textContent = "Fix the history decryption key, or clear it";
+      return;
+    }
     const bnc = $("sBody").classList.contains("bnc-mode");
     const missing = !val("sHost") ? "sHost" : !val("sNick") ? "sNick" : bnc && !val("sBncUser") ? "sBncUser" : bnc && !$("sBncPass").value ? "sBncPass" : null;
     document.querySelectorAll(".field input.invalid").forEach((x) => x.classList.remove("invalid"));
@@ -393,6 +434,7 @@ export async function openServerEditor(cfg, onSaved) {
       authMethod: $("sAuthM").value, authUser: val("sAuthU"), authPass: $("sAuthP").value, autoConnect: on("sAuto"),
       rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"), encoding: $("sEnc").value,
       bouncer: bnc ? $("sBnc").value : "", bouncerUser: val("sBncUser"), bouncerPass: $("sBncPass").value, bouncerNetwork: val("sBncNet"),
+      encryptionKey: $("sEncKey").value.trim(),
     };
     const saved = await Go.SaveServer(out);
     if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }
