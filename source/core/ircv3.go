@@ -31,6 +31,12 @@ func (c *Conn) hasCap(name string) bool {
 // shown then (with the server's time and msgid); without it, it's shown straight away.
 // It reports whether the line will come back as an echo.
 func (c *Conn) sendMsg(cmd, target, text string, viaPlugin bool) bool {
+	return c.sendMsgTags(cmd, target, text, "", viaPlugin)
+}
+
+// sendMsgTags is sendMsg with client tags ("+draft/reply=abc"), sent only when the server
+// supports message-tags.
+func (c *Conn) sendMsgTags(cmd, target, text, tags string, viaPlugin bool) bool {
 	c.mu.Lock()
 	echo := c.caps["echo-message"]
 	labeled := c.caps["labeled-response"]
@@ -51,8 +57,14 @@ func (c *Conn) sendMsg(cmd, target, text string, viaPlugin bool) bool {
 	}
 	c.mu.Unlock()
 	line := cmd + " " + target + " :" + text
+	if tags != "" && !c.hasCap("message-tags") {
+		tags = ""
+	}
 	if label != "" {
-		line = "@label=" + label + " " + line
+		tags = strings.TrimPrefix(tags+";label="+label, ";")
+	}
+	if tags != "" {
+		line = "@" + tags + " " + line
 	}
 	c.SendRaw(line)
 	return echo
@@ -132,20 +144,25 @@ func (c *Conn) checkSTS(caps []string) bool {
 
 // typingAllowed: the server may deny client tags (ISUPPORT CLIENTTAGDENY=*,-typing etc.).
 func (c *Conn) typingAllowed() bool {
+	return c.clientTagAllowed("typing")
+}
+
+// clientTagAllowed reports whether we may send the client tag +name (or +draft/name): the
+// server needs message-tags, and may deny tags with ISUPPORT CLIENTTAGDENY=*,-typing etc.
+func (c *Conn) clientTagAllowed(name string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.caps["message-tags"] {
 		return false
 	}
-	deny := c.clientTagDeny
 	allowed := true
-	for _, t := range strings.Split(deny, ",") {
+	for _, t := range strings.Split(c.clientTagDeny, ",") {
 		switch t {
 		case "*":
 			allowed = false
-		case "typing", "draft/typing":
+		case name, "draft/" + name:
 			allowed = false
-		case "-typing", "-draft/typing":
+		case "-" + name, "-draft/" + name:
 			allowed = true
 		}
 	}
@@ -168,6 +185,9 @@ func (a *App) SendTyping(server, target, state string) {
 }
 
 func (c *Conn) onTagmsg(m *Message, nick string, isMe bool) {
+	if c.onReact(m, nick, isMe) {
+		return
+	}
 	state := m.Tags["+typing"]
 	if state == "" {
 		state = m.Tags["+draft/typing"]

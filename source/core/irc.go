@@ -441,6 +441,10 @@ func (c *Conn) maxPayload(cmd, target string) int {
 
 // Say sends a PRIVMSG (splitting long text) and echoes it locally.
 func (c *Conn) Say(target, text string, viaPlugin bool) {
+	if strings.HasPrefix(target, "=") { // a DCC chat window
+		c.app.dccChatSay(c, target, "privmsg", text)
+		return
+	}
 	if c.Status() != "connected" {
 		c.info(target, "error", "Not connected")
 		return
@@ -457,6 +461,10 @@ func (c *Conn) Say(target, text string, viaPlugin bool) {
 }
 
 func (c *Conn) Action(target, text string) {
+	if strings.HasPrefix(target, "=") {
+		c.app.dccChatSay(c, target, "action", text)
+		return
+	}
 	if !c.sendMsg("PRIVMSG", target, "\x01ACTION "+text+"\x01", false) {
 		c.emitOwn(target, "action", text)
 	}
@@ -475,7 +483,11 @@ func (c *Conn) emitOwn(target, kind, text string) {
 	if !c.isChannel(target) && !c.hasQuery(target) && kind == "notice" {
 		buf = "*active*"
 	}
-	c.emit(Event{Type: "msg", Buffer: buf, Kind: kind, Nick: c.Nick(), Prefix: c.prefixOf(target, c.Nick()), Text: text, Self: true})
+	c.emitOwnTagged(buf, target, kind, text, nil)
+}
+
+func (c *Conn) emitOwnTagged(buf, target, kind, text string, extra map[string]any) {
+	c.emit(Event{Type: "msg", Buffer: buf, Kind: kind, Nick: c.Nick(), Prefix: c.prefixOf(target, c.Nick()), Text: text, Self: true, Extra: extra})
 	c.noteSeen(buf, time.Now().UnixMilli(), true, text)
 }
 
@@ -1230,6 +1242,12 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		body := strings.Trim(text, "\x01")
 		cmd, arg, _ := strings.Cut(body, " ")
 		cmd = strings.ToUpper(cmd)
+		if cmd == "DCC" {
+			if !isMe && m.Command == "PRIVMSG" && !c.isChannel(target) {
+				c.onDCC(nick, m.Prefix, arg)
+			}
+			return
+		}
 		if cmd == "ACTION" {
 			kind = "action"
 			text = arg
@@ -1285,7 +1303,7 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		return
 	}
 
-	if !isMe && (highlight || (isPM && kind != "notice")) {
+	if !isMe && c.app.wantsNotify(c, buffer, kind, isPM, highlight) {
 		c.app.notify(c, buffer, nick, text, isPM, highlight)
 	}
 	if m.Command == "PRIVMSG" && kind == "privmsg" {
@@ -1314,6 +1332,9 @@ func msgExtra(m *Message) map[string]any {
 	}
 	if acc := m.Tags["account"]; acc != "" && acc != "*" {
 		x["account"] = acc
+	}
+	if r := replyTag(m); r != "" {
+		x["reply"] = r
 	}
 	return x
 }

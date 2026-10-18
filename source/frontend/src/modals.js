@@ -581,6 +581,7 @@ export function openSettings(startTab) {
       <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>
       <div class="set-sep"></div>
       ${check("gTyping", set.sendTyping !== false, "Let others see when I'm typing")}
+      ${check("gSpell", set.spellCheck !== false, "Check spelling as I type (right-click a word for suggestions)")}
       <div class="hint indent">Shows “Andrew is typing…” in clients that support it, on servers that allow it.</div>`) +
       card("Messages", "The default message sent when you quit or leave a channel.", `
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`);
@@ -591,6 +592,7 @@ export function openSettings(startTab) {
       card(android || os !== "windows" ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
       ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
+      <div class="hint">To get every message from a channel, or to mute one, right-click it in the sidebar and choose Notifications.</div>
       <div style="margin-top:10px"><button class="btn sm" id="hTest">Send a test notification</button></div>`) +
       card("Sounds", "Play a sound when you're mentioned or messaged while looking elsewhere.", `
       <div class="fgrid">
@@ -615,6 +617,7 @@ export function openSettings(startTab) {
       ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF, SVG, imgur and Giphy links)")}
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
       ${check("mVid", set.inlineVideos ?? true, "Show video and audio players (MP4, WEBM, MOV, MP3, OGG, imgur GIFV) and Vimeo, Streamable or Spotify — click to play")}
+      ${check("mLinks", set.linkPreviews !== false, "Show a preview under web links (title, description and picture)")}
       <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`) +
       card("Image uploads", "Attach, paste or drop a JPG, PNG, WebP or BMP image in the message box to share it as a link.", `
       ${field("Upload to", `<select id="uHost">
@@ -628,7 +631,14 @@ export function openSettings(startTab) {
       </div>
       <div id="uCustomRow" style="margin-top:10px">
         ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. Run your own with <a href="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting" data-url="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting">self-hosting/upload.php</a> on GitHub.`)}
-      </div>`);
+      </div>`) +
+      card("DCC", "Send files and chat directly with someone, without going through the server. Right-click a nick and choose Send file… or Direct chat, or use /dcc.", `
+      ${field("Save received files to", `<div style="display:flex;gap:8px"><input type="text" id="dFolder" value="${esc(set.dccFolder || "")}" placeholder="Default: your Downloads folder" style="flex:1"><button class="btn" id="dBrowse">Choose…</button></div>`)}
+      <div class="fgrid">
+        ${field("Your address", text("dAddr", set.dccAddress, "Detect automatically"), "Your public IP or host name, if detecting it gets it wrong.")}
+        ${field("Listen on ports", text("dPorts", set.dccPorts, "Any free port"), "A port or range such as 5000-5010.")}
+      </div>
+      <div class="hint">Behind a home router, others can only reach your offers if these ports are forwarded to this computer. Files you receive are never opened automatically.</div>`, "desktop-only");
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
     wire();
@@ -649,6 +659,7 @@ export function openSettings(startTab) {
       $("uHost").addEventListener("change", sync); sync();
       document.querySelectorAll("#uImgurRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));
     }
+    if ($("dBrowse")) $("dBrowse").onclick = async () => { const f = await Go.PickDCCFolder(); if (f) $("dFolder").value = f; };
     if ($("gTxt")) {
       const sync = () => { $("gTxtRow").style.opacity = on("gTxt") ? 1 : 0.5; };
       $("gTxt").addEventListener("change", sync); sync();
@@ -979,6 +990,7 @@ export function openSettings(startTab) {
       set.autoAway = on("gAway"); set.autoAwayMinutes = Math.max(1, parseInt(val("gAwayMin")) || 15); set.autoAwayMessage = val("gAwayMsg");
       set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
       set.sendTyping = on("gTyping");
+      if (has("gSpell")) set.spellCheck = on("gSpell");
       if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
@@ -992,7 +1004,8 @@ export function openSettings(startTab) {
       set.notifyList = lines("hFriends"); set.notifyFriends = on("hFriendsNotify");
     }
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
-    if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); }
+    if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); set.linkPreviews = on("mLinks"); }
+    if (has("dFolder")) { set.dccFolder = val("dFolder"); set.dccAddress = val("dAddr"); set.dccPorts = val("dPorts"); }
     if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); set.uploadURL = val("uURL"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");

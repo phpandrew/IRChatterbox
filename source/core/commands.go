@@ -206,6 +206,8 @@ func (a *App) runCommandFrom(c *Conn, buffer, line string, fromScript bool) {
 		if requireConn() && arg(0) != "" {
 			c.Notice(arg(0), after(1))
 		}
+	case "dcc":
+		a.dccCommand(c, buffer, rest)
 	case "ctcp":
 		if requireConn() && arg(0) != "" && arg(1) != "" {
 			body := strings.ToUpper(arg(1))

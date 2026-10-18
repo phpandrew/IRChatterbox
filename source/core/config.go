@@ -158,6 +158,14 @@ type Settings struct {
 	// service with a status-bar notification). Off: disconnect in the background and let
 	// the bouncer replay what you missed when you come back.
 	KeepAlive bool `json:"keepAlive"`
+
+	LinkPreviews bool `json:"linkPreviews"` // title, description and picture under web links
+	SpellCheck   bool `json:"spellCheck"`   // underline misspelled words in the message box
+
+	// DCC (direct file transfers and chats)
+	DCCFolder  string `json:"dccFolder"`  // where received files go ("" = Downloads)
+	DCCAddress string `json:"dccAddress"` // address to give others ("" = detect)
+	DCCPorts   string `json:"dccPorts"`   // port or range to listen on, e.g. "5000-5010" ("" = any)
 }
 
 // Shortcut replaces a typed word such as "$shrug" with Text when a message is sent.
@@ -201,7 +209,13 @@ type Config struct {
 	Shortcuts  []Shortcut        `json:"shortcuts"`
 	Settings   Settings          `json:"settings"`
 	NickColors map[string]string `json:"nickColors"`
-	Plugins    PluginSettings    `json:"plugins"`
+
+	// per-channel notification settings, keyed "serverID/lowercase buffer" (chanotify.go)
+	ChannelNotify map[string]NotifyRule `json:"channelNotify,omitempty"`
+
+	// channels and private chats pinned to the top of the sidebar (favourites.go)
+	Favourites []Favourite    `json:"favourites,omitempty"`
+	Plugins    PluginSettings `json:"plugins"`
 	// InstallID is a random ID made once per install. Reports and uploads send it so the
 	// servers can rate-limit per install; it says nothing about who you are.
 	InstallID string `json:"installId"`
@@ -246,7 +260,7 @@ func defaultConfig() Config {
 			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,
 			AutoAwayMinutes: 15, AutoAwayMessage: "Away from keyboard",
 			SoundHighlight: "chime", SoundPM: "ping", SoundVolume: 70,
-			KeepAlive: true, UploadHost: UploadHostIRChatterbox,
+			KeepAlive: true, UploadHost: UploadHostIRChatterbox, LinkPreviews: true, SpellCheck: true,
 		},
 		NickColors: map[string]string{},
 		Shortcuts:  defaultShortcuts(),

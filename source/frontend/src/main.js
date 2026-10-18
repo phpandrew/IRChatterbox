@@ -6,7 +6,7 @@ import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog } from "./modals.js";
 import { detectOS, os } from "./platform.js";
-import { setLanguage } from "./i18n.js";
+import { setLanguage, t } from "./i18n.js";
 import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
 
 const $ = (id) => document.getElementById(id);
@@ -62,13 +62,15 @@ async function loadHistory(srv, b) {
   b.history = true;
   const lines = (await Go.GetHistory(srv.id, b.name)) || [];
   const redacted = new Map(lines.filter((ev) => ev.type === "redact").map((ev) => [ev.text, ev.extra?.reason || ""]));
-  const old = lines.filter((ev) => ev.time < b.created && ev.type !== "redact").map((ev) => {
+  const reacts = lines.filter((ev) => ev.type === "react" && ev.time < b.created);
+  const old = lines.filter((ev) => ev.time < b.created && ev.type !== "redact" && ev.type !== "react").map((ev) => {
     const l = { ...evToLine(ev), history: true, hl: false };
     if (l.extra?.msgid && redacted.has(l.extra.msgid)) { l.redacted = true; l.redactReason = redacted.get(l.extra.msgid); }
     return l;
   });
   if (!old.length) return;
   b.lines = old.concat(b.lines);
+  for (const ev of reacts) applyReact(b, ev);
   if (isActive(srv, b)) renderChat();
   if (onScreen(srv, b)) renderPanesSoon();
 }
@@ -212,6 +214,12 @@ function onIrc(ev) {
       }
       break;
     }
+    case "react": {
+      const b = srv.buffers.get((ev.buffer || "").toLowerCase());
+      const line = b && applyReact(b, ev);
+      if (line) refreshLine(srv, b, line);
+      break;
+    }
     case "read": {
       const key = (ev.buffer || "").toLowerCase();
       (srv.readMarks ||= {})[key] = Math.max(srv.readMarks[key] || 0, ev.time);
@@ -317,6 +325,7 @@ function select(serverId, key) {
   Go.SetActive(serverId, b.name);
   renderAll();
   renderTyping();
+  renderReplyBar();
   b.markPending = false; // you're reading it now
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
@@ -326,11 +335,32 @@ function select(serverId, key) {
 }
 
 function allBuffers() {
-  const out = [];
+  const out = favourites().filter((f) => f.b).map(({ srv, b }) => ({ srv, b }));
   for (const srv of S.servers) {
-    for (const b of sortedBuffers(srv)) out.push({ srv, b });
+    for (const b of sortedBuffers(srv)) if (!isFavourite(srv, b)) out.push({ srv, b });
   }
   return out;
+}
+
+// ---------- favourites: channels and chats pinned to the top of the sidebar ----------
+// [{ srv, key, name, b }] in the saved order; b is the buffer once it exists
+function favourites() {
+  const out = [];
+  for (const f of S.cfg?.favourites || []) {
+    const srv = S.byId[f.server];
+    if (!srv || !f.buffer) continue;
+    const key = f.buffer.toLowerCase();
+    out.push({ srv, key, name: f.buffer, b: srv.buffers.get(key) });
+  }
+  return out;
+}
+function isFavourite(srv, b) {
+  return (S.cfg?.favourites || []).some((f) => f.server === srv.id && (f.buffer || "").toLowerCase() === b.key);
+}
+function toggleFavourite(srv, b) {
+  const on = !isFavourite(srv, b);
+  Go.SetFavourite(srv.id, b.name, on);
+  toast(on ? t("{0} added to Favourites", b.name) : t("{0} removed from Favourites", b.name), "ok");
 }
 
 function sortedBuffers(srv) {
@@ -364,6 +394,12 @@ const ICONS = {
   server: `<svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`,
   query: `<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.8 3.6-5.6 7-5.6s6.2 1.8 7 5.6"/></svg>`,
   chev: `<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>`,
+  smile: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8.7 14c.8 1.1 1.9 1.7 3.3 1.7s2.5-.6 3.3-1.7"/><path d="M9.2 9.8h.01M14.8 9.8h.01" stroke-width="2.4"/></svg>`,
+  reply: `<svg viewBox="0 0 24 24"><path d="M10 8 5 12.5l5 4.5"/><path d="M5.5 12.5H14a5 5 0 0 1 5 5V19"/></svg>`,
+  replyTo: `<svg viewBox="0 0 24 24"><path d="M6 5v6a4 4 0 0 0 4 4h9"/><path d="m15 11 4 4-4 4"/></svg>`,
+  bellOff: `<svg viewBox="0 0 24 24"><path d="M9.5 20a2.6 2.6 0 0 0 5 0"/><path d="M17.5 13.5V10a5.5 5.5 0 0 0-9.3-4M6.5 9.8V14L5 16.5h11.5"/><path d="m4 4 16 16"/></svg>`,
+  star: `<svg viewBox="0 0 24 24"><path d="m12 3.8 2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z"/></svg>`,
+  bell: `<svg viewBox="0 0 24 24"><path d="M9.5 20a2.6 2.6 0 0 0 5 0"/><path d="M6.5 10a5.5 5.5 0 0 1 11 0v4l1.5 2.5H5L6.5 14z"/></svg>`,
 };
 
 // ---------- channel icons and the compact sidebar ----------
@@ -419,21 +455,30 @@ function renderTree() {
   if (drag) { treeDirty = true; return; } // don't rebuild the list mid-drag
   const tree = $("tree");
   let html = "";
+  // favourites first: make sure each has a buffer (a channel you're not in shows as parted)
+  const favs = favourites();
+  for (const f of favs) if (!f.b) f.b = ensureBuffer(f.srv, f.name);
+  if (favs.length) {
+    let fU = 0, fH = 0, rows = "";
+    const many = S.servers.length > 1;
+    for (const { srv, b } of favs) {
+      fU += b.unread; fH += b.hl;
+      rows += bufRow(srv, b, many ? srv.cfg.name || srv.cfg.host : "");
+    }
+    const fc = !!S.ui.favCollapsed;
+    const agg = fc ? (fH ? `<span class="badge hl">${fH}</span>` : fU ? `<span class="badge">${fU}</span>` : "") : "";
+    html += `<div class="srv fav-sec ${fc ? "collapsed" : ""}">
+      <div class="srv-head fav-head" data-favhead="1">${ICONS.chev}<span class="fav-star">${ICONS.star}</span>
+        <div style="flex:1;min-width:0"><div class="fav-title">Favourites</div></div>${agg}</div>
+      <div class="srv-kids">${rows}</div></div>`;
+  }
   for (const srv of S.servers) {
     let aggU = 0, aggH = 0;
     let kids = "";
     for (const b of sortedBuffers(srv)) {
+      if (isFavourite(srv, b)) continue;
       aggU += b.unread; aggH += b.hl;
-      const active = isActive(srv, b);
-      const cls = ["buf", active && "active", b.activity && "activity", b.hl && "hl", b.type === "channel" && !b.joined && "parted"].filter(Boolean).join(" ");
-      const ico = b.type === "server" ? ICONS.server : b.type === "channel" ? "#" : ICONS.query;
-      const label = b.type === "server" ? "Server status" : b.type === "channel" ? esc(b.name.replace(/^#/, "")) : esc(b.name);
-      const badge = b.hl ? `<span class="badge hl">${b.hl}</span>` : b.unread ? `<span class="badge">${b.unread > 999 ? "999+" : b.unread}</span>` : "";
-      const x = b.type !== "server" ? `<span class="x" data-close="1" title="${b.type === "channel" ? "Leave" : "Close"}">✕</span>` : "";
-      const pic = chanIcon(srv, b);
-      const letter = esc((b.type === "server" ? (srv.cfg.name || "?") : b.name.replace(/^[#&!+]+/, "")).charAt(0).toUpperCase() || "#");
-      const icoHtml = pic ? `<img src="${pic}" alt="">` : ico;
-      kids += `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${b.type === "channel" ? ` draggable="true"` : ""} title="${esc(b.type === "server" ? "Server status" : b.name)}"><span class="ico${pic ? " pic" : ""}" data-l="${letter}" style="--tile:${nickColor(b.name || srv.cfg.name || "")}">${icoHtml}</span><span class="nm">${label}</span>${badge}${x}</div>`;
+      kids += bufRow(srv, b);
     }
     const stTxt = { connected: "Connected", connecting: "Connecting…", disconnected: "Disconnected" }[srv.status];
     const agg = srv.collapsed ? (aggH ? `<span class="badge hl">${aggH}</span>` : aggU ? `<span class="badge">${aggU}</span>` : "") : "";
@@ -450,6 +495,59 @@ function renderTree() {
   afterTree(S.servers, S.active);
 }
 
+// ---------- per-channel notifications ----------
+function notifyRule(srv, b) {
+  const r = S.cfg?.channelNotify?.[srv.id + "/" + b.key];
+  if (!r || (r.level === "mute" && r.until && Date.now() >= r.until)) return null;
+  return r;
+}
+function notifyLevel(srv, b) {
+  return notifyRule(srv, b)?.level || (b.type === "channel" ? "mentions" : "all");
+}
+function notifyMenu(srv, b) {
+  const r = notifyRule(srv, b), level = notifyLevel(srv, b);
+  const set = (lvl, minutes = 0) => () => Go.SetChannelNotify(srv.id, b.name, lvl, minutes);
+  const items = [["Every message", set("all"), "", level === "all"]];
+  if (b.type === "channel") items.push(["Only mentions", set("mentions"), "", level === "mentions"]);
+  items.push(["Nothing", set("mute"), "", level === "mute" && !r?.until]);
+  items.push("-");
+  items.push(["Mute for 1 hour", set("mute", 60)]);
+  items.push(["Mute for 8 hours", set("mute", 480)]);
+  items.push(["Mute for 24 hours", set("mute", 1440)]);
+  if (level === "mute") {
+    items.push("-");
+    if (r?.until) items.push([t("Muted until {0}", fmtWhen(r.until)), () => {}, "muted-note"]);
+    items.push(["Unmute", set("")]);
+  }
+  return items;
+}
+function fmtWhen(ms) {
+  const d = new Date(ms), now = new Date();
+  return d.toDateString() === now.toDateString() ? fmtTime(ms) : d.toLocaleDateString(undefined, { weekday: "short" }) + " " + fmtTime(ms);
+}
+setInterval(() => { // mutes that run out
+  if (Object.values(S.cfg?.channelNotify || {}).some((r) => r.until && r.until <= Date.now() && r.until > Date.now() - 61000)) scheduleTree();
+}, 60000);
+
+// one sidebar row; fav = the server's name to show beside a favourite ("" = none), or undefined
+function bufRow(srv, b, fav) {
+  const active = isActive(srv, b);
+  const muted = notifyLevel(srv, b) === "mute";
+  const isFav = fav !== undefined;
+  const cls = ["buf", active && "active", b.activity && "activity", b.hl && "hl", b.type === "channel" && !b.joined && "parted", muted && "muted", isFav && "fav"].filter(Boolean).join(" ");
+  const ico = b.type === "server" ? ICONS.server : b.type === "channel" ? "#" : ICONS.query;
+  const label = b.type === "server" ? "Server status" : b.type === "channel" ? esc(b.name.replace(/^#/, "")) : esc(b.name);
+  const badge = b.hl ? `<span class="badge hl">${b.hl}</span>` : b.unread ? `<span class="badge">${b.unread > 999 ? "999+" : b.unread}</span>` : "";
+  const x = b.type !== "server" ? `<span class="x" data-close="1" title="${b.type === "channel" ? "Leave" : "Close"}">✕</span>` : "";
+  const pic = chanIcon(srv, b);
+  const letter = esc((b.type === "server" ? (srv.cfg.name || "?") : b.name.replace(/^[#&!+]+/, "")).charAt(0).toUpperCase() || "#");
+  const icoHtml = pic ? `<img src="${pic}" alt="">` : ico;
+  const drag = isFav || b.type === "channel" ? ` draggable="true"` : "";
+  const tip = b.type === "server" ? "Server status" : fav ? `${b.name} · ${fav}` : b.name;
+  const where = fav ? `<span class="fav-srv">${esc(fav)}</span>` : "";
+  return `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${isFav ? ` data-fav="1"` : ""}${drag} title="${esc(tip)}"><span class="ico${pic ? " pic" : ""}" data-l="${letter}" style="--tile:${nickColor(b.name || srv.cfg.name || "")}">${icoHtml}</span><span class="nm">${label}${where}</span>${muted ? `<span class="mute-ico" title="${esc(t("Notifications muted"))}">${ICONS.bellOff}</span>` : ""}${badge}${x}</div>`;
+}
+
 function updateTitle() {
   const srv = activeServer(), b = activeBuffer();
   let total = 0;
@@ -464,9 +562,10 @@ function clearDropMarks() {
   document.querySelectorAll(".drop-before,.drop-after").forEach((el) => el.classList.remove("drop-before", "drop-after"));
 }
 $("tree").addEventListener("dragstart", (e) => {
-  const head = e.target.closest?.(".srv-head");
+  const head = e.target.closest?.(".srv-head[data-head]");
   const row = e.target.closest?.(".buf[draggable]");
   if (head) drag = { kind: "server", id: head.dataset.head, el: head.closest(".srv") };
+  else if (row?.dataset.fav) drag = { kind: "fav", srv: row.dataset.s, key: row.dataset.k, el: row };
   else if (row) drag = { kind: "channel", srv: row.dataset.s, key: row.dataset.k, el: row };
   else return;
   e.dataTransfer.effectAllowed = "move";
@@ -476,10 +575,14 @@ $("tree").addEventListener("dragstart", (e) => {
 function dropTarget(e) {
   if (!drag) return null;
   if (drag.kind === "server") {
-    const srvEl = e.target.closest(".srv");
+    const srvEl = e.target.closest(".srv:not(.fav-sec)");
     return srvEl && srvEl !== drag.el ? srvEl : null;
   }
-  const row = e.target.closest(".buf[draggable]");
+  if (drag.kind === "fav") {
+    const row = e.target.closest(".buf[data-fav]");
+    return row && row !== drag.el ? row : null;
+  }
+  const row = e.target.closest(".buf[draggable]:not([data-fav])");
   return row && row !== drag.el && row.dataset.s === drag.srv ? row : null;
 }
 $("tree").addEventListener("dragover", (e) => {
@@ -495,7 +598,14 @@ $("tree").addEventListener("drop", (e) => {
   if (!t) return;
   e.preventDefault();
   const after = t.classList.contains("drop-after");
-  if (drag.kind === "server") {
+  if (drag.kind === "fav") {
+    const list = favourites().map((f) => ({ server: f.srv.id, buffer: f.name }));
+    const at = (s, k) => list.findIndex((f) => f.server === s && f.buffer.toLowerCase() === k);
+    const moved = list.splice(at(drag.srv, drag.key), 1)[0];
+    list.splice(at(t.dataset.s, t.dataset.k) + (after ? 1 : 0), 0, moved);
+    S.cfg.favourites = list;
+    Go.SetFavouriteOrder(list);
+  } else if (drag.kind === "server") {
     const from = S.servers.findIndex((s) => s.id === drag.id);
     const moved = S.servers.splice(from, 1)[0];
     let to = S.servers.findIndex((s) => s.id === t.dataset.srv) + (after ? 1 : 0);
@@ -518,6 +628,12 @@ $("tree").addEventListener("dragend", () => {
 });
 
 $("tree").addEventListener("click", (e) => {
+  if (e.target.closest("[data-favhead]")) {
+    S.ui.favCollapsed = !S.ui.favCollapsed;
+    saveUi();
+    renderTree();
+    return;
+  }
   const head = e.target.closest("[data-head]");
   if (head) {
     const srv = S.byId[head.dataset.head];
@@ -536,9 +652,13 @@ $("tree").addEventListener("click", (e) => {
     return;
   }
   select(row.dataset.s, row.dataset.k);
+  const b = srv.buffers.get(row.dataset.k);
+  if (row.dataset.fav && b?.type === "channel" && !b.joined && srv.status === "connected") Go.SendInput(srv.id, b.name, "/join " + b.name);
 });
 
 function closeBuffer(srv, b) {
+  // a closed private chat leaves Favourites too (a channel stays there, greyed, to rejoin)
+  if (b.type !== "channel" && isFavourite(srv, b)) Go.SetFavourite(srv.id, b.name, false);
   Go.CloseBuffer(srv.id, b.name);
   closeBufferLocal(srv, b.key);
 }
@@ -547,12 +667,14 @@ $("tree").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const head = e.target.closest("[data-head]");
   const row = e.target.closest(".buf");
+  if (e.target.closest("[data-favhead]")) return;
   if (head) return serverMenu(S.byId[head.dataset.head], e);
   if (row) {
     const srv = S.byId[row.dataset.s];
     const b = srv.buffers.get(row.dataset.k);
     if (b.type === "server") return serverMenu(srv, e);
     const items = [];
+    items.push([isFavourite(srv, b) ? "Remove from Favourites" : "Add to Favourites", () => toggleFavourite(srv, b)]);
     if (b.type === "channel") {
       items.push(b.joined ? ["Leave channel", () => Go.SendInput(srv.id, b.name, "/part " + b.name)] : ["Rejoin", () => Go.SendInput(srv.id, b.name, "/join " + b.name)]);
     } else {
@@ -573,6 +695,7 @@ $("tree").addEventListener("contextmenu", (e) => {
       S.cfg.startView = isStart ? {} : { server: srv.id, buffer: b.name };
       toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
     }, "", isStart]);
+    items.push(["Notifications", notifyMenu(srv, b)]);
     items.push(["Show in split view", () => showInSplit(srv, b)]);
     items.push([chanIcon(srv, b) ? "Change icon…" : "Set icon…", () => pickChannelIcon(srv, b)]);
     if (chanIcon(srv, b)) items.push(["Remove icon", () => Go.SetChannelIcon(srv.id, b.name, "")]);
@@ -724,8 +847,111 @@ function ctxFor(srv) {
 const EV_SYMBOL = { join: "→", part: "←", quit: "←", kick: "✕", nick: "•", mode: "•", topic: "•" };
 
 const lineOf = new WeakMap(); // rendered .line element -> its line object
+const lineCtx = new WeakMap(); // rendered .line element -> { srv, b }
+
+// ---------- replies & reactions (IRCv3 +draft/reply, +draft/react) ----------
+function findByMsgid(b, id) {
+  if (!id) return null;
+  for (let i = b.lines.length - 1; i >= 0; i--) if (b.lines[i].extra?.msgid === id) return b.lines[i];
+  return null;
+}
+// a message you can reply or react to: someone's (or your) chat line with a server msgid
+function canAnswer(srv, b, line) {
+  return !!line.extra?.msgid && line.type === "msg" && !line.redacted && !line.extra?.dcc && b.type !== "server" &&
+    ["privmsg", "action", "notice"].includes(line.kind) && srv?.status === "connected";
+}
+function applyReact(b, ev) {
+  const line = findByMsgid(b, ev.extra?.msgid);
+  if (!line || !ev.text) return null;
+  const list = (line.reacts ||= []);
+  const who = ev.nick || "", lw = who.toLowerCase();
+  let r = list.find((x) => x.e === ev.text);
+  if (ev.extra?.remove) {
+    if (!r) return line;
+    r.nicks = r.nicks.filter((n) => n.toLowerCase() !== lw);
+    if (!r.nicks.length) list.splice(list.indexOf(r), 1);
+  } else {
+    if (!r) list.push((r = { e: ev.text, nicks: [] }));
+    if (!r.nicks.some((n) => n.toLowerCase() === lw)) r.nicks.push(who);
+  }
+  return line;
+}
+function reactsEl(srv, line) {
+  const me = (srv.nick || "").toLowerCase();
+  const span = document.createElement("span");
+  span.className = "reacts";
+  span.innerHTML = line.reacts.map((r, i) => {
+    const mine = r.nicks.some((n) => n.toLowerCase() === me);
+    return `<button class="rx${mine ? " mine" : ""}" data-rx="${i}" title="${esc(r.nicks.join(", "))}"><span class="rx-e">${esc(r.e)}</span><span class="rx-n">${r.nicks.length}</span></button>`;
+  }).join("") + (canAnswerSrv(srv) ? `<button class="rx add" data-rx="+" title="${esc(t("Add reaction"))}">${ICONS.smile}</button>` : "");
+  return span;
+}
+function canAnswerSrv(srv) { return srv?.status === "connected"; }
+function replyQuote(b, id) {
+  const q = findByMsgid(b, id);
+  const body = q
+    ? `<b style="color:${nickColor(q.nick)}">${esc(q.nick)}</b> <span class="rq-t">${q.redacted ? esc(t("message deleted")) : esc(stripCodes(q.text).slice(0, 160))}</span>`
+    : `<i>${esc(t("Reply to an earlier message"))}</i>`;
+  return `<span class="rq" data-jump="${esc(id)}"><span class="rq-ar">${ICONS.replyTo}</span>${body}</span>`;
+}
+// redraws one line in place (reactions changed) without moving the scroll position
+function refreshLine(srv, b, line) {
+  for (const el of document.querySelectorAll(`.line[data-msgid="${CSS.escape(line.extra.msgid)}"]`)) {
+    if (lineOf.get(el) !== line) continue;
+    const ctx = lineCtx.get(el);
+    el.replaceWith(lineEl(ctx.srv, ctx.b, line));
+  }
+  if (stick && isActive(srv, b)) scrollBottom();
+}
+function react(srv, b, line, emoji, remove) {
+  Go.React(srv.id, b.name, line.extra.msgid, emoji, !!remove).then((err) => { if (err) toast(err, "error"); });
+}
+function pickReaction(srv, b, line, anchor) {
+  toggleEmojiPicker(anchor, null, (emoji) => {
+    const me = (srv.nick || "").toLowerCase();
+    const has = line.reacts?.find((r) => r.e === emoji)?.nicks.some((n) => n.toLowerCase() === me);
+    if (!has) react(srv, b, line, emoji, false);
+  });
+}
+function startReply(srv, b, line) {
+  if (!isActive(srv, b)) select(srv.id, b.key);
+  S.reply = { server: srv.id, key: b.key, msgid: line.extra.msgid, nick: line.nick || "", text: line.text || "" };
+  renderReplyBar();
+  $("input").focus();
+}
+function cancelReply() {
+  if (!S.reply) return false;
+  S.reply = null;
+  renderReplyBar();
+  return true;
+}
+function renderReplyBar() {
+  let bar = $("replyBar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "replyBar";
+    bar.className = "hidden";
+    $("composer").insertBefore(bar, $("composer").querySelector(".input-box"));
+    bar.addEventListener("click", (e) => { if (e.target.closest("[data-x]")) { cancelReply(); $("input").focus(); } });
+  }
+  const r = S.reply;
+  const show = !!r && r.server === S.active.server && r.key === S.active.key;
+  bar.classList.toggle("hidden", !show);
+  if (!show) return;
+  bar.innerHTML = `<span class="rb-ico">${ICONS.reply}</span><span class="rb-l">Replying to <b class="no-i18n" style="color:${nickColor(r.nick)}">${esc(r.nick)}</b></span><span class="rb-t no-i18n">${esc(stripCodes(r.text).slice(0, 160))}</span><button class="icon-btn" data-x="1" title="Cancel reply (Esc)">✕</button>`;
+}
+function jumpToMsg(fromEl, id) {
+  const box = fromEl.closest("#chat") || fromEl.closest(".pane-view") || document;
+  const target = box.querySelector(`.line[data-msgid="${CSS.escape(id)}"]`);
+  if (!target) { toast(t("That message is no longer loaded"), ""); return; }
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  target.classList.remove("flash");
+  void target.offsetWidth;
+  target.classList.add("flash");
+}
 
 function lineEl(srv, b, line) {
+  if (line.type === "dcc") return dccLineEl(srv, b, line);
   const el = document.createElement("div");
   const isEv = line.type === "event";
   el.className = "line " + [line.kind, isEv ? "ev" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : ""].join(" ");
@@ -758,19 +984,36 @@ function lineEl(srv, b, line) {
   if (line.redacted) msg = `<span class="redacted">message deleted${line.redactReason ? " · " + esc(line.redactReason) : ""}</span>`;
   const acct = line.extra?.account;
   const title = line.nick ? (acct ? `${line.nick} · logged in as ${acct}` : line.nick) : "";
-  el.innerHTML = `<span class="ts">${fmtTime(line.t)}</span><span class="who"${whoStyle} data-nick="${esc(line.nick || "")}" title="${esc(title)}">${who}</span><span class="msg">${msg}</span>`;
+  const quote = line.type === "msg" && line.extra?.reply ? replyQuote(b, line.extra.reply) : "";
+  el.innerHTML = `<span class="ts">${fmtTime(line.t)}</span><span class="who"${whoStyle} data-nick="${esc(line.nick || "")}" title="${esc(title)}">${who}</span><span class="msg">${quote}${msg}</span>`;
   lineOf.set(el, line);
+  lineCtx.set(el, { srv, b });
+  const mid = line.extra?.msgid;
+  if (mid) el.dataset.msgid = mid;
   if (line.type === "msg" && !line.redacted) addMedia(el, line.text);
+  if (line.reacts?.length) {
+    el.appendChild(document.createElement("span"));
+    el.appendChild(document.createElement("span"));
+    el.appendChild(reactsEl(srv, line));
+  }
+  if (canAnswer(srv, b, line)) {
+    const act = document.createElement("span");
+    act.className = "lact";
+    act.innerHTML = `<button data-act="react" title="${esc(t("Add reaction"))}">${ICONS.smile}</button><button data-act="reply" title="${esc(t("Reply"))}">${ICONS.reply}</button>`;
+    el.appendChild(act);
+  }
   return el;
 }
 
 function addMedia(el, text) {
   const set = S.cfg.settings;
-  if (!set.inlineImages && !set.inlineYouTube && !set.inlineVideos) return;
+  const plain = []; // links that aren't pictures or videos: these get a preview card
   const seen = new Set();
   for (const url of findUrls(text)) {
     const m = mediaFor(url);
-    if (!m || seen.has(m.src || m.id)) continue;
+    if (!m) { if (/^https?:\/\//i.test(url) && !plain.includes(url)) plain.push(url); continue; }
+    if (!set.inlineImages && !set.inlineYouTube && !set.inlineVideos) continue;
+    if (seen.has(m.src || m.id)) continue;
     seen.add(m.src || m.id);
     if (seen.size > 3) break;
     const wrap = document.createElement("div");
@@ -827,6 +1070,142 @@ function addMedia(el, text) {
     el.appendChild(document.createElement("span"));
     el.appendChild(document.createElement("span"));
     el.appendChild(wrap);
+  }
+  if (set.linkPreviews !== false && plain.length) addLinkPreviews(el, plain.slice(0, 2));
+}
+
+// ---------- DCC (direct file transfers and chats) ----------
+S.dcc = {}; // id -> transfer
+const dccSpeed = {}; // id -> { done, at, bps }
+function dccBufferFor(srv, t) {
+  return t.kind === "chat" && t.state === "active" ? null : ensureBuffer(srv, t.nick);
+}
+function onDCC(tr) {
+  const srv = S.byId[tr.server];
+  if (!srv) return;
+  const prev = S.dcc[tr.id];
+  const sp = (dccSpeed[tr.id] ||= { done: 0, at: Date.now(), bps: 0 });
+  if (tr.state === "active" && tr.done > sp.done) {
+    const dt = (Date.now() - sp.at) / 1000;
+    if (dt > 0.2) { sp.bps = sp.bps ? sp.bps * 0.6 + ((tr.done - sp.done) / dt) * 0.4 : (tr.done - sp.done) / dt; sp.done = tr.done; sp.at = Date.now(); }
+  }
+  S.dcc[tr.id] = tr;
+  if (!prev) {
+    const b = ensureBuffer(srv, tr.nick);
+    addLine(srv, b, { t: tr.time || Date.now(), kind: "dcc", type: "dcc", nick: tr.nick, text: "", dcc: tr.id });
+    if (tr.dir === "in" && tr.state === "offer") {
+      if (!isActive(srv, b)) { b.hl++; scheduleTree(); }
+      toast(tr.kind === "chat" ? t("{0} wants to start a direct chat", tr.nick) : t("{0} wants to send you {1}", tr.nick, tr.file), "");
+    }
+    return;
+  }
+  for (const el of document.querySelectorAll(`.line[data-dcc="${CSS.escape(tr.id)}"]`)) {
+    const ctx = lineCtx.get(el), line = lineOf.get(el);
+    if (ctx && line) el.replaceWith(dccLineEl(ctx.srv, ctx.b, line));
+  }
+}
+function fmtBytes(n) {
+  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(1) + " GB";
+  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + " MB";
+  if (n >= 1 << 10) return Math.round(n / (1 << 10)) + " KB";
+  return n + " B";
+}
+// translated template with HTML pieces dropped into its {0}, {1}…
+function tHtml(tpl, ...parts) { return esc(t(tpl)).replace(/\{(\d)\}/g, (_, i) => parts[+i] ?? ""); }
+function dccLineEl(srv, b, line) {
+  const tr = S.dcc[line.dcc] || { state: "failed", error: "gone", nick: line.nick, kind: "send" };
+  const el = document.createElement("div");
+  el.className = "line dccl";
+  el.dataset.dcc = line.dcc;
+  lineOf.set(el, line);
+  lineCtx.set(el, { srv, b });
+  const nick = `<b class="no-i18n" style="color:${nickColor(tr.nick)}">${esc(tr.nick)}</b>`;
+  const file = `<b class="no-i18n">${esc(tr.file || "")}</b>`;
+  const size = `<span class="no-i18n">${fmtBytes(tr.size || 0)}</span>`;
+  const btn = (act, label, cls = "") => `<button class="btn sm ${cls}" data-dcc-act="${act}">${label}</button>`;
+  let title = "", sub = "", acts = "", bar = "";
+  const send = tr.kind === "send";
+  switch (tr.state) {
+    case "offer":
+      title = send ? tHtml("{0} wants to send you {1} ({2})", nick, file, size) : tHtml("{0} wants to start a direct chat", nick);
+      sub = `<span class="dcc-sub">${tHtml("From {0}. Only accept from people you trust.", esc(tr.addr || ""))}</span>`;
+      if (tr.risky) sub += `<span class="dcc-warn">${tHtml("This kind of file can run programs on your computer.")}</span>`;
+      acts = btn("accept", "Accept", "primary") + btn("decline", "Decline");
+      break;
+    case "waiting":
+      title = tr.dir === "out" ? (send ? tHtml("Offering {0} ({1}) to {2}…", file, size, nick) : tHtml("Waiting for {0} to accept a direct chat…", nick)) : tHtml("Connecting…");
+      if (tr.dir === "out") sub = `<span class="dcc-sub">${tHtml("If they can't connect, you may need to forward a port on your router (Settings → Media → DCC).")}</span>`;
+      acts = btn("cancel", "Cancel");
+      break;
+    case "active": {
+      if (!send) { title = tHtml("Direct chat with {0} is open", nick); acts = btn("open", "Open chat", "primary") + btn("cancel", "End chat"); break; }
+      const pct = tr.size ? Math.min(100, (tr.done / tr.size) * 100) : 0;
+      const sp = dccSpeed[tr.id]?.bps || 0;
+      title = tr.dir === "in" ? tHtml("Receiving {0} from {1}", file, nick) : tHtml("Sending {0} to {1}", file, nick);
+      sub = `<span class="dcc-sub no-i18n">${fmtBytes(tr.done || 0)} / ${fmtBytes(tr.size || 0)}${sp ? " · " + fmtBytes(Math.round(sp)) + "/s" : ""}</span>`;
+      bar = `<span class="dcc-bar"><i style="width:${pct.toFixed(1)}%"></i></span>`;
+      acts = btn("cancel", "Cancel");
+      break;
+    }
+    case "done":
+      if (!send) title = tHtml("Direct chat with {0} ended", nick);
+      else if (tr.dir === "in") { title = tHtml("Received {0} ({1}) from {2}", file, size, nick); acts = btn("show", "Show in folder"); }
+      else title = tHtml("Sent {0} ({1}) to {2}", file, size, nick);
+      break;
+    case "declined": title = send ? tHtml("You declined {0}", file) : tHtml("You declined the direct chat"); break;
+    case "cancelled": title = send ? tHtml("Transfer of {0} cancelled", file) : tHtml("Direct chat cancelled"); break;
+    default:
+      title = send ? tHtml("Transfer of {0} failed", file) : tHtml("Direct chat failed");
+      sub = `<span class="dcc-sub">${esc(tr.error || "")}</span>`;
+  }
+  el.innerHTML = `<span class="ts">${fmtTime(line.t)}</span><span class="who">DCC</span><span class="dcc-card dcc-${tr.state}"><span class="dcc-ico">${send ? "📄" : "💬"}</span><span class="dcc-main no-i18n"><span class="dcc-title">${title}</span>${sub}${bar}</span><span class="dcc-acts">${acts}</span></span>`;
+  el.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-dcc-act]")?.dataset.dccAct;
+    if (!a) return;
+    if (a === "accept") Go.DCCAccept(tr.id).then((err) => err && toast(err, "error"));
+    else if (a === "decline" || a === "cancel") Go.DCCDecline(tr.id);
+    else if (a === "show") Go.ShowDCCFile(tr.id);
+    else if (a === "open") select(srv.id, ensureBuffer(srv, "=" + tr.nick).key);
+  });
+  return el;
+}
+async function dccPickAndSend(srv, nick) {
+  const path = await Go.PickFile(t("Send a file to {0}", nick));
+  if (!path) return;
+  const err = await Go.DCCSend(srv.id, nick, path);
+  if (err) toast(err, "error");
+}
+
+// ---------- link previews ----------
+const previews = new Map(); // url -> Promise<preview>
+function getPreview(url) {
+  let p = previews.get(url);
+  if (!p) {
+    p = Go.GetLinkPreview(url).catch(() => null);
+    previews.set(url, p);
+    if (previews.size > 400) previews.delete(previews.keys().next().value);
+  }
+  return p;
+}
+function addLinkPreviews(el, urls) {
+  for (const url of urls) {
+    const gap1 = document.createElement("span"), gap2 = document.createElement("span");
+    const wrap = document.createElement("div");
+    wrap.className = "media lp-wrap";
+    el.append(gap1, gap2, wrap);
+    getPreview(url).then((p) => {
+      if (!p || p.error || !p.title) { gap1.remove(); gap2.remove(); wrap.remove(); return; }
+      const keep = stick;
+      wrap.innerHTML = `<a class="lp${p.image ? " has-img" : ""}" href="${esc(url)}" data-url="${esc(url)}" title="${esc(url)}">
+        <span class="lp-txt">${p.site ? `<span class="lp-site">${esc(p.site)}</span>` : ""}<span class="lp-title">${esc(p.title)}</span>${p.description ? `<span class="lp-desc">${esc(p.description)}</span>` : ""}</span>
+        ${p.image ? `<img class="lp-img" src="${esc(p.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}</a>`;
+      const img = wrap.querySelector(".lp-img");
+      if (img) {
+        img.onerror = () => { img.remove(); wrap.querySelector(".lp")?.classList.remove("has-img"); };
+        img.onload = () => { if (keep && stick) scrollBottom(); };
+      }
+      if (keep && stick) scrollBottom();
+    });
   }
 }
 
@@ -1172,7 +1551,12 @@ $("chat").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const srv = activeServer(), b = activeBuffer();
   if (!srv || !b) return;
-  const items = [["Copy text", () => navigator.clipboard.writeText(line.text)]];
+  const items = [];
+  if (canAnswer(srv, b, line)) {
+    items.push(["Reply", () => startReply(srv, b, line)]);
+    items.push(["Add reaction…", () => pickReaction(srv, b, line, lineElm.querySelector(".lact") || lineElm)]);
+  }
+  items.push(["Copy text", () => navigator.clipboard.writeText(line.text)]);
   if (line.self && line.extra?.msgid) items.push(["Delete message", async () => {
     const err = await Go.Redact(srv.id, b.name, line.extra.msgid);
     if (err) toast(err, "error");
@@ -1183,6 +1567,19 @@ $("chat").addEventListener("contextmenu", (e) => {
     .then((all) => showMenu(x, y, all));
 });
 document.addEventListener("click", (e) => {
+  const lineElm = e.target.closest(".line");
+  const hit = lineElm && e.target.closest(".rq[data-jump], .lact [data-act], .rx[data-rx]");
+  if (hit) {
+    e.preventDefault();
+    const line = lineOf.get(lineElm), ctx = lineCtx.get(lineElm);
+    if (!line || !ctx) return;
+    if (hit.matches(".rq")) return jumpToMsg(lineElm, hit.dataset.jump);
+    if (hit.dataset.act === "reply") return startReply(ctx.srv, ctx.b, line);
+    if (hit.dataset.act === "react" || hit.dataset.rx === "+") return pickReaction(ctx.srv, ctx.b, line, hit);
+    const r = line.reacts?.[+hit.dataset.rx];
+    if (r) react(ctx.srv, ctx.b, line, r.e, hit.classList.contains("mine"));
+    return;
+  }
   const a = e.target.closest("a[href]");
   if (a && !e.defaultPrevented) { e.preventDefault(); Go.OpenURL(a.dataset.url || a.href); }
 });
@@ -1279,6 +1676,10 @@ function userMenu(nick, e) {
     ["Whois", () => send("/whois " + nick)],
     ["Mention", () => insertMention(nick)],
   ];
+  if (!android && srv.status === "connected" && nick.toLowerCase() !== (srv.nick || "").toLowerCase()) {
+    items.push(["Send file…", () => dccPickAndSend(srv, nick)]);
+    items.push(["Direct chat (DCC)", () => Go.DCCChat(srv.id, nick).then((err) => err && toast(err, "error"))]);
+  }
   if (b?.type === "channel") {
     const u = b.users.find((x) => x.nick === nick);
     const p = u?.prefix || "";
@@ -1568,6 +1969,7 @@ input.addEventListener("keydown", (e) => {
     if (sc) replaceRange(sw.start, sw.start + sw.word.length, sc.text);
   }
   if (e.key === "Tab") { e.preventDefault(); tabComplete(); return; }
+  if (e.key === "Escape" && cancelReply()) { e.preventDefault(); return; }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); return; }
   if (e.key === "ArrowUp" && !input.value.slice(0, input.selectionStart).includes("\n") && S.inputHistory.length) {
     e.preventDefault();
@@ -1767,6 +2169,12 @@ function finishSend(srv, b, original, text) {
   typingSent = { key: "", at: 0, state: "" }; // the message itself ends "typing" for others
   document.getElementById("completeBox")?.remove();
   if (clientCommand(srv, b, text.trim())) return;
+  const r = S.reply;
+  if (r && r.server === srv.id && r.key === b.key && b.type !== "server") {
+    cancelReply();
+    Go.SendReply(srv.id, b.name, r.msgid, text);
+    return;
+  }
   Go.SendInput(srv.id, b.type === "server" ? "" : b.name, text);
 }
 
@@ -1985,6 +2393,9 @@ export function applySettings() {
   root.setProperty("--ts-col", probe.offsetWidth + 2 + "px");
   probe.remove();
   if (typeof positionNickHandle === "function") requestAnimationFrame(positionNickHandle);
+  const box = $("input");
+  box.spellcheck = set.spellCheck !== false;
+  box.lang = document.documentElement.lang || "en";
   afterTheme();
 }
 
@@ -2091,6 +2502,8 @@ async function boot() {
   });
   Go.PluginCommands().then((list) => { pluginCommands = list || []; });
   on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
+  on("dcc", onDCC);
+  on("dccPick", (x) => { const srv = S.byId[x.server]; if (srv) dccPickAndSend(srv, x.nick); });
   on("icons", (icons) => { S.icons = icons || {}; renderTree(); renderHeader(); renderMe(); });
   on("focusBuffer", ({ server, buffer }) => {
     const srv = S.byId[server];

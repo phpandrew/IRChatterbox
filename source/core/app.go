@@ -64,6 +64,7 @@ func NewApp() *App {
 	}
 	a.plugins = NewPlugins(a)
 	a.loadQueries()
+	a.pruneNotifyRules()
 	return a
 }
 
@@ -117,7 +118,7 @@ func (a *App) emit(c *Conn, ev Event) {
 	} else {
 		a.emitUI("irc", ev)
 	}
-	if (ev.Type == "msg" || ev.Type == "event" || ev.Type == "redact") && ev.Buffer != "" && ev.Buffer != "*active*" {
+	if (ev.Type == "msg" || ev.Type == "event" || ev.Type == "redact" || ev.Type == "react") && ev.Buffer != "" && ev.Buffer != "*active*" {
 		a.logEvent(c.cfg.Name, ev)
 	}
 }
@@ -499,6 +500,13 @@ func (a *App) SaveServer(s ServerConfig) ServerConfig {
 func (a *App) DeleteServer(id string) {
 	a.Disconnect(id)
 	a.store.Update(func(c *Config) {
+		favs := c.Favourites[:0]
+		for _, f := range c.Favourites {
+			if f.Server != id {
+				favs = append(favs, f)
+			}
+		}
+		c.Favourites = favs
 		for i := range c.Servers {
 			if c.Servers[i].ID == id {
 				c.Servers = append(c.Servers[:i], c.Servers[i+1:]...)
@@ -653,7 +661,7 @@ func (a *App) SetActive(server, buffer string) {
 // MarkRead is called by the UI when you've seen a buffer up to ms. Through a bouncer that
 // supports read markers, your other devices then show it as read too.
 func (a *App) MarkRead(server, buffer string, ms int64) {
-	if c := a.conn(server); c != nil && c.cfg.Bouncer != "" {
+	if c := a.conn(server); c != nil { // servers and bouncers with draft/read-marker
 		c.markRead(buffer, ms)
 	}
 }

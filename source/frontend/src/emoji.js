@@ -107,7 +107,15 @@ function position(anchor) {
   const r = anchor.getBoundingClientRect();
   const w = 352;
   box.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
-  box.style.bottom = innerHeight - r.top + 8 + "px";
+  // above the button, or below it when there isn't room (reacting to a message near the top)
+  const h = box.offsetHeight || 420;
+  if (r.top - 8 < h && innerHeight - r.bottom > r.top) {
+    box.style.bottom = "auto";
+    box.style.top = Math.min(r.bottom + 8, innerHeight - h - 8) + "px";
+  } else {
+    box.style.top = "auto";
+    box.style.bottom = innerHeight - r.top + 8 + "px";
+  }
 }
 
 function pick(e, keepOpen) {

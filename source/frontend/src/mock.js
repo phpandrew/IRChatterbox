@@ -64,7 +64,30 @@ export const api = {
   UploadImage: () => new Promise((r) => setTimeout(() => r({ url: "https://i.irchatterbox.com/k3x9Qa2mZp.webp", expires: "2026-10-24T18:00:00Z", host: "irchatterbox" }), 800)),
   SaveTheme: () => null,
   SaveShortcuts: (l) => { cfg.shortcuts = l; },
-  SendInput: (s, b, t) => { if (!t.startsWith("/")) emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now() }); },
+  SendInput: (s, b, t) => { if (!t.startsWith("/")) emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now(), extra: { msgid: "m" + Math.random().toString(36).slice(2) } }); },
+  SendReply: (s, b, id, t) => emit("irc", { type: "msg", server: s, buffer: b, kind: "privmsg", nick: "Andrew", prefix: "@", text: t, self: true, time: Date.now(), extra: { msgid: "m" + Math.random().toString(36).slice(2), reply: id } }),
+  React: (s, b, id, e, remove) => { emit("irc", { type: "react", server: s, buffer: b, nick: "Andrew", text: e, self: true, time: Date.now(), extra: { msgid: id, remove } }); return ""; },
+  GetLinkPreview: (url) => new Promise((r) => setTimeout(() => r(url.includes("github.com")
+    ? { url, title: "phpandrew/IRChatterbox: A modern IRC client for Windows, macOS, Linux and Android", description: "Inline images, coloured nicks, plugins, mIRC scripts, bouncer history and 11 languages. Built with Go and Wails.", image: "https://picsum.photos/id/180/300/300", site: "GitHub" }
+    : { url, error: "no preview" }), 300)),
+  SetFavourite: (s, b, on) => {
+    cfg.favourites = (cfg.favourites || []).filter((f) => !(f.server === s && f.buffer.toLowerCase() === b.toLowerCase()));
+    if (on) cfg.favourites.push({ server: s, buffer: b });
+    setTimeout(() => emit("config", structuredClone(cfg)));
+  },
+  SetFavouriteOrder: (list) => { cfg.favourites = list; },
+  SetChannelNotify: (s, b, level, minutes) => {
+    cfg.channelNotify ||= {};
+    const k = s + "/" + b.toLowerCase();
+    if (!level) delete cfg.channelNotify[k]; else cfg.channelNotify[k] = { level, until: level === "mute" && minutes ? Date.now() + minutes * 60e3 : 0 };
+    setTimeout(() => emit("config", structuredClone(cfg)));
+  },
+  DCCAccept: (id) => { dccDemo(id); return ""; },
+  DCCDecline: (id) => { const t = mockDCC[id]; if (t) { t.state = t.state === "offer" ? "declined" : "cancelled"; emit("dcc", { ...t }); } },
+  DCCSend: (s, nick, path) => { const t = { id: "o" + Date.now(), server: s, nick, kind: "send", dir: "out", file: path.split(/[\\/]/).pop(), size: 2400000, state: "waiting", time: Date.now() }; mockDCC[t.id] = t; emit("dcc", { ...t }); return ""; },
+  DCCChat: () => "",
+  ShowDCCFile: () => {},
+  PickDCCFolder: () => "D:\\Downloads\\IRC",
   AutoConnect: () => {
     const base = Date.now() - 3600e3;
     const lines = [
@@ -87,6 +110,28 @@ export const api = {
     emit("irc", { type: "msg", server: "neo", buffer: "#lounge", kind: "privmsg", nick: "Caleo", text: "anyone around?", time: Date.now() });
     emit("irc", { type: "msg", server: "lib", buffer: "#linux", kind: "privmsg", nick: "flux", text: "andrew: did tshirtgang move to the new box?", highlight: true, time: Date.now() });
     emit("irc", { type: "info", server: "neo", buffer: "", kind: "motd", text: "- Welcome to the Neowin IRC network", time: Date.now() });
+    // replies, reactions and a link preview
+    const t0 = base + 15 * 60e3;
+    emit("irc", { type: "msg", server: "neo", buffer: "#neowin", kind: "privmsg", nick: "Caleo", prefix: "@", text: "anyone tried the new client build yet? https://github.com/phpandrew/IRChatterbox", time: t0, extra: { msgid: "q1" } });
+    emit("irc", { type: "msg", server: "neo", buffer: "#neowin", kind: "privmsg", nick: "Alan-", text: "yes, the reactions are slick", time: t0 + 60e3, extra: { msgid: "q2", reply: "q1" } });
+    for (const [n, e] of [["Alan-", "👍"], ["Kennyout", "👍"], ["Andrew", "👍"], ["zyme", "🔥"]]) emit("irc", { type: "react", server: "neo", buffer: "#neowin", nick: n, text: e, self: n === "Andrew", time: t0 + 70e3, extra: { msgid: "q1" } });
+    emit("irc", { type: "react", server: "neo", buffer: "#neowin", nick: "Caleo", text: "😂", time: t0 + 80e3, extra: { msgid: "q2" } });
+    if (new URLSearchParams(location.search).has("dcc")) {
+      const t = { id: "d1", server: "neo", nick: "Kennyout", kind: "send", dir: "in", file: "holiday photos.zip", size: 48234000, addr: "203.0.113.7:5001", state: "offer", time: Date.now() };
+      mockDCC.d1 = t;
+      setTimeout(() => emit("dcc", { ...t }), 50);
+    }
   },
 };
+const mockDCC = {};
+function dccDemo(id) {
+  const t = mockDCC[id];
+  if (!t) return;
+  t.state = "active"; t.done = 0; emit("dcc", { ...t });
+  const step = setInterval(() => {
+    t.done = Math.min(t.size, t.done + t.size / 8);
+    if (t.done >= t.size) { t.state = "done"; clearInterval(step); }
+    emit("dcc", { ...t });
+  }, 250);
+}
 export function install() { window.__mockEmit = emit; }

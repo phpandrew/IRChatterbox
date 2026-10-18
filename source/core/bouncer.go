@@ -163,7 +163,7 @@ func (c *Conn) onReplayMessage(m *Message, nick string, isMe bool, ts int64) {
 	c.emit(Event{Type: "msg", Buffer: buffer, Kind: kind, Nick: nick, Prefix: c.prefixOf(target, nick), Text: text, Time: ts, Self: isMe, Highlight: highlight, Extra: extra})
 	c.noteSeen(buffer, ts, isMe, text)
 
-	if !isMe && (highlight || (isPM && kind != "notice")) {
+	if !isMe && (highlight || (isPM && kind != "notice")) && c.app.notifyLevel(c.cfg.ID, buffer, isPM) != "mute" {
 		c.mu.Lock()
 		// only count what arrived after you last looked: after the read marker, and after this
 		// app was last connected (the first ever connection just fills in history quietly)
