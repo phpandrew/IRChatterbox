@@ -26,6 +26,7 @@ A modern IRC client for Windows and Android. The backend is Go; on Windows the U
 - **Older networks**: per-server text encoding (Cyrillic, Japanese, Western and more)
 - **Safe by design**: IRC text never runs as HTML, paste protection, every release security-scanned
 - **Plugins**: built-in temperature bot, `!music` now-playing, URL commands, JavaScript plugins and **mIRC scripts** (`.mrc`)
+- **11 languages**: English, French, Spanish, German, Portuguese, Italian, Russian, Polish, Turkish, Chinese and Japanese, following your system or picked in Settings ([help translate](../docs/TRANSLATING.md))
 
 ## Screenshots
 <p align="center">

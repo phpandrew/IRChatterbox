@@ -301,6 +301,46 @@ func (a *App) PickFile(title string) string {
 	return p
 }
 
+// SaveBackup asks where to save a settings backup and writes it. "" = saved or cancelled.
+func (a *App) SaveBackup(name, data string) string {
+	p, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{Title: "Save settings backup", DefaultFilename: name,
+		Filters: []wruntime.FileFilter{{DisplayName: "IRChatterbox backup (*.json)", Pattern: "*.json"}}})
+	if err != nil {
+		return err.Error()
+	}
+	if p == "" {
+		return ""
+	}
+	if err := writeBackupFile(p, data); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// OpenBackup asks for a settings backup and returns its text ("" when cancelled).
+func (a *App) OpenBackup() BackupOpen {
+	p, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "Import settings backup",
+		Filters: []wruntime.FileFilter{{DisplayName: "IRChatterbox backup (*.json)", Pattern: "*.json"}, {DisplayName: "All files", Pattern: "*.*"}}})
+	if err != nil {
+		return BackupOpen{Error: err.Error()}
+	}
+	if p == "" {
+		return BackupOpen{}
+	}
+	st, err := os.Stat(p)
+	if err != nil {
+		return BackupOpen{Error: err.Error()}
+	}
+	if st.Size() > backupMaxSize {
+		return BackupOpen{Error: "That file is too big to be an IRChatterbox backup."}
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return BackupOpen{Error: err.Error()}
+	}
+	return BackupOpen{Data: string(b)}
+}
+
 // PickSoundFile opens a file chooser for a custom notification sound.
 func (a *App) PickSoundFile() string {
 	p, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "Choose a notification sound",

@@ -187,6 +187,10 @@ func (a *App) OpenDataFolder()                {}
 func (a *App) OpenLogFolder()                 {}
 func (a *App) ApplyLocalUpdate() string       { return "" }
 
+// The Android shell saves and opens backup files itself (MainActivity, via bridge.js).
+func (a *App) SaveBackup(name, data string) string { return "Not available on Android" }
+func (a *App) OpenBackup() BackupOpen              { return BackupOpen{Error: "Not available on Android"} }
+
 // InstallUpdate opens the new APK's download; Android's installer takes it from there.
 func (a *App) InstallUpdate() string {
 	if storeName == "play" {

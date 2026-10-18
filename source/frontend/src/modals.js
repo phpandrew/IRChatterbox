@@ -1,4 +1,4 @@
-import { Go } from "./api.js";
+import { Go, on as onEvent } from "./api.js";
 import wordmarkLight from "./assets/wordmark-light.png";
 import wordmarkDark from "./assets/wordmark-dark.png";
 import githubIcon from "./assets/github.png";
@@ -10,6 +10,7 @@ import { os } from "./platform.js";
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
+import { LANGUAGES, setLanguage } from "./i18n.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
 const $ = (id) => document.getElementById(id);
@@ -41,6 +42,102 @@ onSystemThemeChange(() => {
   b.value = resolveTheme(S.cfg.settings).name;
   b.dispatchEvent(new Event("change"));
 });
+
+// ---------- settings backup ----------
+// On Android the shell shows its own save/open screens and answers with an androidBackup event.
+let backupWait = null;
+let backupListening = false;
+function androidBackup(start) {
+  if (!backupListening) {
+    backupListening = true;
+    onEvent("androidBackup", (d) => { const r = backupWait; backupWait = null; r?.(d || {}); });
+  }
+  return new Promise((resolve) => { backupWait?.({ canceled: true }); backupWait = resolve; start(); });
+}
+
+function openBackupExport() {
+  open(`<div class="modal-head">Export settings</div>
+    <div class="modal-body">
+      <p class="hint" style="margin:0 0 12px">Your servers, shortcuts, settings, nick colours, plugins and custom themes go into one .json file.</p>
+      ${check("bkPw", false, "Include passwords (server, SASL / NickServ and bouncer)")}
+      <div id="bkPwBox" class="hidden" style="margin-top:10px">
+        <div class="fgrid">
+          ${field("Passphrase", `<input type="password" id="bkPass" autocomplete="new-password" placeholder="at least 8 characters">`)}
+          ${field("Passphrase again", `<input type="password" id="bkPass2" autocomplete="new-password">`)}
+        </div>
+        <div class="hint">The passwords are encrypted with this passphrase. You'll need it to import them, and it can't be recovered.</div>
+      </div>
+      <div class="hint" style="margin-top:10px">Without passwords you type them again after importing. Bot URL commands are saved as they are, so check them for API keys before sharing the file.</div>
+      <div id="bkErr" class="t-status bad" style="margin-top:8px"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="bkCancel">Cancel</button><button class="btn primary" id="bkOk">Export</button></div>`, "sm", true);
+  $("bkPw").onchange = () => { $("bkPwBox").classList.toggle("hidden", !on("bkPw")); if (on("bkPw")) $("bkPass").focus(); };
+  $("bkCancel").onclick = closeOverlay;
+  $("bkOk").onclick = async () => {
+    const err = (m) => { $("bkErr").textContent = m; };
+    const withPw = on("bkPw");
+    const pass = $("bkPass").value;
+    if (withPw && pass !== $("bkPass2").value) return err("The passphrases don't match.");
+    $("bkOk").disabled = true;
+    err("");
+    const res = await Go.ExportSettings(withPw, withPw ? pass : "");
+    $("bkOk").disabled = false;
+    if (!res || res.error) return err(res?.error || "Export failed.");
+    if (android) {
+      const d = await androidBackup(() => window.icbAndroid.saveBackup(res.name, res.data));
+      if (d.canceled) return;
+      if (d.error) return err(d.error);
+    } else {
+      const e = await Go.SaveBackup(res.name, res.data);
+      if (e) return err(e);
+    }
+    closeOverlay();
+    toast("Settings exported", "ok");
+  };
+}
+
+async function openBackupImport() {
+  let data = "";
+  if (android) {
+    const d = await androidBackup(() => window.icbAndroid.openBackup());
+    if (d.canceled) return;
+    if (d.error) return toast(d.error, "error");
+    data = d.data || "";
+  } else {
+    const f = await Go.OpenBackup();
+    if (f?.error) return toast(f.error, "error");
+    data = f?.data || "";
+  }
+  if (!data) return;
+  const info = await Go.InspectSettings(data);
+  if (!info || info.error) return toast(info?.error || "That isn't an IRChatterbox settings backup.", "error");
+  const when = info.exported ? new Date(info.exported).toLocaleString() : "";
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  open(`<div class="modal-head">Import settings</div>
+    <div class="modal-body">
+      <p style="margin:0 0 10px">Backup${info.version ? ` from IRChatterbox ${esc(info.version)}` : ""}${when ? `, made ${esc(when)}` : ""}:
+        ${n(info.servers, "server", "servers")}, ${n(info.shortcuts, "shortcut", "shortcuts")}, ${n(info.themes, "custom theme", "custom themes")}.</p>
+      <p class="hint" style="margin:0 0 10px">Servers in the backup replace the same servers here, and new ones are added. Shortcuts, settings and plugins are replaced; nick colours and themes are added to yours.</p>
+      ${info.hasPasswords ? field("Passphrase", `<input type="password" id="biPass" autocomplete="off">`, "This backup has encrypted passwords. Leave it empty to import without them.") :
+        `<p class="hint" style="margin:0">This backup has no passwords. Servers you already have keep theirs.</p>`}
+      <div id="biErr" class="t-status bad" style="margin-top:8px"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" id="biCancel">Cancel</button><button class="btn primary" id="biOk">Import</button></div>`, "sm", true);
+  $("biCancel").onclick = closeOverlay;
+  const go = async () => {
+    $("biOk").disabled = true;
+    $("biErr").textContent = "";
+    const e = await Go.ImportSettings(data, $("biPass")?.value || "");
+    $("biOk").disabled = false;
+    if (e) { $("biErr").textContent = e; $("biPass")?.focus(); return; }
+    closeOverlay();
+    toast("Settings imported", "ok");
+    setTimeout(() => location.reload(), 600);
+  };
+  $("biOk").onclick = go;
+  $("biPass")?.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  ($("biPass") || $("biOk")).focus();
+}
 
 // ---------- simple prompt ----------
 export function openPrompt(title, placeholder, value, onOk, okLabel = "OK") {
@@ -308,7 +405,7 @@ export function openSettings(startTab) {
     m.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
     draw();
   };
-  $("stX").onclick = $("stCancel").onclick = () => { applySettings(); closeOverlay(); };
+  $("stX").onclick = $("stCancel").onclick = () => { applySettings(); setLanguage(S.cfg.settings.language || ""); closeOverlay(); };
   $("stFolder").onclick = () => Go.OpenDataFolder();
   $("stSave").onclick = async () => {
     collect();
@@ -497,7 +594,9 @@ export function openSettings(startTab) {
   function drawAppearance(selectTheme) {
     const themes = allThemes();
     const opts = (sel) => themeOptions(sel);
-    body.innerHTML = card("Theme", "Pick a theme, or follow Windows light and dark mode automatically.", `
+    body.innerHTML = card("Language", "Language of the app's menus and settings. Messages in chats are never translated.", `
+      <div class="fgrid">${field("Language", `<select id="aLang"><option value="">Automatic (system language)</option>${LANGUAGES.map(([c, n]) => `<option value="${c}" ${set.language === c ? "selected" : ""}>${n}</option>`).join("")}</select>`)}</div>`) +
+      card("Theme", "Pick a theme, or follow Windows light and dark mode automatically.", `
       <div class="fgrid">
         ${field("Mode", `<select id="aMode">
           <option value="auto" ${set.theme === "auto" ? "selected" : ""}>Automatic — follow Windows light/dark</option>
@@ -598,6 +697,7 @@ export function openSettings(startTab) {
       b.closest(".chip").remove();
     };
     for (const id of ["aMode", "aLight", "aDark"]) $(id).onchange = () => { collect(); applyTheme(resolveTheme(set)); };
+    $("aLang").onchange = () => setLanguage($("aLang").value); // preview now; kept when you save
     drawVars();
   }
 
@@ -626,6 +726,12 @@ export function openSettings(startTab) {
           <span id="abStatus" class="muted" style="font-size:12.5px"></span>
         </div>
         <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`)}
+      ${card("Back up settings", "Move your setup to another computer or phone, or keep a copy.", `
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" id="abExport">Export settings…</button>
+          <button class="btn sm" id="abImport">Import settings…</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Saves your servers, shortcuts, settings, nick colours, plugins and custom themes to one file. Passwords are left out unless you choose to include them, and then they're encrypted with a passphrase. Save any changes in Settings first.</div>`)}
       ${card("Troubleshooting", "Something went wrong? The logs help track it down.", `
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn sm" id="abLogs">Open logs</button>
@@ -636,6 +742,8 @@ export function openSettings(startTab) {
     body.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => Go.OpenURL(b.dataset.open)));
     $("abVer").textContent = (await Go.GetVersion()) || "dev";
     $("abLogs").onclick = () => Go.OpenDiagnostics();
+    $("abExport").onclick = openBackupExport;
+    $("abImport").onclick = openBackupImport;
     $("abReport").onclick = () => Go.ReportProblem();
     if ($("abCheck")) $("abCheck").onclick = async () => {
       const st = $("abStatus");
@@ -652,7 +760,7 @@ export function openSettings(startTab) {
 
   function drawShortcuts() {
     body.innerHTML = card("Text shortcuts", "Type a shortcut and it's replaced with its text.", `
-      <p class="hint" style="margin:0 0 12px">Type a shortcut in any message and it's replaced with its text, e.g. <code>$whatever</code> → <code>¯\\_(ツ)_/¯</code>. It expands when you press space or send, and typing <code>$</code> shows the list. The text can also be a command like <code>/me waves</code>. You can also manage shortcuts with <code>/shortcut add $name text</code>.</p>
+      <p class="hint" style="margin:0 0 12px">Type a shortcut in any message and it's replaced with its text, e.g. <code>$shrug</code> → <code>¯\\_(ツ)_/¯</code>. It expands when you press space or send, and typing <code>$</code> shows the list. The text can also be a command like <code>/me waves</code>. You can also manage shortcuts with <code>/shortcut add $name text</code>.</p>
       <div class="sc-row muted" style="font-size:11.5px;font-weight:700"><span>SHORTCUT</span><span>REPLACED WITH</span><span></span></div>
       <div id="scList"></div>
       <button class="btn sm" id="scAdd">+ Add shortcut</button>`);
@@ -776,6 +884,7 @@ export function openSettings(startTab) {
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }
+    if (has("aLang")) set.language = $("aLang").value;
     if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; set.nickContrast = on("aContrast"); }
     if (has("hWords")) {
       set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore"); set.filterWords = lines("hFilter");

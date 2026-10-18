@@ -6,6 +6,7 @@ import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog } from "./modals.js";
 import { detectOS, os } from "./platform.js";
+import { setLanguage } from "./i18n.js";
 import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
 
 const $ = (id) => document.getElementById(id);
@@ -2028,6 +2029,7 @@ async function boot() {
       .concat(myAvatar() ? [["Remove avatar", () => Go.SetChannelIcon("_me", "avatar", "")]] : []));
   };
   S.cfg = await Go.GetConfig();
+  await setLanguage(S.cfg.settings.language || "");
   setCustomThemes(await Go.GetThemes());
   applySettings();
   // Follow Windows light/dark. Besides the change event, re-check when the window comes back

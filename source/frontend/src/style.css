@@ -334,8 +334,8 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 #completeBox .c { padding: 4px 10px; border-radius: 5px; font-size: 13px; display: flex; gap: 12px; }
 #completeBox .c.sel { background: var(--bg-active); }
 #completeBox .c .d { color: var(--text-faint); font-size: 12px; margin-left: auto; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-row { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; margin-bottom: 6px; align-items: center; }
-.sc-row input { background: var(--bg-input); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; outline: none; }
+.sc-row { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr) auto; gap: 8px; margin-bottom: 6px; align-items: center; }
+.sc-row input { min-width: 0; width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 7px; padding: 6px 9px; outline: none; }
 .sc-row input:focus { border-color: var(--accent); }
 .sc-row .trig { font-family: var(--mono); font-size: 12.5px; }
 
@@ -618,6 +618,11 @@ body.mobile .modal.sm { height: auto; max-height: 92dvh; border-radius: 16px 16p
 body.mobile .modal.settings { width: 100vw; height: 100dvh; max-height: 100dvh; }
 body.mobile .modal-head { padding: 14px 14px 8px; }
 body.mobile .modal-body, body.mobile .modal.settings .modal-body { padding: 10px 12px 14px; }
+/* nothing in Settings should push the page sideways: long words and code wrap, rows shrink */
+body.mobile .modal.settings .modal-body { overflow-x: hidden; }
+body.mobile .set-card, body.mobile .set-body { min-width: 0; }
+body.mobile .set-card .hint code { overflow-wrap: anywhere; }
+body.mobile .sc-row { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 6px; }
 body.mobile .modal-foot { padding: 10px 12px; flex-wrap: wrap; }
 body.mobile .modal-foot .btn { padding-top: 10px; padding-bottom: 10px; }
 body.mobile .tabs { padding: 0 8px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }

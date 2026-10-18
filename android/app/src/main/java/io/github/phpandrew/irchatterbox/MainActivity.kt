@@ -72,6 +72,74 @@ class MainActivity : ComponentActivity() {
     }
     private var pendingImages: List<SharedImages.Item> = emptyList()
 
+    // Settings backup (About → Back up settings): Android's "save as" and "open" screens.
+    // The result goes back to the page as an androidBackup event.
+    private var pendingBackup: String? = null
+    private val saveBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val data = pendingBackup
+        pendingBackup = null
+        if (uri == null || data == null) return@registerForActivityResult backupResult("saved", canceled = true)
+        Thread {
+            try {
+                contentResolver.openOutputStream(uri, "wt")!!.use { it.write(data.toByteArray()) }
+                main.post { backupResult("saved") }
+            } catch (e: Exception) {
+                Log.w(CoreHost.TAG, "couldn't save backup", e)
+                main.post { backupResult("saved", error = "Couldn't save the file.") }
+            }
+        }.start()
+    }
+    private val openBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult backupResult("opened", canceled = true)
+        Thread {
+            try {
+                val bytes = contentResolver.openInputStream(uri)!!.use { input ->
+                    // read at most MAX_BACKUP + 1 bytes (readNBytes needs Android 13)
+                    val out = java.io.ByteArrayOutputStream()
+                    val buf = ByteArray(16 * 1024)
+                    while (out.size() <= MAX_BACKUP) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray()
+                }
+                main.post {
+                    if (bytes.size > MAX_BACKUP) backupResult("opened", error = "That file is too big to be an IRChatterbox backup.")
+                    else backupResult("opened", data = String(bytes))
+                }
+            } catch (e: Exception) {
+                Log.w(CoreHost.TAG, "couldn't open backup", e)
+                main.post { backupResult("opened", error = "Couldn't read the file.") }
+            }
+        }.start()
+    }
+
+    fun saveBackupFile(name: String, data: String) {
+        pendingBackup = data
+        try {
+            saveBackup.launch(name)
+        } catch (e: Exception) {
+            pendingBackup = null
+            backupResult("saved", error = "No app to save files with.")
+        }
+    }
+
+    fun openBackupFile() {
+        try {
+            openBackup.launch(arrayOf("application/json", "text/plain", "application/octet-stream"))
+        } catch (e: Exception) {
+            backupResult("opened", error = "No app to open files with.")
+        }
+    }
+
+    private fun backupResult(kind: String, data: String? = null, error: String? = null, canceled: Boolean = false) {
+        val o = JSONObject().put("kind", kind).put("canceled", canceled)
+        if (data != null) o.put("data", data)
+        if (error != null) o.put("error", error)
+        queueEvent("androidBackup", o.toString())
+    }
+
     private fun answerFileChooser(uris: Array<Uri>?) {
         fileCallback?.onReceiveValue(uris)
         fileCallback = null
@@ -411,6 +479,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val HOST = "appassets.androidplatform.net"
+        private const val MAX_BACKUP = 4 shl 20
         const val EXTRA_DRAFT = "draft"
         @Volatile var current: MainActivity? = null
             private set

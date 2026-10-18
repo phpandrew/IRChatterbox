@@ -10,7 +10,7 @@ const cfg = {
   ],
   settings: { theme: "auto", lightTheme: "Light", darkTheme: "Dark", highlightWords: ["tshirtgang"], notifications: true, notifyPMs: true, inlineImages: true, inlineYouTube: true, inlineVideos: true, showJoinsParts: true, timeFormat: "24h", fontSize: 14, logging: true, historyLines: 200, quitMessage: "IRChatterbox", ignore: [] },
   nickColors: { caleo: "#f2b53c" },
-  shortcuts: [{ trigger: "$whatever", text: "¯\\_(ツ)_/¯" }, { trigger: "$shrug", text: "¯\\_(ツ)_/¯" }, { trigger: "$tableflip", text: "(╯°□°)╯︵ ┻━┻" }],
+  shortcuts: [{ trigger: "$shrug", text: "¯\\_(ツ)_/¯" }, { trigger: "$tableflip", text: "(╯°□°)╯︵ ┻━┻" }],
   plugins: { botPrefix: "[Bot] ", weatherEnabled: true, weatherFromMe: true, weatherFromOthers: true, weatherChannels: [], weatherCooldown: 5, urlCommands: [{ trigger: "!solar", url: "https://example.com/solar", template: "", maxLines: 3, cooldown: 30, enabled: true }], scriptsEnabled: true },
 };
 const users = ["~DaveLegg", "~Neobond", "@Andrew", "@Caleo", "%ammali", "%bemis|back", "%Enigma-Penguin|L", "%LogicalApex", "%The_Decryptor", "Alan-", "binaryzero", "brock_aholic", "Hackerpcs", "Kennyout", "kinghat", "Mike", "peachey|cloud", "Ryoken", "SierraSonic", "zyme"]
@@ -20,7 +20,7 @@ const mockIcons = {};
 export const api = {
   GetChannelIcons: () => ({ ...mockIcons }),
   SetChannelIcon: (server, buffer, url) => { if (url) mockIcons[server + "/" + buffer.toLowerCase()] = url; else delete mockIcons[server + "/" + buffer.toLowerCase()]; emit("icons", { ...mockIcons }); return ""; },
-  GetConfig: () => structuredClone(cfg),
+  GetConfig: () => { const c = structuredClone(cfg); c.settings.language = new URLSearchParams(location.search).get("lang") || ""; return c; },
   GetThemes: () => [],
   GetState: () => [
     { id: "lib", status: "connected", nick: "Andrew", network: "Libera.Chat", channels: [{ name: "#linux", topic: "Linux support · Be nice", users: users.slice(5, 12) }] },

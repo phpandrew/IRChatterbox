@@ -86,5 +86,8 @@
     requestNotifications() { send({ t: "notifications" }); },
     openNotificationSettings() { send({ t: "notificationSettings" }); },
     vibrate(ms) { send({ t: "vibrate", ms: ms | 0 }); },
+    // settings backup: the answer arrives as an "androidBackup" event
+    saveBackup(name, data) { send({ t: "saveBackup", name: String(name), data: String(data) }); },
+    openBackup() { send({ t: "openBackup" }); },
   };
 })();

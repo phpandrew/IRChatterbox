@@ -122,6 +122,7 @@ type Settings struct {
 	MarkerLine       bool     `json:"markerLine"`
 	NickContrast     bool     `json:"nickContrast"` // flip custom nick colours that are unreadable on the current theme
 	Ignore           []string `json:"ignore"`
+	Language         string   `json:"language"`    // interface language: "" = follow the system, or en, fr, es, de, pt-BR, it, ru, pl, tr, zh-CN, ja
 	FilterWords      []string `json:"filterWords"` // masked as ••• wherever they appear (Settings → Highlights)
 
 	// updates
@@ -165,7 +166,6 @@ type Shortcut struct {
 
 func defaultShortcuts() []Shortcut {
 	return []Shortcut{
-		{"$whatever", `¯\_(ツ)_/¯`},
 		{"$shrug", `¯\_(ツ)_/¯`},
 		{"$tableflip", "(╯°□°)╯︵ ┻━┻"},
 		{"$unflip", "┬─┬ノ( º _ ºノ)"},
