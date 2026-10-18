@@ -101,8 +101,8 @@ Make the key once and keep a backup somewhere safe, because losing it means user
    | `ANDROID_KEY_ALIAS` | `irchatterbox` |
    | `ANDROID_KEY_PASSWORD` | the key password (the same as the keystore's unless you chose another) |
 
-Without these secrets, CI signs with a throwaway debug key and prints a warning. Those APKs
-install, but the next release won't install over them.
+Without these secrets, a release build fails. Test builds (not releases) are signed with a
+throwaway debug key, which is different on every run, so they won't update an installed release.
 
 For local release builds, create `android/keystore.properties` (it's git-ignored):
 

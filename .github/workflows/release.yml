@@ -198,8 +198,13 @@ jobs:
           if [ -n "$KEYSTORE" ]; then
             echo "$KEYSTORE" | base64 -d > release.jks
             echo "ANDROID_KEYSTORE_FILE=release.jks" >> "$GITHUB_ENV"
+          elif [ "${{ needs.windows.outputs.release }}" = "true" ]; then
+            # A debug key is different on every runner, so phones can't update from one
+            # release to the next. Never publish one.
+            echo "::error::No ANDROID_KEYSTORE_BASE64 secret: releases must be signed with the release key (see docs/ANDROID.md)."
+            exit 1
           else
-            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the APK is signed with a debug key (see docs/ANDROID.md)."
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: this test APK is signed with a debug key and won't update an installed release."
           fi
 
       # github flavor → IRChatterbox.apk on the release (built-in update check).
