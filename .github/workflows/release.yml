@@ -202,15 +202,20 @@ jobs:
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: the APK is signed with a debug key (see docs/ANDROID.md)."
           fi
 
-      - name: Build APK
+      # github flavor → IRChatterbox.apk on the release (built-in update check).
+      # play flavor → IRChatterbox-play.aab, uploaded to Google Play by hand. Signed with the
+      # same key, which Play uses as the upload key (Play App Signing re-signs for users).
+      - name: Build APK and Play bundle
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          ./gradlew assembleRelease --no-daemon -PappVersion="${{ needs.windows.outputs.version }}"
-          mkdir -p ../out && cp app/build/outputs/apk/release/app-release.apk ../out/IRChatterbox.apk
+          ./gradlew assembleGithubRelease bundlePlayRelease --no-daemon -PappVersion="${{ needs.windows.outputs.version }}"
+          mkdir -p ../out ../out-play
+          cp app/build/outputs/apk/github/release/app-github-release.apk ../out/IRChatterbox.apk
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab ../out-play/IRChatterbox-play.aab
           rm -f release.jks
 
       - uses: actions/upload-artifact@v7
@@ -218,6 +223,14 @@ jobs:
           name: IRChatterbox-android-${{ needs.windows.outputs.version }}
           retention-days: 30
           path: out/IRChatterbox.apk
+
+      # Not part of the GitHub release (its name doesn't match IRChatterbox-*): download it
+      # from the workflow run and upload it in Play Console.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: play-bundle-${{ needs.windows.outputs.version }}
+          retention-days: 90
+          path: out-play/IRChatterbox-play.aab
 
   # Linux: Wails needs GTK and WebKitGTK, so it's built natively (cgo) on Ubuntu.
   linux:

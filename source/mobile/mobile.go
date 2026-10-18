@@ -50,6 +50,10 @@ func Start(dataDir, version string, host Host) {
 	app.StartAndroid(adapter{})
 }
 
+// SetStore marks the build as installed from an app store ("play"): the store handles
+// updates. Call it before Start.
+func SetStore(name string) { core.SetStore(name) }
+
 // SetBackground tells the app it has left (true) or returned to (false) the screen.
 func SetBackground(bg bool) {
 	if app != nil {
@@ -70,7 +74,7 @@ func Shutdown() {
 }
 
 // Methods the UI must not reach: they're for the shell itself.
-var internal = map[string]bool{"StartAndroid": true, "SetBackground": true, "Shutdown": true}
+var internal = map[string]bool{"StartAndroid": true, "SetStore": true, "SetBackground": true, "Shutdown": true}
 
 // Call runs an App method by name with a JSON array of arguments and returns
 // {"ok": result} or {"error": message}.

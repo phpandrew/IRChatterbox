@@ -365,6 +365,47 @@ const ICONS = {
   chev: `<svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>`,
 };
 
+// ---------- channel icons and the compact sidebar ----------
+S.icons = {};
+function chanIcon(srv, b) {
+  const u = b && b.type !== "server" ? S.icons[srv.id + "/" + b.key] : "";
+  return u && /^data:image\/(png|webp|jpeg);base64,/.test(u) ? u : "";
+}
+// Shrink a picked picture to a 128×128 square (cropped to the middle) and save it as the icon.
+function pickChannelIcon(srv, b) { pickIcon(srv.id, b.name, b.name); }
+// Your own avatar is stored the same way, as "_me/avatar". IRC can't send it to others.
+function myAvatar() {
+  const u = S.icons["_me/avatar"];
+  return u && /^data:image\/(png|webp|jpeg);base64,/.test(u) ? u : "";
+}
+function pickIcon(server, name, label) {
+  const inp = document.createElement("input");
+  inp.type = "file";
+  inp.accept = "image/png,image/jpeg,image/webp,image/gif,image/bmp";
+  inp.onchange = async () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    try {
+      const img = await createImageBitmap(f);
+      const side = Math.min(img.width, img.height), c = document.createElement("canvas");
+      c.width = c.height = 128;
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, 128, 128);
+      const err = await Go.SetChannelIcon(server, name, c.toDataURL("image/png"));
+      if (err) toast(err, "error"); else toast(server === "_me" ? "Avatar updated" : `Icon set for ${label}`, "ok");
+    } catch { toast("That picture couldn't be opened", "error"); }
+  };
+  inp.click();
+}
+function setSidebarMini(on) {
+  S.ui.sbMini = !!on;
+  saveUi();
+  document.body.classList.toggle("sb-mini", S.ui.sbMini);
+  const t = $("sbToggle");
+  if (t) t.title = S.ui.sbMini ? "Expand sidebar" : "Collapse sidebar";
+}
+
 function renderTree() {
   if (drag) { treeDirty = true; return; } // don't rebuild the list mid-drag
   const tree = $("tree");
@@ -380,7 +421,10 @@ function renderTree() {
       const label = b.type === "server" ? "Server status" : b.type === "channel" ? esc(b.name.replace(/^#/, "")) : esc(b.name);
       const badge = b.hl ? `<span class="badge hl">${b.hl}</span>` : b.unread ? `<span class="badge">${b.unread > 999 ? "999+" : b.unread}</span>` : "";
       const x = b.type !== "server" ? `<span class="x" data-close="1" title="${b.type === "channel" ? "Leave" : "Close"}">✕</span>` : "";
-      kids += `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${b.type === "channel" ? ` draggable="true"` : ""}><span class="ico">${ico}</span><span class="nm">${label}</span>${badge}${x}</div>`;
+      const pic = chanIcon(srv, b);
+      const letter = esc((b.type === "server" ? (srv.cfg.name || "?") : b.name.replace(/^[#&!+]+/, "")).charAt(0).toUpperCase() || "#");
+      const icoHtml = pic ? `<img src="${pic}" alt="">` : ico;
+      kids += `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${b.type === "channel" ? ` draggable="true"` : ""} title="${esc(b.type === "server" ? "Server status" : b.name)}"><span class="ico${pic ? " pic" : ""}" data-l="${letter}" style="--tile:${nickColor(b.name || srv.cfg.name || "")}">${icoHtml}</span><span class="nm">${label}</span>${badge}${x}</div>`;
     }
     const stTxt = { connected: "Connected", connecting: "Connecting…", disconnected: "Disconnected" }[srv.status];
     const agg = srv.collapsed ? (aggH ? `<span class="badge hl">${aggH}</span>` : aggU ? `<span class="badge">${aggU}</span>` : "") : "";
@@ -521,6 +565,8 @@ $("tree").addEventListener("contextmenu", (e) => {
       toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
     }, "", isStart]);
     items.push(["Show in split view", () => showInSplit(srv, b)]);
+    items.push([chanIcon(srv, b) ? "Change icon…" : "Set icon…", () => pickChannelIcon(srv, b)]);
+    if (chanIcon(srv, b)) items.push(["Remove icon", () => Go.SetChannelIcon(srv.id, b.name, "")]);
     items.push("-");
     items.push(["Mark as read", () => { b.unread = b.hl = 0; b.activity = false; scheduleTree(); sendRead(srv, b); }]);
     items.push(["Clear buffer", () => { b.lines = []; if (isActive(srv, b)) renderChat(); }]);
@@ -571,7 +617,7 @@ function renderHeader() {
   if (!srv || !b) { name.textContent = ""; sub.textContent = ""; topic.innerHTML = ""; meta.innerHTML = ""; return; }
   const net = srv.network || srv.cfg.name;
   if (b.type === "channel") {
-    name.innerHTML = `<span class="hash">#</span>${esc(b.name.replace(/^#/, ""))}`;
+    name.innerHTML = (chanIcon(srv, b) ? `<img class="h-ico" src="${chanIcon(srv, b)}" alt="">` : `<span class="hash">#</span>`) + esc(b.name.replace(/^#/, ""));
     sub.textContent = `${net}`;
     topic.innerHTML = b.topic ? ircToHtml(b.topic, ctxFor(srv)) : `<span class="muted">No topic set</span>`;
     topic.title = (b.topic ? stripCodes(b.topic) + "\n\n" : "") + "Double-click to change the topic";
@@ -584,7 +630,7 @@ function renderHeader() {
     ].join("");
   } else if (b.type === "query") {
     topic.classList.remove("editable");
-    name.innerHTML = `<span style="color:${nickColor(b.name)}">${esc(b.name)}</span>`;
+    name.innerHTML = (chanIcon(srv, b) ? `<img class="h-ico" src="${chanIcon(srv, b)}" alt="">` : "") + `<span style="color:${nickColor(b.name)}">${esc(b.name)}</span>`;
     sub.textContent = `Private conversation · ${net}`;
     topic.innerHTML = "";
     meta.innerHTML = "";
@@ -630,7 +676,11 @@ function renderMe() {
   const nick = srv?.nick || srv?.cfg.nick || "—";
   $("meNick").textContent = nick;
   $("meNick").style.color = nickColor(nick);
-  $("meAvatar").textContent = (nick[0] || "?").toUpperCase();
+  if (myAvatar()) {
+    $("meAvatar").innerHTML = `<img src="${myAvatar()}" alt="">`;
+  } else {
+    $("meAvatar").textContent = (nick[0] || "?").toUpperCase();
+  }
   $("meAvatar").style.background = nickColor(nick);
   $("meStatus").textContent = srv ? ({ connected: "Online", connecting: "Connecting…", disconnected: "Offline" }[srv.status]) : "Offline";
 }
@@ -1898,6 +1948,9 @@ $("nickHandle").addEventListener("dblclick", () => {
   saveUi();
 });
 new ResizeObserver(positionNickHandle).observe($("chatWrap"));
+// When the chat gets shorter (the phone keyboard opening, the window being resized), keep the
+// newest lines in view if that's where you were reading.
+new ResizeObserver(() => { if (stick) scrollBottom(); }).observe($("chat"));
 
 $("usersBtn").onclick = () => { S.ui.users = S.ui.users === false; saveUi(); renderHeader(); renderUsers(); };
 $("settingsBtn").onclick = () => openSettings();
@@ -1964,6 +2017,16 @@ async function boot() {
     addEventListener("unhandledrejection", (e) => Go.LogUI("unhandled promise: " + (e.reason?.stack || e.reason)));
   }
   initMobile({ tabComplete, hideMenu, closeOverlay, closeFind });
+  S.icons = (await Go.GetChannelIcons()) || {};
+  setSidebarMini(S.ui.sbMini);
+  $("sbToggle").onclick = () => setSidebarMini(!S.ui.sbMini);
+  $("meAvatar").title = "Change your avatar";
+  $("meAvatar").onclick = () => pickIcon("_me", "avatar", "your avatar");
+  $("meAvatar").oncontextmenu = (e) => {
+    e.preventDefault();
+    showMenu(e.clientX, e.clientY, [["Change avatar…", () => pickIcon("_me", "avatar", "your avatar")]]
+      .concat(myAvatar() ? [["Remove avatar", () => Go.SetChannelIcon("_me", "avatar", "")]] : []));
+  };
   S.cfg = await Go.GetConfig();
   setCustomThemes(await Go.GetThemes());
   applySettings();
@@ -2015,6 +2078,7 @@ async function boot() {
   });
   Go.PluginCommands().then((list) => { pluginCommands = list || []; });
   on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
+  on("icons", (icons) => { S.icons = icons || {}; renderTree(); renderHeader(); renderMe(); });
   on("focusBuffer", ({ server, buffer }) => {
     const srv = S.byId[server];
     if (!srv) return;

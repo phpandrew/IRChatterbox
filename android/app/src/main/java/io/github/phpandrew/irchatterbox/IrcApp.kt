@@ -18,6 +18,7 @@ class IrcApp : Application() {
         Thread { SharedImages.clean(this) }.start() // photos left from the last run
         CoreHost.init(this)
         val dataDir = File(filesDir, "data").apply { mkdirs() }
+        Mobile.setStore(BuildConfig.STORE)
         Mobile.start(dataDir.absolutePath, BuildConfig.VERSION_NAME, CoreHost)
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {

@@ -16,7 +16,10 @@ const cfg = {
 const users = ["~DaveLegg", "~Neobond", "@Andrew", "@Caleo", "%ammali", "%bemis|back", "%Enigma-Penguin|L", "%LogicalApex", "%The_Decryptor", "Alan-", "binaryzero", "brock_aholic", "Hackerpcs", "Kennyout", "kinghat", "Mike", "peachey|cloud", "Ryoken", "SierraSonic", "zyme"]
   .map((n) => ({ nick: n.replace(/^[~@%+]/, ""), prefix: /^[~@%+]/.test(n) ? n[0] : "" }));
 
+const mockIcons = {};
 export const api = {
+  GetChannelIcons: () => ({ ...mockIcons }),
+  SetChannelIcon: (server, buffer, url) => { if (url) mockIcons[server + "/" + buffer.toLowerCase()] = url; else delete mockIcons[server + "/" + buffer.toLowerCase()]; emit("icons", { ...mockIcons }); return ""; },
   GetConfig: () => structuredClone(cfg),
   GetThemes: () => [],
   GetState: () => [

@@ -372,7 +372,7 @@ export function openSettings(startTab) {
       <div class="hint indent">Stays connected while the app is closed, with a small “Connected” notification. Off: disconnects in the background, and your bouncer replays what you missed when you come back.</div>
       <div class="set-sep"></div>
       <div class="status-row"><span class="grow" id="gBatt"></span><button class="btn sm" id="gBattBtn">Allow</button></div>
-      <div class="hint">Android may cut the connection to save battery. Letting IRChatterbox run unrestricted keeps it reliable.</div>
+      <div class="hint" id="gBattHint">Android may cut the connection to save battery. Letting IRChatterbox run unrestricted keeps it reliable.</div>
       <div class="status-row"><span class="grow" id="gNotif"></span><button class="btn sm" id="gNotifBtn">Settings</button></div>`, "android-only") +
       card("Away", android ? "Mark yourself away on every network when you put the app away." : "Mark yourself away on every network when you step away from your PC.", `
       ${check("gAway", set.autoAway, "Set me away automatically when I'm idle")}
@@ -470,6 +470,12 @@ export function openSettings(startTab) {
       };
       sync();
       $("gBattBtn").onclick = () => window.icbAndroid.requestUnrestricted();
+      // Play build: the button opens the app's settings instead of asking directly
+      Go.GetStore().then((store) => {
+        if (store !== "play" || !$("gBattHint")) return;
+        $("gBattBtn").textContent = "Open settings";
+        $("gBattHint").textContent = "Android may cut the connection to save battery. In the app's settings, tap Battery (or App battery usage) and choose Unrestricted.";
+      });
       $("gNotifBtn").onclick = () => (window.icbAndroid.notificationsAllowed() ? window.icbAndroid.openNotificationSettings() : window.icbAndroid.requestNotifications());
       // re-check when coming back from Android's settings screen
       document.addEventListener("visibilitychange", () => { if (!document.hidden && $("gBatt")) sync(); });
@@ -596,6 +602,7 @@ export function openSettings(startTab) {
   }
 
   async function drawAbout() {
+    const store = (await Go.GetStore().catch(() => "")) || "";
     body.innerHTML = `
       <section class="set-card about">
         <img class="about-logo for-light" src="${wordmarkLight}" alt="IRChatterbox">
@@ -611,7 +618,9 @@ export function openSettings(startTab) {
         <p class="about-support">Help and support: <a href="${REPO}/issues" data-url="${REPO}/issues">GitHub issues</a>. To report abuse in a chat, right-click (or long-press) the message or nick and choose <b>Report…</b></p>
         <a class="about-url" href="${REPO}" data-url="${REPO}">${REPO.replace("https://", "")}</a>
       </section>
-      ${card("Updates", "New versions are published on GitHub Releases.", `
+      ${store === "play" ? card("Updates", "Updates are delivered by Google Play.", `
+        <button class="btn sm" data-open="https://play.google.com/store/apps/details?id=io.github.phpandrew.irchatterbox">Open in Google Play</button>`) :
+      card("Updates", "New versions are published on GitHub Releases.", `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn sm" id="abCheck">Check for updates</button>
           <span id="abStatus" class="muted" style="font-size:12.5px"></span>
@@ -628,7 +637,7 @@ export function openSettings(startTab) {
     $("abVer").textContent = (await Go.GetVersion()) || "dev";
     $("abLogs").onclick = () => Go.OpenDiagnostics();
     $("abReport").onclick = () => Go.ReportProblem();
-    $("abCheck").onclick = async () => {
+    if ($("abCheck")) $("abCheck").onclick = async () => {
       const st = $("abStatus");
       st.className = "muted"; st.textContent = "Checking…";
       const info = await Go.CheckForUpdate();

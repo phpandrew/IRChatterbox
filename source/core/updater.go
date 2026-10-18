@@ -152,8 +152,21 @@ func compareVersions(a, b string) int {
 	return 0
 }
 
+// storeName is set when this build is installed from an app store ("play" for Google Play).
+// The store delivers updates, so the GitHub update check and download are off.
+var storeName string
+
+// SetStore marks this build as installed from a store. Must be called before NewApp.
+func SetStore(name string) { storeName = name }
+
+// GetStore is "" for builds from GitHub Releases, or the store the app came from.
+func (a *App) GetStore() string { return storeName }
+
 // CheckForUpdate is called by the About tab ("Check for updates") and the startup check.
 func (a *App) CheckForUpdate() UpdateInfo {
+	if storeName != "" {
+		return UpdateInfo{Current: appVersion, Latest: appVersion}
+	}
 	info, err := fetchLatestRelease()
 	if err != nil {
 		info.Error = err.Error()
@@ -171,6 +184,9 @@ func (a *App) SkipUpdateVersion(v string) {
 
 // autoUpdateLoop checks shortly after launch and then every 6 hours.
 func (a *App) autoUpdateLoop() {
+	if storeName != "" {
+		return
+	}
 	time.Sleep(15 * time.Second)
 	for {
 		set := a.store.Get().Settings

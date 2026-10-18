@@ -28,7 +28,7 @@ type App struct {
 
 	mu             sync.Mutex
 	conns          map[string]*Conn
-	queries        map[string]map[string]bool // server -> lower nick -> open
+	queries        map[string]map[string]string // server -> lower nick -> nick, for open private chats (saved in queries.json)
 	focused        bool
 	activeServer   string
 	activeBuffer   string
@@ -58,11 +58,12 @@ func NewApp() *App {
 	a := &App{
 		store:        NewStore(),
 		conns:        map[string]*Conn{},
-		queries:      map[string]map[string]bool{},
+		queries:      map[string]map[string]string{},
 		pendingFocus: map[string]bool{},
 		focused:      true,
 	}
 	a.plugins = NewPlugins(a)
+	a.loadQueries()
 	return a
 }
 
@@ -123,17 +124,22 @@ func (a *App) emit(c *Conn, ev Event) {
 
 func (a *App) addQuery(server, nick string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.queries[server] == nil {
-		a.queries[server] = map[string]bool{}
+		a.queries[server] = map[string]string{}
 	}
-	a.queries[server][lower(nick)] = true
+	_, known := a.queries[server][lower(nick)]
+	a.queries[server][lower(nick)] = nick
+	a.mu.Unlock()
+	if !known {
+		a.saveQueries()
+	}
 }
 
 func (a *App) hasQuery(server, nick string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.queries[server][lower(nick)]
+	_, ok := a.queries[server][lower(nick)]
+	return ok
 }
 
 func (a *App) consumePendingFocus(server, ch string) bool {
@@ -670,6 +676,7 @@ func (a *App) CloseBuffer(server, buffer string) {
 	a.mu.Lock()
 	delete(a.queries[server], lower(buffer))
 	a.mu.Unlock()
+	a.saveQueries()
 }
 
 func (a *App) SendInput(server, buffer, text string) {

@@ -391,6 +391,15 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("BatteryLife")
     fun requestUnrestricted() {
+        if (BuildConfig.STORE == "play") {
+            // Play build: no direct prompt. The app's settings page has Battery → Unrestricted.
+            try {
+                startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+                startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            }
+            return
+        }
         try {
             startActivity(
                 Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))

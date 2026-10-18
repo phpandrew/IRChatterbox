@@ -62,6 +62,23 @@ android {
         }
     }
 
+    // github: the APK on GitHub Releases, with the built-in update check.
+    // play:   the Google Play bundle (.aab). Play delivers updates, so the update check is off,
+    //         and the battery-optimisation prompt is replaced by a link to the app's settings
+    //         (REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is restricted on Play).
+    // Same package name; the two installs can't update each other (different signing keys).
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+            buildConfigField("String", "STORE", "\"\"")
+        }
+        create("play") {
+            dimension = "store"
+            buildConfigField("String", "STORE", "\"play\"")
+        }
+    }
+
     buildFeatures {
         buildConfig = true
     }

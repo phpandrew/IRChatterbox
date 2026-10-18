@@ -626,6 +626,7 @@ func (c *Conn) onRegistered() {
 	c.mu.Unlock()
 	c.setStatus("connected")
 	c.app.plugins.Emit("connect", c, "", map[string]any{"nick": c.Nick()})
+	c.app.restoreQueries(c)
 	if c.cfg.Bouncer != "" {
 		c.fetchMissedQueries()
 	}

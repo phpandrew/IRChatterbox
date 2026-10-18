@@ -189,6 +189,10 @@ func (a *App) ApplyLocalUpdate() string       { return "" }
 
 // InstallUpdate opens the new APK's download; Android's installer takes it from there.
 func (a *App) InstallUpdate() string {
+	if storeName == "play" {
+		a.openBrowser("https://play.google.com/store/apps/details?id=io.github.phpandrew.irchatterbox")
+		return ""
+	}
 	a.mu.Lock()
 	info := a.lastUpdate
 	a.mu.Unlock()

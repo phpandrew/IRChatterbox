@@ -62,10 +62,20 @@ Then:
 
     cd source/frontend && npm ci && npm run build && cd ../..
     android/build-core.sh                 # Go core → android/app/libs/irchatterbox-core.aar
-    cd android && ./gradlew assembleDebug # → app/build/outputs/apk/debug/app-debug.apk
+    cd android && ./gradlew assembleGithubDebug # → app/build/outputs/apk/github/debug/app-github-debug.apk
+
+There are two flavors:
+
+- `github`: the APK on GitHub Releases, with the built-in update check
+  (`./gradlew assembleGithubRelease`).
+- `play`: the Google Play bundle, built with `./gradlew bundlePlayRelease`, which writes
+  `app/build/outputs/bundle/playRelease/app-play-release.aab`. Play delivers its updates, so
+  the update check is off, and it leaves out the restricted `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+  permission: "Allow" opens the app's settings page instead. CI builds both, and the `.aab` is the
+  `play-bundle-<version>` artifact on the workflow run.
 
 Set `ANDROID_HOME` and `ANDROID_NDK_HOME` (or put `sdk.dir=…` in `android/local.properties`).
-`adb install -r app/build/outputs/apk/debug/app-debug.apk` puts it on a phone with USB debugging.
+`adb install -r app/build/outputs/apk/github/debug/app-github-debug.apk` puts it on a phone with USB debugging.
 The debug build installs alongside the release one (`….irchatterbox.debug`).
 
 ### The UI in a browser

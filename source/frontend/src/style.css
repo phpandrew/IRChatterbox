@@ -648,3 +648,47 @@ body.os-darwin .win-only, body.os-linux .win-only { display: none !important; }
 .report-msg { background: var(--bg-hover); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-size: 13px; word-break: break-word; }
 .about-support { font-size: 12.5px; color: var(--text-faint); margin: 12px 0 0; text-align: center; }
 #rpErr { margin: 10px 0 0; color: var(--danger); }
+
+/* channel icons */
+.buf .ico.pic img { width: 18px; height: 18px; border-radius: 5px; object-fit: cover; vertical-align: -4px; display: inline-block; }
+.h-ico { width: 24px; height: 24px; border-radius: 6px; object-fit: cover; vertical-align: -5px; margin-right: 7px; }
+.brand { position: relative; }
+.sb-toggle { margin-left: auto; width: 28px; height: 28px; }
+.sb-toggle svg { width: 17px; height: 17px; }
+
+/* compact sidebar: icons with the name underneath */
+@media (min-width: 760px) {
+  body.sb-mini #sidebar { width: 88px; min-width: 88px; }
+  body.sb-mini #sideResizer { display: none; }
+  body.sb-mini .side-top { padding-left: 8px; padding-right: 8px; }
+  body.sb-mini .brand { flex-direction: column; gap: 6px; }
+  body.sb-mini .brand-name { display: none; }
+  body.sb-mini .sb-toggle { margin: 0; transform: scaleX(-1); }
+  body.sb-mini .jump { justify-content: center; padding: 7px 0; }
+  body.sb-mini .jump span, body.sb-mini .jump kbd { display: none; }
+  body.sb-mini #tree { padding: 4px 6px 12px; }
+  body.sb-mini .srv-head { justify-content: center; padding: 6px 2px; }
+  body.sb-mini .srv-head .chev, body.sb-mini .srv-state { display: none; }
+  body.sb-mini .srv-name { font-size: 11px; text-align: center; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; }
+  body.sb-mini .srv-kids { margin: 2px 0 0; padding: 0; border: 0; }
+  body.sb-mini .buf { flex-direction: column; gap: 3px; padding: 6px 2px; text-align: center; }
+  body.sb-mini .buf.active { box-shadow: inset 3px 0 0 var(--accent); }
+  body.sb-mini .buf .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-size: 15px; overflow: hidden; }
+  body.sb-mini .buf .ico > :not(img) { display: none; }
+  body.sb-mini .buf .ico:not(.pic) { font-size: 0; }
+  body.sb-mini .buf .ico:not(.pic)::after { content: attr(data-l); font-weight: 700; font-size: 15px; }
+  body.sb-mini .buf .ico.pic img { width: 36px; height: 36px; border-radius: 10px; vertical-align: 0; }
+  body.sb-mini .buf.active .ico { outline: 2px solid var(--accent); outline-offset: 1px; }
+  body.sb-mini .buf .nm { font-size: 10.5px; max-width: 100%; line-height: 1.2; }
+  body.sb-mini .buf .badge { position: absolute; top: 2px; right: 8px; }
+  body.sb-mini .buf:hover .badge { display: inline-block; }
+  body.sb-mini .buf .x, body.sb-mini .buf:hover .x { display: none; }
+  body.sb-mini .add-server { justify-content: center; padding: 10px 0; font-size: 0; }
+  body.sb-mini .add-server span { font-size: 20px; }
+  body.sb-mini .me-card { flex-direction: column; padding: 10px 4px; gap: 6px; }
+  body.sb-mini .me-text { display: none; }
+}
+
+/* own avatar */
+#meAvatar { cursor: pointer; overflow: hidden; }
+#meAvatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
