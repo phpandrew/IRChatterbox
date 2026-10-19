@@ -713,5 +713,9 @@
 "They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "BANが解除されるまで再参加できません。同じアドレスの他の人もBANされます。すでにチャンネルにいる場合は外されません。",
 "They'll be removed from the channel and won't be able to join again until the ban is removed.": "チャンネルから外され、BANが解除されるまで再参加できません。",
 "Everyone in the channel sees the reason.": "理由はチャンネルの全員に表示されます。",
-"Ban…": "BAN…"
+"Ban…": "BAN…",
+"Message layout": "メッセージの表示",
+"Automatic (stacked on phones, side by side on computers)": "自動（スマホは縦並び、パソコンは横並び）",
+"Side by side: time · name · message": "横並び: 時刻 · 名前 · メッセージ",
+"Stacked: name and time above the message": "縦並び: 名前と時刻をメッセージの上に表示"
 }

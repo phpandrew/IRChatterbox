@@ -713,5 +713,9 @@
 "They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "Nie będzie mógł dołączyć, dopóki ban nie zostanie zdjęty. Każdy z tego samego adresu też jest zbanowany. Nie zostanie usunięty, jeśli już jest na kanale.",
 "They'll be removed from the channel and won't be able to join again until the ban is removed.": "Zostanie usunięty z kanału i nie będzie mógł wrócić, dopóki ban nie zostanie zdjęty.",
 "Everyone in the channel sees the reason.": "Wszyscy na kanale widzą powód.",
-"Ban…": "Zbanuj…"
+"Ban…": "Zbanuj…",
+"Message layout": "Układ wiadomości",
+"Automatic (stacked on phones, side by side on computers)": "Automatycznie (jedno pod drugim na telefonie, obok siebie na komputerze)",
+"Side by side: time · name · message": "Obok siebie: czas · nazwa · wiadomość",
+"Stacked: name and time above the message": "Jedno pod drugim: nazwa i czas nad wiadomością"
 }

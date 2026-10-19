@@ -713,5 +713,9 @@
 "They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "Yasak kaldırılana kadar yeniden katılamaz. Aynı adresten gelen herkes de yasaklanır. Zaten kanaldaysa çıkarılmaz.",
 "They'll be removed from the channel and won't be able to join again until the ban is removed.": "Kanaldan çıkarılır ve yasak kaldırılana kadar yeniden katılamaz.",
 "Everyone in the channel sees the reason.": "Sebebi kanaldaki herkes görür.",
-"Ban…": "Yasakla…"
+"Ban…": "Yasakla…",
+"Message layout": "Mesaj düzeni",
+"Automatic (stacked on phones, side by side on computers)": "Otomatik (telefonda alt alta, bilgisayarda yan yana)",
+"Side by side: time · name · message": "Yan yana: saat · ad · mesaj",
+"Stacked: name and time above the message": "Alt alta: ad ve saat mesajın üstünde"
 }

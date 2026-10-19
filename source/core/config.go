@@ -124,6 +124,7 @@ type Settings struct {
 	LogMaxLines      int      `json:"logMaxLines"` // keep at most this many lines per log file; 0 = unlimited
 	ShowUserList     bool     `json:"showUserList"`
 	CompactMode      bool     `json:"compactMode"`
+	ChatLayout       string   `json:"chatLayout"` // "" automatic (stacked on phones) | columns | stacked
 	QuitMessage      string   `json:"quitMessage"`
 	StartWithWindows bool     `json:"startWithWindows"`
 	StartMinimized   bool     `json:"startMinimized"`

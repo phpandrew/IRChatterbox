@@ -886,3 +886,19 @@ body.sb-mini .buf .draft-ico { display: none; }
 /* destructive confirm button (kick / ban) */
 .btn.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.danger-fill:hover { filter: brightness(1.08); }
+
+/* stacked message layout: name and time above, message below (Settings → General → Message layout) */
+body .stacked .line { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who ts" "msg msg"; column-gap: 10px; padding: 7px 14px 1px; }
+body .stacked .line .who { grid-area: who; display: block; text-align: left; border-right: 0; padding-right: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body .stacked .line .ts { grid-area: ts; align-self: center; margin: 0; }
+body .stacked .line .msg { grid-area: msg; display: block; }
+body .stacked .line > span:empty { display: none; }
+body .stacked .line > .media, body .stacked .line > .reacts, body .stacked .line > .lp-wrap { grid-column: 1 / -1; }
+body .stacked .line.cont { grid-template-areas: "msg msg"; padding-top: 1px; }
+body .stacked .line.cont .who, body .stacked .line.cont .ts { display: none; }
+body .stacked .line.ev, body .stacked .line.info, body .stacked .line.action, body .stacked .line.dccl { grid-template-areas: "msg ts"; padding-top: 4px; }
+body .stacked .line.ev .who, body .stacked .line.info .who, body .stacked .line.action .who, body .stacked .line.dccl .who { display: none; }
+body .stacked .line.dccl .dcc-card { grid-area: msg; }
+body .stacked .line.hl { padding-top: 7px; }
+body .stacked.compact .line { padding-top: 3px; }
+body .stacked.compact .line.cont { padding-top: 0; }

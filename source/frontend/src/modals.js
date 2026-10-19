@@ -563,6 +563,10 @@ export function openSettings(startTab) {
         ${field("Chat font", text("gFont", set.fontFamily, "Segoe UI (default) — e.g. Cascadia Mono, Consolas"))}
       </div>
       <div class="set-sep"></div>
+      ${field("Message layout", `<select id="gLayout">
+        <option value="">Automatic (stacked on phones, side by side on computers)</option>
+        <option value="columns" ${set.chatLayout === "columns" ? "selected" : ""}>Side by side: time · name · message</option>
+        <option value="stacked" ${set.chatLayout === "stacked" ? "selected" : ""}>Stacked: name and time above the message</option></select>`)}
       ${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
       ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
       ${check("gCompact", set.compactMode, "Compact line spacing")}
@@ -1009,7 +1013,7 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.chatLayout = $("gLayout").value; set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");

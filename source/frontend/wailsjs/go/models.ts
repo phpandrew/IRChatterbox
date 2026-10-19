@@ -255,6 +255,7 @@ export namespace core {
 	    logMaxLines: number;
 	    showUserList: boolean;
 	    compactMode: boolean;
+	    chatLayout: string;
 	    quitMessage: string;
 	    startWithWindows: boolean;
 	    startMinimized: boolean;
@@ -318,6 +319,7 @@ export namespace core {
 	        this.logMaxLines = source["logMaxLines"];
 	        this.showUserList = source["showUserList"];
 	        this.compactMode = source["compactMode"];
+	        this.chatLayout = source["chatLayout"];
 	        this.quitMessage = source["quitMessage"];
 	        this.startWithWindows = source["startWithWindows"];
 	        this.startMinimized = source["startMinimized"];

@@ -982,11 +982,28 @@ function jumpToMsg(fromEl, id) {
   target.classList.add("flash");
 }
 
-function lineEl(srv, b, line) {
+// ---------- stacked layout: name and time on their own line, the message underneath ----------
+function stackedLayout() {
+  const l = S.cfg?.settings?.chatLayout || "";
+  return l === "stacked" || (l === "" && isMobile());
+}
+// a message from the same person shortly after their last one: no new name/time header
+function continues(prev, line) {
+  return !!prev && prev.type === "msg" && line.type === "msg" && prev.nick === line.nick && !prev.self === !line.self &&
+    prev.kind === line.kind && line.kind !== "action" && line.t - prev.t < 5 * 60e3 && line.t >= prev.t &&
+    new Date(prev.t).toDateString() === new Date(line.t).toDateString();
+}
+function prevLine(b, line) {
+  const i = b.lines.lastIndexOf(line);
+  return i > 0 ? b.lines[i - 1] : null;
+}
+
+function lineEl(srv, b, line, prev) {
   if (line.type === "dcc") return dccLineEl(srv, b, line);
   const el = document.createElement("div");
   const isEv = line.type === "event";
-  el.className = "line " + [line.kind, isEv ? "ev" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : ""].join(" ");
+  el.className = "line " + [line.kind, isEv ? "ev" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : "",
+    stackedLayout() && continues(prev === undefined ? prevLine(b, line) : prev, line) ? "cont" : ""].join(" ");
   let who = "", msg = "";
   const ctx = ctxFor(srv);
   const nickSpan = (n) => `<span class="nickref" style="color:${nickColor(n)}">${esc(n)}</span>`;
@@ -1378,6 +1395,7 @@ function renderChat() {
   chat.innerHTML = "";
   lastRenderedDay = "";
   chat.classList.toggle("compact", !!S.cfg.settings.compactMode);
+  chat.classList.toggle("stacked", stackedLayout());
   if ((!srv || !b) && isSplit() && S.servers.length) {
     chat.innerHTML = `<div class="pane-empty"><div><b>Empty pane</b><br>Pick a channel in the sidebar to show it here,<br>or drag a channel onto this pane.</div></div>`;
     return;
@@ -1389,14 +1407,16 @@ function renderChat() {
   }
   const frag = document.createDocumentFragment();
   let markerEl = null;
+  let prev = null;
   b.lines.forEach((line) => {
     const day = new Date(line.t).toDateString();
     if (day !== lastRenderedDay) {
       lastRenderedDay = day;
       const d = document.createElement("div"); d.className = "day"; d.textContent = dayLabel(line.t); frag.appendChild(d);
     }
-    if (line === b.marker && S.cfg.settings.markerLine !== false) frag.appendChild((markerEl = markerLineEl()));
-    frag.appendChild(lineEl(srv, b, line));
+    if (line === b.marker && S.cfg.settings.markerLine !== false) { frag.appendChild((markerEl = markerLineEl())); prev = null; }
+    frag.appendChild(lineEl(srv, b, line, prev));
+    prev = line;
   });
   chat.appendChild(frag);
   stick = true;
@@ -1428,8 +1448,9 @@ function appendLineDom(b, line) {
     lastRenderedDay = day;
     const d = document.createElement("div"); d.className = "day"; d.textContent = dayLabel(line.t); chat.appendChild(d);
   }
-  const el = lineEl(activeServer(), b, line);
-  if (line === b.marker && S.cfg.settings.markerLine !== false) chat.appendChild(markerLineEl());
+  const marker = line === b.marker && S.cfg.settings.markerLine !== false;
+  const el = lineEl(activeServer(), b, line, marker ? null : undefined);
+  if (marker) chat.appendChild(markerLineEl());
   chat.appendChild(el);
   while (chat.childElementCount > MAX_LINES + 50) chat.firstElementChild.remove();
   if (findText) matchLine(el);
@@ -1515,16 +1536,19 @@ function renderPanesSoon() { clearTimeout(panesTimer); panesTimer = setTimeout(r
 function renderPaneView(view, pb) {
   view.innerHTML = "";
   view.classList.toggle("compact", !!S.cfg.settings.compactMode);
+  view.classList.toggle("stacked", stackedLayout());
   view._day = "";
   if (!pb) {
     view.innerHTML = `<div class="pane-empty"><div><b>Empty pane</b><br>Click here, then pick a channel in the sidebar,<br>or drag a channel onto it.</div></div>`;
     return;
   }
   const frag = document.createDocumentFragment();
+  let prev = null;
   for (const line of pb.b.lines.slice(-300)) {
     const d = new Date(line.t).toDateString();
     if (d !== view._day) { view._day = d; const el = document.createElement("div"); el.className = "day"; el.textContent = dayLabel(line.t); frag.appendChild(el); }
-    frag.appendChild(lineEl(pb.srv, pb.b, line));
+    frag.appendChild(lineEl(pb.srv, pb.b, line, prev));
+    prev = line;
   }
   view.appendChild(frag);
   view.scrollTop = view.scrollHeight;
@@ -2519,6 +2543,7 @@ for (const v of ["--side-w", "--users-w", "--nick-col"]) if (S.ui[v]) document.d
 // Draggable divider between the nick column and the message column.
 function positionNickHandle() {
   const h = $("nickHandle");
+  if (stackedLayout()) { h.style.display = "none"; return; }
   const who = $("chat").querySelector(".line:not(.hidden) .who");
   if (!who) { h.style.display = "none"; return; }
   h.style.display = "";
