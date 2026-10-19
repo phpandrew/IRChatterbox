@@ -699,5 +699,19 @@
 "Proxy password": "プロキシのパスワード",
 "Optional": "任意",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor は通常 127.0.0.1 のポート 9050（Tor Browser は 9150）です。リンクのプレビューと DCC 転送はプロキシを通りません。",
-"Enter the proxy's host and port, or choose No proxy": "プロキシのホストとポートを入力するか、「プロキシなし」を選んでください"
+"Enter the proxy's host and port, or choose No proxy": "プロキシのホストとポートを入力するか、「プロキシなし」を選んでください",
+"Moderation": "モデレーション",
+"For channels where you're an operator.": "オペレーター権限のあるチャンネル向け。",
+"Ask before kicking or banning someone, with a box for the reason": "キックやBANの前に確認し、理由を入力する",
+"Default kick reason": "既定のキック理由",
+"Their nick": "相手のニックネーム",
+"Used when you leave the reason empty, or when you aren't asked.": "理由を空欄にしたときや確認しないときに使われます。",
+"Kick {0} from {1}?": "{0} を {1} からキックしますか？",
+"Ban {0} from {1}?": "{0} を {1} からBANしますか？",
+"Kick and ban {0} from {1}?": "{0} を {1} からキックしてBANしますか？",
+"They'll be removed from the channel, and can rejoin.": "チャンネルから外されますが、再参加できます。",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "BANが解除されるまで再参加できません。同じアドレスの他の人もBANされます。すでにチャンネルにいる場合は外されません。",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "チャンネルから外され、BANが解除されるまで再参加できません。",
+"Everyone in the channel sees the reason.": "理由はチャンネルの全員に表示されます。",
+"Ban…": "BAN…"
 }

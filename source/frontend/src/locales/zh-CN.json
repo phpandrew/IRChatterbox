@@ -699,5 +699,19 @@
 "Proxy password": "代理密码",
 "Optional": "可选",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor 通常是 127.0.0.1 端口 9050（Tor 浏览器：9150）。链接预览和 DCC 传输不经过代理。",
-"Enter the proxy's host and port, or choose No proxy": "请输入代理的主机和端口，或选择“不使用代理”"
+"Enter the proxy's host and port, or choose No proxy": "请输入代理的主机和端口，或选择“不使用代理”",
+"Moderation": "管理",
+"For channels where you're an operator.": "适用于你担任管理员的频道。",
+"Ask before kicking or banning someone, with a box for the reason": "踢出或封禁前先确认，并可填写原因",
+"Default kick reason": "默认踢出原因",
+"Their nick": "对方的昵称",
+"Used when you leave the reason empty, or when you aren't asked.": "在原因留空或不询问时使用。",
+"Kick {0} from {1}?": "将 {0} 踢出 {1}？",
+"Ban {0} from {1}?": "在 {1} 封禁 {0}？",
+"Kick and ban {0} from {1}?": "将 {0} 踢出并封禁于 {1}？",
+"They'll be removed from the channel, and can rejoin.": "对方会被移出频道，但可以重新加入。",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "在解除封禁前对方无法再加入。来自同一地址的其他人也会被封禁。如果对方已在频道中，不会被移出。",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "对方会被移出频道，并且在解除封禁前无法再加入。",
+"Everyone in the channel sees the reason.": "频道里的所有人都能看到原因。",
+"Ban…": "封禁…"
 }

@@ -699,5 +699,19 @@
 "Proxy password": "Vekil parolası",
 "Optional": "İsteğe bağlı",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor genellikle 127.0.0.1, bağlantı noktası 9050'dir (Tor Browser: 9150). Bağlantı önizlemeleri ve DCC aktarımları vekilden geçmez.",
-"Enter the proxy's host and port, or choose No proxy": "Vekil sunucunun adresini ve bağlantı noktasını girin ya da Vekil yok'u seçin"
+"Enter the proxy's host and port, or choose No proxy": "Vekil sunucunun adresini ve bağlantı noktasını girin ya da Vekil yok'u seçin",
+"Moderation": "Moderasyon",
+"For channels where you're an operator.": "Operatör olduğunuz kanallar için.",
+"Ask before kicking or banning someone, with a box for the reason": "Birini atmadan veya yasaklamadan önce sor, sebep için bir kutuyla",
+"Default kick reason": "Varsayılan atma sebebi",
+"Their nick": "Rumuzu",
+"Used when you leave the reason empty, or when you aren't asked.": "Sebebi boş bıraktığınızda veya size sorulmadığında kullanılır.",
+"Kick {0} from {1}?": "{0}, {1} kanalından atılsın mı?",
+"Ban {0} from {1}?": "{0}, {1} kanalından yasaklansın mı?",
+"Kick and ban {0} from {1}?": "{0}, {1} kanalından atılıp yasaklansın mı?",
+"They'll be removed from the channel, and can rejoin.": "Kanaldan çıkarılır ve yeniden katılabilir.",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "Yasak kaldırılana kadar yeniden katılamaz. Aynı adresten gelen herkes de yasaklanır. Zaten kanaldaysa çıkarılmaz.",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "Kanaldan çıkarılır ve yasak kaldırılana kadar yeniden katılamaz.",
+"Everyone in the channel sees the reason.": "Sebebi kanaldaki herkes görür.",
+"Ban…": "Yasakla…"
 }

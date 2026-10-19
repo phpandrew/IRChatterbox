@@ -282,6 +282,8 @@ export namespace core {
 	    keepAlive: boolean;
 	    linkPreviews: boolean;
 	    spellCheck: boolean;
+	    confirmModeration: boolean;
+	    kickReason: string;
 	    dccFolder: string;
 	    dccAddress: string;
 	    dccPorts: string;
@@ -343,6 +345,8 @@ export namespace core {
 	        this.keepAlive = source["keepAlive"];
 	        this.linkPreviews = source["linkPreviews"];
 	        this.spellCheck = source["spellCheck"];
+	        this.confirmModeration = source["confirmModeration"];
+	        this.kickReason = source["kickReason"];
 	        this.dccFolder = source["dccFolder"];
 	        this.dccAddress = source["dccAddress"];
 	        this.dccPorts = source["dccPorts"];

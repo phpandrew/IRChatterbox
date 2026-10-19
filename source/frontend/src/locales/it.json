@@ -699,5 +699,19 @@
 "Proxy password": "Password del proxy",
 "Optional": "Facoltativo",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor di solito è 127.0.0.1 porta 9050 (Tor Browser: 9150). Le anteprime dei link e i trasferimenti DCC non passano dal proxy.",
-"Enter the proxy's host and port, or choose No proxy": "Inserisci host e porta del proxy, oppure scegli Nessun proxy"
+"Enter the proxy's host and port, or choose No proxy": "Inserisci host e porta del proxy, oppure scegli Nessun proxy",
+"Moderation": "Moderazione",
+"For channels where you're an operator.": "Per i canali in cui sei operatore.",
+"Ask before kicking or banning someone, with a box for the reason": "Chiedi prima di espellere o bannare qualcuno, con un campo per il motivo",
+"Default kick reason": "Motivo di espulsione predefinito",
+"Their nick": "Il suo nick",
+"Used when you leave the reason empty, or when you aren't asked.": "Usato se lasci vuoto il motivo o se non ti viene chiesto.",
+"Kick {0} from {1}?": "Espellere {0} da {1}?",
+"Ban {0} from {1}?": "Bannare {0} da {1}?",
+"Kick and ban {0} from {1}?": "Espellere e bannare {0} da {1}?",
+"They'll be removed from the channel, and can rejoin.": "Verrà rimosso dal canale e potrà rientrare.",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "Non potrà rientrare finché il ban non viene rimosso. Chiunque altro dallo stesso indirizzo viene bannato. Non viene rimosso se è già nel canale.",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "Verrà rimosso dal canale e non potrà rientrare finché il ban non viene rimosso.",
+"Everyone in the channel sees the reason.": "Tutti nel canale vedono il motivo.",
+"Ban…": "Banna…"
 }

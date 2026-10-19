@@ -1826,6 +1826,36 @@ function reportUser(srv, b, nick, line) {
   });
 }
 
+// Kick / ban from the user list: straight away, or after a confirmation with a reason box
+// (Settings → General → Moderation).
+function moderate(kind, srv, b, nick, send) {
+  const set = S.cfg.settings;
+  const reasonOf = (r) => (r || "").trim() || (set.kickReason || "").trim() || (kind === "kb" ? "Banned" : nick);
+  const run = (r) => {
+    if (kind === "kick") send(`/kick ${nick} ${reasonOf(r)}`);
+    else if (kind === "ban") send(`/ban ${nick}`);
+    else send(`/kb ${nick} ${reasonOf(r)}`);
+  };
+  if (set.confirmModeration === false) return run("");
+  const title = { kick: "Kick {0} from {1}?", ban: "Ban {0} from {1}?", kb: "Kick and ban {0} from {1}?" }[kind];
+  const what = {
+    kick: "They'll be removed from the channel, and can rejoin.",
+    ban: "They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.",
+    kb: "They'll be removed from the channel and won't be able to join again until the ban is removed.",
+  }[kind];
+  const ok = { kick: "Kick", ban: "Ban", kb: "Kick + ban" }[kind];
+  const el = openModal(`<div class="modal-head no-i18n"><span>${tHtml(title, `<b style="color:${nickColor(nick)}">${esc(nick)}</b>`, esc(b.name))}</span></div>
+    <div class="modal-body"><p class="muted" style="margin:0 0 12px">${esc(t(what))}</p>
+    ${kind === "ban" ? "" : `<div class="field"><label>Reason</label><input type="text" id="modReason" maxlength="300" placeholder="${esc(set.kickReason || (kind === "kb" ? "Banned" : nick))}"></div><div class="hint">Everyone in the channel sees the reason.</div>`}</div>
+    <div class="modal-foot"><button class="btn" id="modCancel">Cancel</button><button class="btn danger-fill" id="modOk">${esc(t(ok))}</button></div>`, "sm");
+  const go = () => { const r = $("modReason")?.value || ""; closeOverlay(); run(r); };
+  $("modCancel").onclick = closeOverlay;
+  $("modOk").onclick = go;
+  $("modReason")?.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  ($("modReason") || $("modOk")).focus();
+  return el;
+}
+
 function userMenu(nick, e) {
   const srv = activeServer(), b = activeBuffer();
   if (!srv) return;
@@ -1845,9 +1875,10 @@ function userMenu(nick, e) {
     items.push("-");
     items.push(p.includes("@") ? ["Deop", () => send("/deop " + nick)] : ["Op", () => send("/op " + nick)]);
     items.push(p.includes("+") ? ["Devoice", () => send("/devoice " + nick)] : ["Voice", () => send("/voice " + nick)]);
-    items.push(["Kick…", () => openPrompt(`Kick ${nick}`, "Reason", "", (r) => send(`/kick ${nick} ${r || nick}`), "Kick")]);
-    items.push(["Ban", () => send("/ban " + nick)]);
-    items.push(["Kick + ban…", () => openPrompt(`Kick and ban ${nick}`, "Reason", "", (r) => send(`/kb ${nick} ${r || "Banned"}`), "Kick + ban")], "danger");
+    const ask = S.cfg.settings.confirmModeration !== false;
+    items.push([ask ? "Kick…" : "Kick", () => moderate("kick", srv, b, nick, send)]);
+    items.push([ask ? "Ban…" : "Ban", () => moderate("ban", srv, b, nick, send), "danger"]);
+    items.push([ask ? "Kick + ban…" : "Kick + ban", () => moderate("kb", srv, b, nick, send), "danger"]);
   }
   items.push("-");
   const custom = S.cfg.nickColors?.[nick.toLowerCase()] || S.cfg.nickColors?.[baseNick(nick)] || "";

@@ -699,5 +699,19 @@
 "Proxy password": "Mot de passe du proxy",
 "Optional": "Facultatif",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor est en général 127.0.0.1 port 9050 (Tor Browser : 9150). Les aperçus de liens et les transferts DCC ne passent pas par le proxy.",
-"Enter the proxy's host and port, or choose No proxy": "Saisissez l'hôte et le port du proxy, ou choisissez Aucun proxy"
+"Enter the proxy's host and port, or choose No proxy": "Saisissez l'hôte et le port du proxy, ou choisissez Aucun proxy",
+"Moderation": "Modération",
+"For channels where you're an operator.": "Pour les salons où vous êtes opérateur.",
+"Ask before kicking or banning someone, with a box for the reason": "Demander avant d'expulser ou de bannir quelqu'un, avec un champ pour la raison",
+"Default kick reason": "Raison d'expulsion par défaut",
+"Their nick": "Son pseudo",
+"Used when you leave the reason empty, or when you aren't asked.": "Utilisée si vous laissez la raison vide, ou si on ne vous demande pas.",
+"Kick {0} from {1}?": "Expulser {0} de {1} ?",
+"Ban {0} from {1}?": "Bannir {0} de {1} ?",
+"Kick and ban {0} from {1}?": "Expulser et bannir {0} de {1} ?",
+"They'll be removed from the channel, and can rejoin.": "La personne sera retirée du salon et pourra revenir.",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "La personne ne pourra plus rejoindre le salon tant que le bannissement n'est pas levé. Toute autre personne à la même adresse est aussi bannie. Elle n'est pas retirée si elle est déjà dans le salon.",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "La personne sera retirée du salon et ne pourra plus le rejoindre tant que le bannissement n'est pas levé.",
+"Everyone in the channel sees the reason.": "Tout le monde dans le salon voit la raison.",
+"Ban…": "Bannir…"
 }

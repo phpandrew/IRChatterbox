@@ -882,3 +882,7 @@ body.sb-mini .buf .draft-ico { display: none; }
 
 /* proxy fields */
 .px-addr { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
+
+/* destructive confirm button (kick / ban) */
+.btn.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-fill:hover { filter: brightness(1.08); }

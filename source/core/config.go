@@ -169,6 +169,10 @@ type Settings struct {
 	LinkPreviews bool `json:"linkPreviews"` // title, description and picture under web links
 	SpellCheck   bool `json:"spellCheck"`   // underline misspelled words in the message box
 
+	// moderation (the user list's Kick / Ban items)
+	ConfirmModeration bool   `json:"confirmModeration"` // ask (with a reason box) before kicking or banning
+	KickReason        string `json:"kickReason"`        // default reason; "" = the person's nick
+
 	// DCC (direct file transfers and chats)
 	DCCFolder  string `json:"dccFolder"`  // where received files go ("" = Downloads)
 	DCCAddress string `json:"dccAddress"` // address to give others ("" = detect)
@@ -267,7 +271,7 @@ func defaultConfig() Config {
 			AutoUpdateCheck: true, TrayIcon: true, FlashOnPing: true, PasteWarnLines: 5,
 			AutoAwayMinutes: 15, AutoAwayMessage: "Away from keyboard",
 			SoundHighlight: "chime", SoundPM: "ping", SoundVolume: 70,
-			KeepAlive: true, UploadHost: UploadHostIRChatterbox, LinkPreviews: true, SpellCheck: true,
+			KeepAlive: true, UploadHost: UploadHostIRChatterbox, LinkPreviews: true, SpellCheck: true, ConfirmModeration: true,
 		},
 		NickColors: map[string]string{},
 		Shortcuts:  defaultShortcuts(),

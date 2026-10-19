@@ -699,5 +699,19 @@
 "Proxy password": "Пароль прокси",
 "Optional": "Необязательно",
 "Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.": "Tor обычно 127.0.0.1, порт 9050 (Tor Browser: 9150). Превью ссылок и передачи DCC идут не через прокси.",
-"Enter the proxy's host and port, or choose No proxy": "Укажите адрес и порт прокси или выберите «Без прокси»"
+"Enter the proxy's host and port, or choose No proxy": "Укажите адрес и порт прокси или выберите «Без прокси»",
+"Moderation": "Модерация",
+"For channels where you're an operator.": "Для каналов, где вы оператор.",
+"Ask before kicking or banning someone, with a box for the reason": "Спрашивать перед киком или баном, с полем для причины",
+"Default kick reason": "Причина кика по умолчанию",
+"Their nick": "Их ник",
+"Used when you leave the reason empty, or when you aren't asked.": "Используется, если причина не указана или вас не спрашивают.",
+"Kick {0} from {1}?": "Кикнуть {0} из {1}?",
+"Ban {0} from {1}?": "Забанить {0} в {1}?",
+"Kick and ban {0} from {1}?": "Кикнуть и забанить {0} в {1}?",
+"They'll be removed from the channel, and can rejoin.": "Пользователь будет удалён из канала и сможет вернуться.",
+"They won't be able to join again until the ban is removed. Anyone else from the same address is banned too. They aren't removed if they're already in the channel.": "Пользователь не сможет войти, пока бан не снят. Все с того же адреса тоже забанены. Если он уже в канале, он не будет удалён.",
+"They'll be removed from the channel and won't be able to join again until the ban is removed.": "Пользователь будет удалён из канала и не сможет вернуться, пока бан не снят.",
+"Everyone in the channel sees the reason.": "Причину видят все в канале.",
+"Ban…": "Забанить…"
 }

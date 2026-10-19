@@ -579,6 +579,11 @@ export function openSettings(startTab) {
       <div class="field" id="gTxtRow" style="margin-top:10px"><label>Log folder</label>
         <div style="display:flex;gap:8px"><input type="text" id="gFolder" value="${esc(set.logFolder || "")}" placeholder="Default: the IRChatterbox data folder\\logs" style="flex:1">
         <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div></div>`) +
+      card("Moderation", "For channels where you're an operator.", `
+      ${check("gModConfirm", set.confirmModeration !== false, "Ask before kicking or banning someone, with a box for the reason")}
+      <div class="fgrid" style="margin-top:10px">
+        ${field("Default kick reason", text("gKickReason", set.kickReason || "", "Their nick"), "Used when you leave the reason empty, or when you aren't asked.")}
+      </div>`) +
       card("Startup & closing", "Configure how IRChatterbox starts and exits.", `
       <div class="win-only">${check("gAuto", set.startWithWindows, "Launch when I sign in to Windows")}
       <div class="indent">${check("gMin", set.startMinimized, "Start minimised to the taskbar")}</div></div>
@@ -1013,6 +1018,7 @@ export function openSettings(startTab) {
       set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
       set.sendTyping = on("gTyping");
       if (has("gSpell")) set.spellCheck = on("gSpell");
+      if (has("gModConfirm")) { set.confirmModeration = on("gModConfirm"); set.kickReason = val("gKickReason"); }
       if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
