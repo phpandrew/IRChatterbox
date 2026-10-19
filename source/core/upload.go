@@ -16,7 +16,7 @@ import (
 
 // Image uploads: the UI hands over an image picked, pasted or dropped into the message box,
 // and gets back a link to put in the message. Two hosts:
-//   - "irchatterbox" (default): i.irchatterbox.com shrinks it to fit 600×600, saves it as WebP
+//   - "irchatterbox" (default): i.irchatterbox.com shrinks it to fit 1000×1000, saves it as WebP
 //     and keeps it for 7 days.
 //   - "imgur": uploaded as-is with the user's own Imgur Client ID.
 

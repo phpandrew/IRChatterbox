@@ -2,10 +2,10 @@
 // IRChatterbox image host: one file, no dependencies beyond PHP's GD extension.
 //
 // POST https://your-server/upload.php with a multipart "image" field → JSON:
-//   200 {"ok":true,"url":"https://your-server/i/7/k3/k3x9Qa2mZp.webp","width":600,"height":450,"bytes":38211,"expires":"2026-10-24T18:00:00Z"}
+//   200 {"ok":true,"url":"https://your-server/i/7/k3/k3x9Qa2mZp.webp","width":1000,"height":750,"bytes":38211,"expires":"2026-10-24T18:00:00Z"}
 //   4xx/5xx {"ok":false,"error":"Only JPG, PNG, WebP and BMP images can be uploaded."}
 //
-// Each image is shrunk to fit 600×600, turned upright, saved as WebP without its metadata,
+// Each image is shrunk to fit 1000×1000, turned upright, saved as WebP without its metadata,
 // and given a random name. Delete old ones from cron (as the web server's user):
 //   7 * * * * php /path/to/upload.php cleanup
 //
@@ -28,8 +28,8 @@ $CONFIG = [
     'max_pixels' => 40_000_000, // GD needs ~5 bytes a pixel, hence memory_limit below
     'memory_limit' => '320M',
     // Output size and quality.
-    'max_width' => 600,
-    'max_height' => 600,
+    'max_width' => 1000,
+    'max_height' => 1000,
     'webp_quality' => 82,
     'id_length' => 10,
 ];

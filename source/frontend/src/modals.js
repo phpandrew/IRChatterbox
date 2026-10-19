@@ -685,7 +685,7 @@ export function openSettings(startTab) {
         $("uHostHint").textContent = imgur
           ? "Uploaded as-is to Imgur under your own Client ID. Imgur keeps images until they're deleted, and its own rules and limits apply."
           : custom ? "Uploaded to your server, which decides the size, format and how long images are kept."
-          : "Shrunk to fit 600×600 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
+          : "Shrunk to fit 1000×1000 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
       };
       $("uHost").addEventListener("change", sync); sync();
       document.querySelectorAll("#uImgurRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));

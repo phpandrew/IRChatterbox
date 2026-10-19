@@ -5,7 +5,7 @@ PHP server and point the app at it to keep uploads on your own machine.
 
 What it does with each upload:
 - Accepts JPG, PNG, WebP and BMP up to 10 MB and 40 megapixels.
-- Shrinks to fit 600×600 (aspect ratio kept), turns phone photos upright and strips all metadata.
+- Shrinks to fit 1000×1000 (aspect ratio kept), turns phone photos upright and strips all metadata.
 - Saves as WebP under a random name and returns its link.
 - Keeps it for 7 days. `php upload.php cleanup` deletes anything older.
 
@@ -37,7 +37,7 @@ Rate limiting is up to your web server; the public host allows 10 uploads a minu
 
 `POST /upload.php` with a multipart form field named `image`:
 
-    200 {"ok":true,"id":"k3x9Qa2mZp","url":"https://img.example.com/i/7/k3/k3x9Qa2mZp.webp","width":600,"height":450,"bytes":38211,"expires":"2026-10-24T18:00:00Z"}
+    200 {"ok":true,"id":"k3x9Qa2mZp","url":"https://img.example.com/i/7/k3/k3x9Qa2mZp.webp","width":1000,"height":750,"bytes":38211,"expires":"2026-10-24T18:00:00Z"}
     413 {"ok":false,"error":"Images can be at most 10 MB."}
     415 {"ok":false,"error":"Only JPG, PNG, WebP and BMP images can be uploaded."}
 
