@@ -89,7 +89,11 @@ func TestChannelNotifyRules(t *testing.T) {
 	if a.wantsNotify(c, "#c", "privmsg", false, true) {
 		t.Fatal("muted channel notified a mention")
 	}
-	a.store.Update(func(cf *Config) { r := cf.ChannelNotify["s1/#c"]; r.Until = time.Now().Add(-time.Minute).UnixMilli(); cf.ChannelNotify["s1/#c"] = r })
+	a.store.Update(func(cf *Config) {
+		r := cf.ChannelNotify["s1/#c"]
+		r.Until = time.Now().Add(-time.Minute).UnixMilli()
+		cf.ChannelNotify["s1/#c"] = r
+	})
 	if !a.wantsNotify(c, "#c", "privmsg", false, true) || a.notifyLevel("s1", "#c", false) != "mentions" {
 		t.Fatal("expired mute still in force")
 	}
@@ -136,7 +140,10 @@ func TestDCCParsing(t *testing.T) {
 // A file goes from DCCSend to an accepted offer over loopback, both sides in one test.
 func TestDCCTransferLoopback(t *testing.T) {
 	a := newBackupApp(t)
-	a.store.Update(func(c *Config) { c.Settings.DCCAddress = "127.0.0.1"; c.Settings.DCCFolder = filepath.Join(a.store.dir, "in") })
+	a.store.Update(func(c *Config) {
+		c.Settings.DCCAddress = "127.0.0.1"
+		c.Settings.DCCFolder = filepath.Join(a.store.dir, "in")
+	})
 	data := bytes.Repeat([]byte("IRChatterbox DCC "), 50000) // ~850 KB
 	src := filepath.Join(t.TempDir(), "src file.bin")
 	os.WriteFile(src, data, 0o644)

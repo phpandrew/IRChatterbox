@@ -311,7 +311,9 @@ function select(serverId, key) {
     saveUi();
   }
   const prev = activeBuffer();
-  if (prev && !(S.active.server === serverId && S.active.key === key)) {
+  const switching = !(S.active.server === serverId && S.active.key === key);
+  if (prev && switching && inputFor === draftKey(activeServer(), prev)) saveDraft(activeServer(), prev);
+  if (prev && switching) {
     // leaving a buffer: everything in it now counts as read, so the next message gets the line
     prev.marker = null;
     prev.markPending = true;
@@ -326,6 +328,7 @@ function select(serverId, key) {
   renderAll();
   renderTyping();
   renderReplyBar();
+  if (inputFor !== draftKey(srv, b)) restoreDraft(srv, b);
   b.markPending = false; // you're reading it now
   b.unread = 0; b.hl = 0; b.activity = false;
   scheduleTree();
@@ -333,6 +336,33 @@ function select(serverId, key) {
   afterSelect();
   if (!isMobile()) $("input").focus(); // on a phone that would pop the keyboard up every time
 }
+
+// ---------- drafts: what you'd typed in each channel stays there when you switch ----------
+const DRAFTS_KEY = "drafts";
+let drafts = (() => { try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || "{}"); } catch { return {}; } })();
+let draftTimer = 0;
+function draftKey(srv, b) { return srv.id + "/" + b.key; }
+function persistDrafts() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => { try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)); } catch {} }, 400);
+}
+window.addEventListener("beforeunload", () => { clearTimeout(draftTimer); try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)); } catch {} });
+function saveDraft(srv, b) {
+  if (!srv || !b) return;
+  const v = $("input").value;
+  const k = draftKey(srv, b);
+  if (v.trim()) drafts[k] = v.slice(0, 20000); else delete drafts[k];
+  persistDrafts();
+}
+let inputFor = ""; // whose draft the message box holds
+function restoreDraft(srv, b) {
+  inputFor = draftKey(srv, b);
+  const inp = $("input");
+  inp.value = drafts[draftKey(srv, b)] || "";
+  autosize();
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+}
+function hasDraft(srv, b) { return !!drafts[draftKey(srv, b)] && !isActive(srv, b); }
 
 function allBuffers() {
   const out = favourites().filter((f) => f.b).map(({ srv, b }) => ({ srv, b }));
@@ -398,6 +428,7 @@ const ICONS = {
   reply: `<svg viewBox="0 0 24 24"><path d="M10 8 5 12.5l5 4.5"/><path d="M5.5 12.5H14a5 5 0 0 1 5 5V19"/></svg>`,
   replyTo: `<svg viewBox="0 0 24 24"><path d="M6 5v6a4 4 0 0 0 4 4h9"/><path d="m15 11 4 4-4 4"/></svg>`,
   bellOff: `<svg viewBox="0 0 24 24"><path d="M9.5 20a2.6 2.6 0 0 0 5 0"/><path d="M17.5 13.5V10a5.5 5.5 0 0 0-9.3-4M6.5 9.8V14L5 16.5h11.5"/><path d="m4 4 16 16"/></svg>`,
+  pencil: `<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>`,
   star: `<svg viewBox="0 0 24 24"><path d="m12 3.8 2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z"/></svg>`,
   bell: `<svg viewBox="0 0 24 24"><path d="M9.5 20a2.6 2.6 0 0 0 5 0"/><path d="M6.5 10a5.5 5.5 0 0 1 11 0v4l1.5 2.5H5L6.5 14z"/></svg>`,
 };
@@ -545,7 +576,7 @@ function bufRow(srv, b, fav) {
   const drag = isFav || b.type === "channel" ? ` draggable="true"` : "";
   const tip = b.type === "server" ? "Server status" : fav ? `${b.name} · ${fav}` : b.name;
   const where = fav ? `<span class="fav-srv">${esc(fav)}</span>` : "";
-  return `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${isFav ? ` data-fav="1"` : ""}${drag} title="${esc(tip)}"><span class="ico${pic ? " pic" : ""}" data-l="${letter}" style="--tile:${nickColor(b.name || srv.cfg.name || "")}">${icoHtml}</span><span class="nm">${label}${where}</span>${muted ? `<span class="mute-ico" title="${esc(t("Notifications muted"))}">${ICONS.bellOff}</span>` : ""}${badge}${x}</div>`;
+  return `<div class="${cls}" data-s="${srv.id}" data-k="${esc(b.key)}"${isFav ? ` data-fav="1"` : ""}${drag} title="${esc(tip)}"><span class="ico${pic ? " pic" : ""}" data-l="${letter}" style="--tile:${nickColor(b.name || srv.cfg.name || "")}">${icoHtml}</span><span class="nm">${label}${where}</span>${hasDraft(srv, b) ? `<span class="draft-ico" title="${esc(t("Unsent message"))}">${ICONS.pencil}</span>` : ""}${muted ? `<span class="mute-ico" title="${esc(t("Notifications muted"))}">${ICONS.bellOff}</span>` : ""}${badge}${x}</div>`;
 }
 
 function updateTitle() {
@@ -716,6 +747,7 @@ function serverMenu(srv, e) {
   else items.push(["Disconnect", () => Go.Disconnect(srv.id)]);
   items.push(["Reconnect", () => Go.SendInput(srv.id, "", "/reconnect")]);
   items.push(["Join channel…", () => openPrompt("Join channel", "#channel", "", (v) => v && Go.SendInput(srv.id, "", "/join " + v))]);
+  if (srv.status === "connected") items.push(["Channel list…", () => openChannelList(srv)]);
   items.push("-");
   items.push(["Edit server…", () => editServer(srv.cfg)]);
   const hasIcon = !!S.icons[srv.id + "/*"];
@@ -1174,6 +1206,133 @@ async function dccPickAndSend(srv, nick) {
   if (!path) return;
   const err = await Go.DCCSend(srv.id, nick, path);
   if (err) toast(err, "error");
+}
+
+// ---------- channel browser (/list) ----------
+let chanList = null; // { srv, items, done, el }
+function openModal(html, cls = "") {
+  const ov = $("overlay");
+  ov.innerHTML = `<div class="modal ${cls}">${html}</div>`;
+  ov.classList.remove("hidden");
+  ov.onclick = (e) => { if (e.target === ov) closeOverlay(); };
+  return ov.firstElementChild;
+}
+function openChannelList(srv, filter = "") {
+  const el = openModal(`<div class="modal-head">Channels on <span class="no-i18n" style="margin-left:6px">${esc(srv.network || srv.cfg.name)}</span><button class="icon-btn" data-x="1" style="margin-left:auto">✕</button></div>
+    <div class="cl-bar"><input type="text" id="clFilter" placeholder="Filter by name or topic…" value="${esc(filter.replace(/^[*>].*/, ""))}">
+      <select id="clMin"><option value="0">Any size</option><option value="5">5+ users</option><option value="20">20+ users</option><option value="100">100+ users</option></select>
+      <button class="btn" id="clRefresh">Refresh</button></div>
+    <div class="cl-status muted" id="clStatus">Loading the channel list…</div>
+    <div class="cl-list" id="clList"></div>`, "lg chanlist");
+  chanList = { srv, items: [], done: false, el };
+  el.querySelector("[data-x]").onclick = closeOverlay;
+  const redraw = () => drawChannelList();
+  $("clFilter").addEventListener("input", redraw);
+  $("clMin").addEventListener("change", redraw);
+  $("clRefresh").onclick = () => { chanList.items = []; chanList.done = false; Go.ListChannels(srv.id, ""); drawChannelList(); };
+  $("clList").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-ch]");
+    if (!row) return;
+    if (e.target.closest("[data-join]") || e.detail > 1) {
+      Go.SendInput(srv.id, "", "/join " + row.dataset.ch);
+      toast(t("Joining {0}…", row.dataset.ch), "ok");
+    }
+  });
+  $("clFilter").focus();
+  Go.ListChannels(srv.id, /^[*>]/.test(filter) ? filter : "").then((err) => { if (err) { $("clStatus").textContent = err; } });
+}
+function drawChannelList() {
+  if (!chanList || !document.body.contains(chanList.el)) { chanList = null; return; }
+  const q = ($("clFilter").value || "").trim().toLowerCase();
+  const min = +$("clMin").value || 0;
+  const all = chanList.items;
+  const match = all.filter((c) => c.users >= min && (!q || c.name.toLowerCase().includes(q) || c.topic.toLowerCase().includes(q)));
+  match.sort((a, b) => b.users - a.users || a.name.localeCompare(b.name));
+  const shown = match.slice(0, 300);
+  const joined = new Set([...chanList.srv.buffers.values()].filter((b) => b.joined).map((b) => b.key));
+  $("clStatus").textContent = chanList.done
+    ? t("{0} channels", all.length.toLocaleString()) + (q || min ? " · " + t("{0} matching", match.length.toLocaleString()) : "") + (match.length > shown.length ? " · " + t("showing the {0} biggest", shown.length) : "")
+    : t("Loading the channel list… {0} so far", all.length.toLocaleString());
+  $("clList").innerHTML = shown.map((c) => `<div class="cl-row" data-ch="${esc(c.name)}" title="${esc(t("Double-click to join"))}">
+      <span class="cl-name no-i18n">${esc(c.name)}</span><span class="cl-users">${c.users.toLocaleString()}</span>
+      <span class="cl-topic no-i18n">${ircToHtml(c.topic, { mentionRe: null })}</span>
+      ${joined.has(c.name.toLowerCase()) ? `<span class="cl-in">Joined</span>` : `<button class="btn sm" data-join="1">Join</button>`}</div>`).join("") ||
+    (chanList.done ? `<div class="empty" style="padding:30px">No channels match.</div>` : "");
+}
+let clDraw = 0;
+function onChanList(x) {
+  if (!chanList || chanList.srv.id !== x.server) return;
+  if (x.start) chanList.items = [];
+  chanList.items.push(...(x.items || []));
+  if (x.done) chanList.done = true;
+  // big networks send tens of thousands: redraw at most a few times a second
+  if (!clDraw) clDraw = setTimeout(() => { clDraw = 0; drawChannelList(); }, x.done ? 0 : 300);
+}
+
+// ---------- search all history ----------
+let searchSeq = 0;
+function openSearch(initial = "") {
+  const srv = activeServer(), b = activeBuffer();
+  const el = openModal(`<div class="modal-head">Search history<button class="icon-btn" data-x="1" style="margin-left:auto">✕</button></div>
+    <div class="cl-bar"><input type="text" id="shQ" placeholder="Words to find (nicks count too)" value="${esc(initial)}">
+      <select id="shScope"><option value="all">Everywhere</option>${srv ? `<option value="srv">${esc(srv.cfg.name)}</option>` : ""}${b && b.type !== "server" ? `<option value="buf">${esc(b.name)}</option>` : ""}</select></div>
+    <div class="cl-status muted" id="shStatus">Type at least 2 letters.</div>
+    <div class="sh-wrap"><div class="sh-list" id="shList"></div><div class="sh-ctx hidden" id="shCtx"></div></div>`, "lg search");
+  el.querySelector("[data-x]").onclick = closeOverlay;
+  let timer = 0;
+  const run = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = $("shQ")?.value.trim() || "";
+      if (q.length < 2) { $("shStatus").textContent = t("Type at least 2 letters."); $("shList").innerHTML = ""; return; }
+      const scope = $("shScope").value;
+      const seq = ++searchSeq;
+      $("shStatus").textContent = t("Searching…");
+      const r = await Go.SearchHistory(q, scope === "all" ? "" : srv.id, scope === "buf" ? b.name : "");
+      if (seq !== searchSeq || !$("shList")) return;
+      const hits = r?.hits || [];
+      $("shStatus").textContent = hits.length ? (r.more ? t("Newest {0} matches", hits.length) : t("{0} matches", hits.length)) : t("Nothing found.");
+      const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+      const mark = (html) => words.reduce((h, w) => h.replace(new RegExp("(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")(?![^<]*>)", "gi"), "<mark>$1</mark>"), html);
+      $("shList").innerHTML = hits.map((h, i) => `<div class="sh-hit" data-i="${i}">
+        <div class="sh-where no-i18n"><b>${esc(h.buffer)}</b> · ${esc(h.serverName || "")} · ${esc(new Date(h.time).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}</div>
+        <div class="sh-text no-i18n"><span style="color:${nickColor(h.nick)};font-weight:600">${esc(h.nick)}</span> ${mark(ircToHtml(h.text, { mentionRe: null }))}</div></div>`).join("");
+      $("shList").onclick = (e) => {
+        const row = e.target.closest(".sh-hit");
+        if (!row) return;
+        document.querySelectorAll(".sh-hit.on").forEach((x) => x.classList.remove("on"));
+        row.classList.add("on");
+        showSearchContext(hits[+row.dataset.i]);
+      };
+    }, 250);
+  };
+  $("shQ").addEventListener("input", run);
+  $("shScope").addEventListener("change", run);
+  $("shQ").focus();
+  if (initial) run();
+}
+async function showSearchContext(h) {
+  const box = $("shCtx");
+  box.classList.remove("hidden");
+  box.innerHTML = `<div class="muted" style="padding:12px">…</div>`;
+  const lines = (await Go.HistoryAround(h.server, h.buffer, h.time, 12)) || [];
+  const srv = S.byId[h.server];
+  box.innerHTML = `<div class="sh-ctx-head"><b class="no-i18n">${esc(h.buffer)}</b>${srv ? `<button class="btn sm primary" id="shGo">Open ${esc(h.buffer)}</button>` : ""}</div>
+    <div class="sh-ctx-lines no-i18n">${lines.map((l) => `<div class="sh-l${l.time === h.time && l.text === h.text ? " hit" : ""}"><span class="ts">${fmtTime(l.time)}</span>${
+      l.type === "msg" ? `<b style="color:${nickColor(l.nick)}">${esc(l.nick)}</b> ${ircToHtml(l.text || "", { mentionRe: null })}` : `<i>${esc(l.text || l.kind || "")}</i>`}</div>`).join("")}</div>`;
+  box.querySelector(".sh-l.hit")?.scrollIntoView({ block: "center" });
+  const go = $("shGo");
+  if (go) go.onclick = () => {
+    closeOverlay();
+    const b = ensureBuffer(srv, h.buffer);
+    select(srv.id, b.key);
+    setTimeout(() => {
+      const line = b.lines.find((l) => l.t === h.time && l.text === h.text);
+      const el = line && [...$("chat").querySelectorAll(".line")].find((x) => lineOf.get(x) === line);
+      if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("flash"); }
+      else toast(t("That message is older than what's loaded here; it's shown in the search window."), "");
+    }, 150);
+  };
 }
 
 // ---------- link previews ----------
@@ -1859,7 +2018,7 @@ function autosize() {
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 160) + "px";
 }
-input.addEventListener("input", () => { autosize(); updateCompletions(); tabState = null; onTypingInput(); });
+input.addEventListener("input", () => { autosize(); updateCompletions(); tabState = null; onTypingInput(); const srv = activeServer(), b = activeBuffer(); if (srv && b) { inputFor = draftKey(srv, b); saveDraft(srv, b); } });
 
 const COMMANDS = [
   ["join", "#channel [key]"], ["part", "[#channel] [message]"], ["msg", "nick message"], ["query", "nick [message]"], ["me", "action"],
@@ -2160,6 +2319,8 @@ function send() {
 }
 
 function finishSend(srv, b, original, text) {
+  delete drafts[draftKey(srv, b)];
+  persistDrafts();
   S.inputHistory.unshift(original);
   S.inputHistory = S.inputHistory.slice(0, 100);
   S.histPos = -1;
@@ -2221,6 +2382,7 @@ function applyFind() {
 }
 $("findInput").addEventListener("input", () => { findText = $("findInput").value.trim().toLowerCase(); applyFind(); });
 $("findInput").addEventListener("keydown", (e) => { if (e.key === "Escape") closeFind(); });
+$("findAll").addEventListener("click", () => { const q = $("findInput").value.trim(); closeFind(); openSearch(q); });
 $("findBtn").onclick = openFind;
 $("findClose").onclick = closeFind;
 
@@ -2268,6 +2430,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { if (overlayOpen) closeOverlay(); hideMenu(); return; }
   if (overlayOpen) return;
   if (e.ctrlKey && e.key.toLowerCase() === "k") { e.preventDefault(); openSwitcher(); }
+  else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "f") { e.preventDefault(); openSearch(); }
   else if (e.ctrlKey && e.key.toLowerCase() === "f") { e.preventDefault(); openFind(); }
   else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) { e.preventDefault(); cycleBuffer(e.key === "ArrowDown" ? 1 : -1); }
   else if (e.ctrlKey && e.key === "Tab") { e.preventDefault(); cycleBuffer(e.shiftKey ? -1 : 1); }
@@ -2503,6 +2666,8 @@ async function boot() {
   Go.PluginCommands().then((list) => { pluginCommands = list || []; });
   on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
   on("dcc", onDCC);
+  on("chanlist", onChanList);
+  on("chanlistOpen", (x) => { const srv = S.byId[x.server]; if (srv) openChannelList(srv, x.filter || ""); });
   on("dccPick", (x) => { const srv = S.byId[x.server]; if (srv) dccPickAndSend(srv, x.nick); });
   on("icons", (icons) => { S.icons = icons || {}; renderTree(); renderHeader(); renderMe(); });
   on("focusBuffer", ({ server, buffer }) => {

@@ -327,6 +327,19 @@ export async function openServerEditor(cfg, onSaved) {
         ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
         <div class="field full">${check("sSkip", c.tlsSkipVerify, "Accept invalid certificates")}<div class="hint indent">Only for servers with a self-signed certificate that you trust.</div></div>
       </div>
+      <div class="section-title">Proxy</div>
+      <div class="fgrid">
+        ${field("Connect through", `<select id="sPxType">
+          <option value="">No proxy</option>
+          <option value="socks5" ${c.proxyType === "socks5" ? "selected" : ""}>SOCKS5 proxy (Tor, SSH, VPN apps)</option>
+          <option value="http" ${c.proxyType === "http" ? "selected" : ""}>HTTP proxy</option></select>`, "", true)}
+        <div class="field full px-row"><div class="px-addr">
+          ${field("Proxy host", text("sPxHost", c.proxyHost, "127.0.0.1"))}
+          ${field("Port", text("sPxPort", c.proxyPort || "", "9050", "number"))}</div></div>
+        <div class="px-row">${field("Proxy user name", text("sPxUser", c.proxyUser, "Optional"))}</div>
+        <div class="px-row">${field("Proxy password", `<input type="password" id="sPxPass" value="${esc(c.proxyPass || "")}" placeholder="Optional" autocomplete="off">`)}</div>
+        <div class="hint full px-row">Tor is usually 127.0.0.1 port 9050 (Tor Browser: 9150). Link previews and DCC transfers don't go through the proxy.</div>
+      </div>
       </div>
     </div>
     <div class="modal-foot">
@@ -367,6 +380,9 @@ export async function openServerEditor(cfg, onSaved) {
   };
   document.querySelectorAll(".mode-opt").forEach((b) => (b.onclick = () => { setMode(b.dataset.mode === "bouncer"); $("sHost").focus(); }));
   setMode(!!c.bouncer);
+  const pxSync = () => document.querySelectorAll(".px-row").forEach((r) => r.classList.toggle("hidden", !$("sPxType").value));
+  $("sPxType").addEventListener("change", () => { pxSync(); if ($("sPxType").value && !val("sPxHost")) { $("sPxHost").value = "127.0.0.1"; $("sPxPort").value = $("sPxType").value === "socks5" ? "9050" : "8080"; } });
+  pxSync();
   Go.GetEncodings().then((list) => {
     $("sEnc").innerHTML = (list || [["auto", "Automatic"]]).map(([v, l]) => `<option value="${v}" ${(c.encoding || "auto") === v ? "selected" : ""}>${esc(l)}</option>`).join("");
   });
@@ -435,7 +451,13 @@ export async function openServerEditor(cfg, onSaved) {
       rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"), encoding: $("sEnc").value,
       bouncer: bnc ? $("sBnc").value : "", bouncerUser: val("sBncUser"), bouncerPass: $("sBncPass").value, bouncerNetwork: val("sBncNet"),
       encryptionKey: $("sEncKey").value.trim(),
+      proxyType: $("sPxType").value, proxyHost: val("sPxHost"), proxyPort: parseInt(val("sPxPort")) || 0, proxyUser: val("sPxUser"), proxyPass: $("sPxPass").value,
     };
+    if (out.proxyType && (!out.proxyHost || !out.proxyPort)) {
+      showTab("adv");
+      $("sErr").textContent = "Enter the proxy's host and port, or choose No proxy";
+      return;
+    }
     const saved = await Go.SaveServer(out);
     if (!saved?.id) { $("sErr").textContent = "Couldn't save the server"; return; }
     if (icon !== undefined) await Go.SetChannelIcon(saved.id, "*", icon);

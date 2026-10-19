@@ -42,6 +42,13 @@ type ServerConfig struct {
 	BouncerNetwork string `json:"bouncerNetwork"` // which of the bouncer's networks (optional)
 	// age private key(s) for reading encrypted bouncer history; never sent anywhere
 	EncryptionKey string `json:"encryptionKey,omitempty"`
+
+	// proxy (proxy.go): "" / none | socks5 | http
+	ProxyType string `json:"proxyType,omitempty"`
+	ProxyHost string `json:"proxyHost,omitempty"`
+	ProxyPort int    `json:"proxyPort,omitempty"`
+	ProxyUser string `json:"proxyUser,omitempty"`
+	ProxyPass string `json:"proxyPass,omitempty"`
 }
 
 // bouncerLogin is the bouncer username with the network appended (andrew/libera),

@@ -206,6 +206,10 @@ func (a *App) runCommandFrom(c *Conn, buffer, line string, fromScript bool) {
 		if requireConn() && arg(0) != "" {
 			c.Notice(arg(0), after(1))
 		}
+	case "list":
+		if requireConn() {
+			a.emitUI("chanlistOpen", map[string]any{"server": c.cfg.ID, "filter": rest})
+		}
 	case "dcc":
 		a.dccCommand(c, buffer, rest)
 	case "ctcp":

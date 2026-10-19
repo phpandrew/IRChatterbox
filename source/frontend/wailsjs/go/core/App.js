@@ -130,6 +130,10 @@ export function GetVersion() {
   return window['go']['core']['App']['GetVersion']();
 }
 
+export function HistoryAround(arg1, arg2, arg3, arg4) {
+  return window['go']['core']['App']['HistoryAround'](arg1, arg2, arg3, arg4);
+}
+
 export function ImportSettings(arg1, arg2) {
   return window['go']['core']['App']['ImportSettings'](arg1, arg2);
 }
@@ -140,6 +144,10 @@ export function InspectSettings(arg1) {
 
 export function InstallUpdate() {
   return window['go']['core']['App']['InstallUpdate']();
+}
+
+export function ListChannels(arg1, arg2) {
+  return window['go']['core']['App']['ListChannels'](arg1, arg2);
 }
 
 export function LogUI(arg1) {
@@ -260,6 +268,10 @@ export function SaveShortcuts(arg1) {
 
 export function SaveTheme(arg1) {
   return window['go']['core']['App']['SaveTheme'](arg1);
+}
+
+export function SearchHistory(arg1, arg2, arg3) {
+  return window['go']['core']['App']['SearchHistory'](arg1, arg2, arg3);
 }
 
 export function SendInput(arg1, arg2, arg3) {

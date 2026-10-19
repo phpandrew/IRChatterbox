@@ -258,11 +258,11 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .fgrid .full { grid-column: 1 / -1; }
 .field label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
-.field input[type=text], .field input[type=password], .field input[type=number], .field select, .field textarea {
+.field input[type=text], .field input[type=password], .field input[type=number], .field select, .field textarea, .cl-bar input, .cl-bar select {
   width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; outline: none;
 }
 .field textarea { min-height: 70px; resize: vertical; font-family: var(--mono); font-size: 12.5px; }
-.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+.field input:focus, .field select:focus, .field textarea:focus, .cl-bar input:focus, .cl-bar select:focus { border-color: var(--accent); }
 .field .hint { font-size: 11.5px; color: var(--text-faint); margin-top: 3px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
 .check input[type=checkbox] {
@@ -611,6 +611,10 @@ body.mobile #findBar { padding: 6px 8px; }
 /* menus and dialogs */
 body.mobile #menu { min-width: 220px; max-width: calc(100vw - 16px); }
 body.mobile #menu .mi { padding: 12px 14px; font-size: 15px; }
+/* checkbox items: room for the box (the rule above would otherwise put the text under it) */
+body.mobile #menu .mi.chk { padding-left: 42px; }
+body.mobile #menu .mi.chk::before { left: 14px; width: 16px; height: 16px; margin-top: -9px; }
+body.mobile #menu .mi.chk.on::after { left: 19.5px; width: 5px; height: 9px; margin-top: -7px; }
 body.mobile #toast { top: auto; bottom: 84px; max-width: calc(100vw - 32px); }
 body.mobile #overlay { place-items: end center; }
 body.mobile .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
@@ -836,3 +840,45 @@ body.sb-mini .buf .mute-ico { display: none; }
   body.sb-mini .fav-head .fav-title, body.sb-mini .buf .fav-srv { display: none; }
   body.sb-mini .fav-head .fav-star svg { width: 18px; height: 18px; }
 }
+
+/* drafts */
+.buf .draft-ico { display: grid; place-items: center; flex: none; margin-left: 4px; color: var(--text-faint); }
+.buf .draft-ico svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.sb-mini .buf .draft-ico { display: none; }
+
+/* away people in the user list */
+.ul-user.away .n { font-style: italic; }
+
+/* channel browser + search history */
+.modal.lg { width: min(980px, 95vw); height: 82vh; }
+.cl-bar { display: flex; gap: 8px; padding: 4px 20px 8px; }
+.cl-bar input { flex: 1; min-width: 0; }
+.cl-bar select { width: auto; flex: none; }
+.cl-status { padding: 0 20px 8px; font-size: 12px; }
+.cl-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); }
+.cl-row { display: grid; grid-template-columns: minmax(120px, 210px) 56px 1fr auto; gap: 12px; align-items: center; padding: 7px 20px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: default; }
+.cl-row:hover { background: var(--bg-hover); }
+.cl-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-users { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12.5px; }
+.cl-topic { color: var(--text-muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cl-in { font-size: 12px; color: var(--success); padding: 0 6px; }
+.sh-wrap { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--border); }
+.sh-list { flex: 1; overflow-y: auto; min-width: 0; }
+.sh-hit { padding: 8px 20px; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); cursor: pointer; }
+.sh-hit:hover { background: var(--bg-hover); }
+.sh-hit.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sh-where { font-size: 11.5px; color: var(--text-faint); margin-bottom: 2px; }
+.sh-where b { color: var(--text-muted); }
+.sh-text { overflow-wrap: anywhere; line-height: 1.4; }
+.sh-text mark, .sh-ctx mark { background: var(--hl-bg); color: inherit; box-shadow: 0 0 0 1px var(--hl-border); border-radius: 2px; }
+.sh-ctx { width: 46%; border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+.sh-ctx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.sh-ctx-lines { flex: 1; overflow-y: auto; padding: 6px 0; font-size: 13px; }
+.sh-l { padding: 2px 12px; overflow-wrap: anywhere; }
+.sh-l .ts { color: var(--text-faint); font-size: 11px; margin-right: 8px; font-variant-numeric: tabular-nums; }
+.sh-l.hit { background: var(--hl-bg); box-shadow: inset 3px 0 0 var(--hl-border); }
+@media (max-width: 760px) { .sh-wrap { flex-direction: column; } .sh-ctx { width: auto; height: 45%; border-left: 0; border-top: 1px solid var(--border); } .cl-row { grid-template-columns: 1fr auto auto; } .cl-topic { grid-column: 1 / -1; } }
+#findAll { margin-right: 4px; white-space: nowrap; }
+
+/* proxy fields */
+.px-addr { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }

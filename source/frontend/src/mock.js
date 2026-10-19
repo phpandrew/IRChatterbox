@@ -14,7 +14,7 @@ const cfg = {
   plugins: { botPrefix: "[Bot] ", weatherEnabled: true, weatherFromMe: true, weatherFromOthers: true, weatherChannels: [], weatherCooldown: 5, urlCommands: [{ trigger: "!solar", url: "https://example.com/solar", template: "", maxLines: 3, cooldown: 30, enabled: true }], scriptsEnabled: true },
 };
 const users = ["~DaveLegg", "~Neobond", "@Andrew", "@Caleo", "%ammali", "%bemis|back", "%Enigma-Penguin|L", "%LogicalApex", "%The_Decryptor", "Alan-", "binaryzero", "brock_aholic", "Hackerpcs", "Kennyout", "kinghat", "Mike", "peachey|cloud", "Ryoken", "SierraSonic", "zyme"]
-  .map((n) => ({ nick: n.replace(/^[~@%+]/, ""), prefix: /^[~@%+]/.test(n) ? n[0] : "" }));
+  .map((n) => ({ nick: n.replace(/^[~@%+]/, ""), prefix: /^[~@%+]/.test(n) ? n[0] : "", away: ["Hackerpcs", "kinghat", "Ryoken"].includes(n) }));
 
 const mockIcons = {};
 export const api = {
@@ -70,6 +70,29 @@ export const api = {
   GetLinkPreview: (url) => new Promise((r) => setTimeout(() => r(new URL(url).hostname === "github.com"
     ? { url, title: "phpandrew/IRChatterbox: A modern IRC client for Windows, macOS, Linux and Android", description: "Inline images, coloured nicks, plugins, mIRC scripts, bouncer history and 11 languages. Built with Go and Wails.", image: "https://picsum.photos/id/180/300/300", site: "GitHub" }
     : { url, error: "no preview" }), 300)),
+  ListChannels: (s) => {
+    const topics = ["Linux support · be nice", "General chat", "Go programming language", "", "\x02Rust\x02 · https://rust-lang.org", "Photography", "Raspberry Pi", "Home automation"];
+    const items = Array.from({ length: 1200 }, (_, i) => ({ name: "#" + ["linux", "go", "rust", "photo", "pi", "homeassistant", "music", "chat"][i % 8] + (i > 7 ? "-" + i : ""), users: Math.max(1, Math.round(2000 / (i + 1))), topic: topics[i % 8] }));
+    emit("chanlist", { server: s, items: [], start: true });
+    setTimeout(() => emit("chanlist", { server: s, items: items.slice(0, 600) }), 200);
+    setTimeout(() => emit("chanlist", { server: s, items: items.slice(600), done: true }), 500);
+    return "";
+  },
+  SearchHistory: (q) => {
+    const base = Date.now() - 86400e3 * 3;
+    const hits = [
+      { type: "msg", server: "neo", serverName: "Neowin", buffer: "#neowin", nick: "Alan-", text: "the raspberry pi 5 needs the 27W supply", time: base + 5e6 },
+      { type: "msg", server: "lib", serverName: "Libera.Chat", buffer: "#linux", nick: "flux", text: "kernel panic on my Raspberry Pi again", time: base + 2e6 },
+      { type: "msg", server: "neo", serverName: "Neowin", buffer: "Kennyout", nick: "Kennyout", text: "sent you the pi case STL", time: base },
+    ].filter((h) => q.toLowerCase().split(/\s+/).every((w) => (h.nick + " " + h.text).toLowerCase().includes(w)));
+    return { hits, more: false };
+  },
+  HistoryAround: (s, b, t) => [
+    { type: "msg", nick: "Caleo", text: "what power supply are you using?", time: t - 120e3 },
+    { type: "msg", nick: "Andrew", text: "the old 15W one", time: t - 60e3 },
+    { type: "msg", nick: "Alan-", text: "the raspberry pi 5 needs the 27W supply", time: t },
+    { type: "msg", nick: "Andrew", text: "ah that explains it", time: t + 60e3 },
+  ],
   SetFavourite: (s, b, on) => {
     cfg.favourites = (cfg.favourites || []).filter((f) => !(f.server === s && f.buffer.toLowerCase() === b.toLowerCase()));
     if (on) cfg.favourites.push({ server: s, buffer: b });

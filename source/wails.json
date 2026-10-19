@@ -13,8 +13,8 @@
   "info": {
     "companyName": "Tshirtgang",
     "productName": "IRChatterbox",
-    "productVersion": "0.3.0",
-    "copyright": "Andrew",
+    "productVersion": "0.6.0",
+    "copyright": "Copyright © 2026 Andrew Lyle. MIT License.",
     "comments": "Modern IRC client"
   }
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -89,12 +90,16 @@ type Conn struct {
 
 	// IRCv3 extras (ircv3.go)
 	labelSeq      int
-	pending       []pendingMsg // sent, waiting for echo-message
-	clientTagDeny string       // ISUPPORT CLIENTTAGDENY
-	monitorMax    int          // ISUPPORT MONITOR: -1 = not supported, 0 = no limit
-	monInitial    bool         // first MONITOR replies after connecting (no toasts)
-	prevOnline    int64        // when this bouncer connection was last online (ms), loaded at connect
-	onlineSince   time.Time    // set once registered
+	pending       []pendingMsg    // sent, waiting for echo-message
+	clientTagDeny string          // ISUPPORT CLIENTTAGDENY
+	whox          bool            // ISUPPORT WHOX
+	autoWho       map[string]bool // channels we sent WHO for, to learn who's away (lowercase)
+	listing       []ChanListItem  // channel list (LIST) being collected for the browser
+	listActive    bool
+	monitorMax    int       // ISUPPORT MONITOR: -1 = not supported, 0 = no limit
+	monInitial    bool      // first MONITOR replies after connecting (no toasts)
+	prevOnline    int64     // when this bouncer connection was last online (ms), loaded at connect
+	onlineSince   time.Time // set once registered
 }
 
 func newConn(app *App, cfg ServerConfig) *Conn {
@@ -267,16 +272,19 @@ func (c *Conn) run() {
 }
 
 func (c *Conn) session(addr string) error {
-	d := &net.Dialer{Timeout: 20 * time.Second, KeepAlive: 60 * time.Second}
-	var nc net.Conn
-	var err error
-	if c.cfg.TLS {
-		nc, err = tls.DialWithDialer(d, "tcp", addr, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify})
-	} else {
-		nc, err = d.Dial("tcp", addr)
-	}
+	nc, err := dialServer(context.Background(), c.cfg, addr)
 	if err != nil {
 		return err
+	}
+	if c.cfg.TLS {
+		tc := tls.Client(nc, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify})
+		tc.SetDeadline(time.Now().Add(20 * time.Second))
+		if err := tc.Handshake(); err != nil {
+			nc.Close()
+			return err
+		}
+		tc.SetDeadline(time.Time{})
+		nc = tc
 	}
 	out := make(chan string, 512)
 	c.mu.Lock()
@@ -295,6 +303,9 @@ func (c *Conn) session(addr string) error {
 	c.replayBase = map[string]int64{}
 	c.pending = nil
 	c.clientTagDeny = ""
+	c.whox = false
+	c.autoWho = map[string]bool{}
+	c.listing, c.listActive = nil, false
 	c.monitorMax = -1
 	c.prevOnline = c.app.lastOnline(c.cfg.ID)
 	c.historyLimit = 0
@@ -873,6 +884,10 @@ func (c *Conn) handle(m *Message) {
 				for i := 0; i < 4 && i < len(parts); i++ {
 					c.chanModes[i] = parts[i]
 				}
+			case "WHOX":
+				c.mu.Lock()
+				c.whox = true
+				c.mu.Unlock()
 			case "CLIENTTAGDENY":
 				c.mu.Lock()
 				c.clientTagDeny = v
@@ -1095,6 +1110,21 @@ func (c *Conn) handle(m *Message) {
 		}
 	case "366":
 		c.emitUsersSoon(m.Param(1))
+		c.whoForAway(m.Param(1))
+	case "352", "354", "315":
+		if c.onAutoWho(m) {
+			return
+		}
+		c.info("", "server", strings.Join(m.Params[1:], " "))
+	case "321", "322", "323":
+		if c.onList(m) {
+			return
+		}
+		if m.Command == "322" {
+			c.info("", "list", fmt.Sprintf("%-20s %5s  %s", m.Param(1), m.Param(2), m.Trailing()))
+		} else {
+			c.info("", "server", strings.Join(m.Params[1:], " "))
+		}
 
 	case "324":
 		c.mu.Lock()
@@ -1154,11 +1184,9 @@ func (c *Conn) handle(m *Message) {
 		c.info("*active*", "info", m.Trailing())
 	case "372", "375", "376", "422":
 		c.info("", "motd", m.Trailing())
-	case "322":
-		c.info("", "list", fmt.Sprintf("%-20s %5s  %s", m.Param(1), m.Param(2), m.Trailing()))
 	case "401", "402", "403", "404", "405", "406", "411", "412", "421", "441", "442", "443", "461", "471", "473", "474", "475", "477", "478", "481", "482":
 		c.info("*active*", "error", strings.Join(m.Params[1:], " "))
-	case "321", "323", "315", "352":
+	case "391":
 		c.info("", "server", strings.Join(m.Params[1:], " "))
 	default:
 		if len(m.Command) == 3 && m.Command[0] >= '0' && m.Command[0] <= '9' {

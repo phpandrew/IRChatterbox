@@ -107,6 +107,9 @@ Every push to `main` that passes the build and security checks is released autom
 ## Security
 IRC text is never rendered as HTML, and the app has a strict Content Security Policy. Dependencies and code are scanned daily, and findings are opened as issues automatically. To report a problem privately, see **[SECURITY.md](SECURITY.md)**.
 
+## License
+IRChatterbox is free and open source under the [MIT License](../LICENSE).
+
 ## Build from source
 See **[docs/BUILDING.md](../docs/BUILDING.md)** for requirements, building, live-reload development, running the tests and how releases work.
 

@@ -388,6 +388,11 @@ export namespace core {
 	    bouncerPass: string;
 	    bouncerNetwork: string;
 	    encryptionKey?: string;
+	    proxyType?: string;
+	    proxyHost?: string;
+	    proxyPort?: number;
+	    proxyUser?: string;
+	    proxyPass?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ServerConfig(source);
@@ -420,6 +425,11 @@ export namespace core {
 	        this.bouncerPass = source["bouncerPass"];
 	        this.bouncerNetwork = source["bouncerNetwork"];
 	        this.encryptionKey = source["encryptionKey"];
+	        this.proxyType = source["proxyType"];
+	        this.proxyHost = source["proxyHost"];
+	        this.proxyPort = source["proxyPort"];
+	        this.proxyUser = source["proxyUser"];
+	        this.proxyPass = source["proxyPass"];
 	    }
 	}
 	export class StartBuffer {
@@ -721,6 +731,74 @@ export namespace core {
 	        this.message = source["message"];
 	        this.context = source["context"];
 	    }
+	}
+	export class SearchHit {
+	    type: string;
+	    server: string;
+	    buffer: string;
+	    kind?: string;
+	    nick?: string;
+	    prefix?: string;
+	    text?: string;
+	    time: number;
+	    self?: boolean;
+	    highlight?: boolean;
+	    extra?: Record<string, any>;
+	    serverName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchHit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.server = source["server"];
+	        this.buffer = source["buffer"];
+	        this.kind = source["kind"];
+	        this.nick = source["nick"];
+	        this.prefix = source["prefix"];
+	        this.text = source["text"];
+	        this.time = source["time"];
+	        this.self = source["self"];
+	        this.highlight = source["highlight"];
+	        this.extra = source["extra"];
+	        this.serverName = source["serverName"];
+	    }
+	}
+	export class SearchResult {
+	    hits: SearchHit[];
+	    more: boolean;
+	    scanned: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hits = this.convertValues(source["hits"], SearchHit);
+	        this.more = source["more"];
+	        this.scanned = source["scanned"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class ServerState {

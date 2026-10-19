@@ -66,11 +66,15 @@ export function GetThemes():Promise<Array<core.Theme>>;
 
 export function GetVersion():Promise<string>;
 
+export function HistoryAround(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<core.Event>>;
+
 export function ImportSettings(arg1:string,arg2:string):Promise<string>;
 
 export function InspectSettings(arg1:string):Promise<core.BackupInfo>;
 
 export function InstallUpdate():Promise<string>;
+
+export function ListChannels(arg1:string,arg2:string):Promise<string>;
 
 export function LogUI(arg1:string):Promise<void>;
 
@@ -131,6 +135,8 @@ export function SaveSettings(arg1:core.Settings):Promise<string>;
 export function SaveShortcuts(arg1:Array<core.Shortcut>):Promise<void>;
 
 export function SaveTheme(arg1:core.Theme):Promise<void>;
+
+export function SearchHistory(arg1:string,arg2:string,arg3:string):Promise<core.SearchResult>;
 
 export function SendInput(arg1:string,arg2:string,arg3:string):Promise<void>;
 

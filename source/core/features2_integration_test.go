@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,5 +141,78 @@ func TestDCCOverIRC(t *testing.T) {
 	b.SendInput(sb, "="+anick, "/me waves")
 	la.waitFor(t, "dcc action", func(e Event) bool { return e.Type == "msg" && e.Kind == "action" && e.Text == "waves" })
 	a.DCCDecline(co.ID)
-	lb.waitFor(t, "closed", func(e Event) bool { return e.Type == "info" && e.Buffer == "="+anick && e.Text == "Direct chat with "+anick+" closed." })
+	lb.waitFor(t, "closed", func(e Event) bool {
+		return e.Type == "info" && e.Buffer == "="+anick && e.Text == "Direct chat with "+anick+" closed."
+	})
+}
+
+func TestAwayListAndProxyOnErgo(t *testing.T) {
+	ch := "#aw" + newID()[:4]
+	a, b, la, _, sa, sb := ergoPair(t, ch)
+	bnick := b.conn(sb).Nick()
+	// bob is away before a third client joins: that client must see him as away straight away
+	b.SendInput(sb, ch, "/away gone fishing")
+	time.Sleep(300 * time.Millisecond)
+
+	// the third client connects through a SOCKS5 proxy
+	paddr, asked := fakeSOCKS5(t, "", "")
+	ph, pp, _ := strings.Cut(paddr, ":")
+	port, _ := strconv.Atoi(pp)
+	c3 := newBackupApp(t)
+	l3 := &evLog{}
+	c3.testHook = l3.add
+	c3.store.Update(func(c *Config) { c.Servers = nil })
+	sv := c3.SaveServer(ServerConfig{Name: "Ergo", Host: "127.0.0.1", Port: 6667, Nick: "px" + newID()[:4], AutoJoin: []string{ch},
+		ProxyType: "socks5", ProxyHost: ph, ProxyPort: port})
+	c3.Connect(sv.ID)
+	defer c3.Disconnect(sv.ID)
+	if got := <-asked; got != "127.0.0.1:6667" {
+		t.Fatalf("proxy asked for %s", got)
+	}
+	l3.waitFor(t, "users with bob away", func(e Event) bool {
+		if e.Type != "users" || e.Buffer != ch {
+			return false
+		}
+		for _, u := range e.Extra["users"].([]User) {
+			if u.Nick == bnick && u.Away {
+				return true
+			}
+		}
+		return false
+	})
+	for _, e := range l3.all {
+		if e.Type == "info" && strings.Contains(e.Text, "End of WHO") {
+			t.Fatal("the automatic WHO was shown")
+		}
+	}
+	// coming back is seen live (away-notify)
+	b.SendInput(sb, ch, "/away")
+	la.waitFor(t, "bob back", func(e Event) bool {
+		if e.Type != "users" || e.Buffer != ch {
+			return false
+		}
+		for _, u := range e.Extra["users"].([]User) {
+			if u.Nick == bnick && !u.Away {
+				return true
+			}
+		}
+		return false
+	})
+	// the channel list is collected, not printed
+	if err := a.ListChannels(sa, ""); err != "" {
+		t.Fatal(err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	c := a.conn(sa)
+	c.mu.Lock()
+	active := c.listActive
+	c.mu.Unlock()
+	if active {
+		t.Fatal("list never finished")
+	}
+	for _, e := range la.all {
+		if e.Type == "info" && e.Kind == "list" {
+			t.Fatal("list lines printed while browsing")
+		}
+	}
 }
