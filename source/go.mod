@@ -3,7 +3,7 @@ module irchatterbox
 go 1.26.9
 
 require (
-	filippo.io/age v1.2.1
+	filippo.io/age v1.3.2
 	fyne.io/systray v1.12.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/dop251/goja v0.0.0-20261016120441-313b6b662e53
@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/dlclark/regexp2/v2 v2.8.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
