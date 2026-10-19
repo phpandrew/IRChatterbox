@@ -563,10 +563,6 @@ export function openSettings(startTab) {
         ${field("Chat font", text("gFont", set.fontFamily, "Segoe UI (default) — e.g. Cascadia Mono, Consolas"))}
       </div>
       <div class="set-sep"></div>
-      ${field("Message layout", `<select id="gLayout">
-        <option value="">Automatic (stacked on phones, side by side on computers)</option>
-        <option value="columns" ${set.chatLayout === "columns" ? "selected" : ""}>Side by side: time · name · message</option>
-        <option value="stacked" ${set.chatLayout === "stacked" ? "selected" : ""}>Stacked: name and time above the message</option></select>`)}
       ${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
       ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
       ${check("gCompact", set.compactMode, "Compact line spacing")}
@@ -636,7 +632,7 @@ export function openSettings(startTab) {
       ${check("hFlash", set.flashOnPing !== false, "Flash the tray icon and taskbar button when I'm mentioned or messaged")}
       <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`, "desktop-only win-only") +
       card("Friends", "Get told when these people come online or go offline (on servers that support MONITOR).", `
-      ${field("Nicks to watch", `<textarea id="hFriends" placeholder="Caleo&#10;Kennyout">${esc((set.notifyList || []).join("\n"))}</textarea>`, "One per line.")}
+      ${field("Nicks to watch", `<textarea id="hFriends" placeholder="Friendname1&#10;AndrewBot">${esc((set.notifyList || []).join("\n"))}</textarea>`, "One per line.")}
       ${check("hFriendsNotify", set.notifyFriends !== false, "Show a notification when one comes online")}`) +
       card("Blocked people", "Hide everything from these people. Block someone from their nick's menu, or with /ignore.", `
       ${field("Blocked nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`) +
@@ -737,6 +733,11 @@ export function openSettings(startTab) {
     const opts = (sel) => themeOptions(sel);
     body.innerHTML = card("Language", "Language of the app's menus and settings. Messages in chats are never translated.", `
       <div class="fgrid">${field("Language", `<select id="aLang"><option value="">Automatic (system language)</option>${LANGUAGES.map(([c, n]) => `<option value="${c}" ${set.language === c ? "selected" : ""}>${n}</option>`).join("")}</select>`)}</div>`) +
+      card("Message layout", "How each message is laid out in the chat.", `
+      <div class="fgrid">${field("Layout", `<select id="aLayout">
+        <option value="">Automatic (stacked on phones, side by side on computers)</option>
+        <option value="columns" ${set.chatLayout === "columns" ? "selected" : ""}>Side by side: time · name · message</option>
+        <option value="stacked" ${set.chatLayout === "stacked" ? "selected" : ""}>Stacked: name and time above the message</option></select>`, "", true)}</div>`) +
       card("Theme", "Pick a theme, or follow Windows light and dark mode automatically.", `
       <div class="fgrid">
         ${field("Mode", `<select id="aMode">
@@ -1013,7 +1014,7 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.chatLayout = $("gLayout").value; set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");
@@ -1028,6 +1029,7 @@ export function openSettings(startTab) {
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
     }
     if (has("aLang")) set.language = $("aLang").value;
+    if (has("aLayout")) set.chatLayout = $("aLayout").value;
     if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; set.nickContrast = on("aContrast"); }
     if (has("hWords")) {
       set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore"); set.filterWords = lines("hFilter");

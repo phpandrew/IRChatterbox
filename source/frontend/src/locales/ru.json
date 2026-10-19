@@ -717,5 +717,7 @@
 "Message layout": "Вид сообщений",
 "Automatic (stacked on phones, side by side on computers)": "Автоматически (столбиком на телефоне, в строку на компьютере)",
 "Side by side: time · name · message": "В строку: время · имя · сообщение",
-"Stacked: name and time above the message": "Столбиком: имя и время над сообщением"
+"Stacked: name and time above the message": "Столбиком: имя и время над сообщением",
+"How each message is laid out in the chat.": "Как сообщения выглядят в чате.",
+"Layout": "Вид"
 }

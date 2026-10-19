@@ -717,5 +717,7 @@
 "Message layout": "Układ wiadomości",
 "Automatic (stacked on phones, side by side on computers)": "Automatycznie (jedno pod drugim na telefonie, obok siebie na komputerze)",
 "Side by side: time · name · message": "Obok siebie: czas · nazwa · wiadomość",
-"Stacked: name and time above the message": "Jedno pod drugim: nazwa i czas nad wiadomością"
+"Stacked: name and time above the message": "Jedno pod drugim: nazwa i czas nad wiadomością",
+"How each message is laid out in the chat.": "Jak wyświetlana jest każda wiadomość na czacie.",
+"Layout": "Układ"
 }

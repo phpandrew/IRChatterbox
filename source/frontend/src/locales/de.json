@@ -717,5 +717,7 @@
 "Message layout": "Nachrichtenlayout",
 "Automatic (stacked on phones, side by side on computers)": "Automatisch (gestapelt auf Handys, nebeneinander am Computer)",
 "Side by side: time · name · message": "Nebeneinander: Zeit · Name · Nachricht",
-"Stacked: name and time above the message": "Gestapelt: Name und Zeit über der Nachricht"
+"Stacked: name and time above the message": "Gestapelt: Name und Zeit über der Nachricht",
+"How each message is laid out in the chat.": "Wie jede Nachricht im Chat angeordnet ist.",
+"Layout": "Layout"
 }

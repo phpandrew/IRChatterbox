@@ -717,5 +717,7 @@
 "Message layout": "消息布局",
 "Automatic (stacked on phones, side by side on computers)": "自动（手机上堆叠，电脑上并排）",
 "Side by side: time · name · message": "并排：时间 · 名称 · 消息",
-"Stacked: name and time above the message": "堆叠：名称和时间在消息上方"
+"Stacked: name and time above the message": "堆叠：名称和时间在消息上方",
+"How each message is laid out in the chat.": "聊天中每条消息的排列方式。",
+"Layout": "布局"
 }

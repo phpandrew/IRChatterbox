@@ -717,5 +717,7 @@
 "Message layout": "Mesaj düzeni",
 "Automatic (stacked on phones, side by side on computers)": "Otomatik (telefonda alt alta, bilgisayarda yan yana)",
 "Side by side: time · name · message": "Yan yana: saat · ad · mesaj",
-"Stacked: name and time above the message": "Alt alta: ad ve saat mesajın üstünde"
+"Stacked: name and time above the message": "Alt alta: ad ve saat mesajın üstünde",
+"How each message is laid out in the chat.": "Her mesajın sohbette nasıl gösterileceği.",
+"Layout": "Düzen"
 }
