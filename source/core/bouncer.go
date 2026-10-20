@@ -35,8 +35,10 @@ func (c *Conn) isReplay(m *Message) bool {
 			return true
 		}
 	}
-	// ZNC without the batch capability: playback is only recognisable by its old timestamps
-	if c.cfg.Bouncer != "" && m.Tags["time"] != "" && m.Command != "BATCH" {
+	// ZNC without the batch capability: playback is only recognisable by its old timestamps.
+	// Numerics are never playback: ZNC re-sends its cached 001-005 with the original
+	// upstream timestamps, and dropping 005 loses PREFIX (+q/+a nicks then keep "~@").
+	if c.cfg.Bouncer != "" && m.Tags["time"] != "" && m.Command != "BATCH" && !isDigits(m.Command) {
 		c.mu.Lock()
 		since := c.connectedAt
 		c.mu.Unlock()
