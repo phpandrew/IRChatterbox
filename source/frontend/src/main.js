@@ -121,6 +121,12 @@ function addLine(srv, b, line) {
   // Marker line: the first message that arrives after you stopped looking at this buffer
   // (switched away or alt-tabbed) gets the divider above it.
   let moveMarker = false;
+  // you replied: you've caught up, so the divider goes (the next unseen message brings it back)
+  if (line.self && !line.replay && b.marker && (line.kind === "privmsg" || line.kind === "action")) {
+    b.marker = null;
+    b.markPending = true;
+    if (isActive(srv, b)) $("chat").querySelector(".marker-line")?.remove();
+  }
   if (counts && !visible && b.markPending) {
     b.marker = line;
     b.markPending = false;
@@ -2669,6 +2675,8 @@ export function applySettings() {
   root.setProperty("--ts-col", probe.offsetWidth + 2 + "px");
   probe.remove();
   if (typeof positionNickHandle === "function") requestAnimationFrame(positionNickHandle);
+  // joins/parts/quits already on screen hide too when they're switched off (new ones aren't kept)
+  document.body.classList.toggle("no-joins", set.showJoinsParts === false);
   const box = $("input");
   box.spellcheck = set.spellCheck !== false;
   box.lang = document.documentElement.lang || "en";

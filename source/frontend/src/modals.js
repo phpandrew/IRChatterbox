@@ -563,7 +563,7 @@ export function openSettings(startTab) {
         ${field("Chat font", text("gFont", set.fontFamily, "Segoe UI (default) — e.g. Cascadia Mono, Consolas"))}
       </div>
       <div class="set-sep"></div>
-      ${check("gJoins", set.showJoinsParts, "Show joins, parts and quits")}
+      ${check("gJoins", set.showJoinsParts !== false, "Show joins, parts and quits")}
       ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
       ${check("gCompact", set.compactMode, "Compact line spacing")}
       ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +

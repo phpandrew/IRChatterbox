@@ -902,3 +902,6 @@ body .stacked .line.dccl .dcc-card { grid-area: msg; }
 body .stacked .line.hl { padding-top: 7px; }
 body .stacked.compact .line { padding-top: 3px; }
 body .stacked.compact .line.cont { padding-top: 0; }
+
+/* Settings → General → "Show joins, parts and quits" off */
+body.no-joins .line.ev.join:not(.self), body.no-joins .line.ev.part:not(.self), body.no-joins .line.ev.quit:not(.self) { display: none; }
