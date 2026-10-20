@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "Empilé : nom et heure au-dessus du message",
 "How each message is laid out in the chat.": "Comment chaque message est disposé dans la discussion.",
 "Layout": "Disposition",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Commandes exécutées dans l'ordre après la connexion. $me = votre pseudo, /wait 3 fait une pause de 3 secondes. Les invitations vers vos salons rejoints automatiquement sont acceptées d'office."
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Commandes exécutées dans l'ordre après la connexion. $me = votre pseudo, /wait 3 fait une pause de 3 secondes. Les invitations vers vos salons rejoints automatiquement sont acceptées d'office.",
+"Typing @ shows the people in the channel to pick from": "Taper @ affiche les personnes du salon à choisir",
+"away": "absent",
+"owner": "propriétaire",
+"admin": "admin",
+"operator": "opérateur",
+"half-op": "demi-op",
+"voice": "voix",
+"Mark all as read": "Tout marquer comme lu",
+"Channel with new messages": "Salon avec nouveaux messages"
 }

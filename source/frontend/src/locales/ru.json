@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "Столбиком: имя и время над сообщением",
 "How each message is laid out in the chat.": "Как сообщения выглядят в чате.",
 "Layout": "Вид",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Команды выполняются по порядку после подключения. $me — ваш ник, /wait 3 — пауза 3 секунды. Приглашения в каналы автовхода принимаются автоматически."
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Команды выполняются по порядку после подключения. $me — ваш ник, /wait 3 — пауза 3 секунды. Приглашения в каналы автовхода принимаются автоматически.",
+"Typing @ shows the people in the channel to pick from": "При вводе @ показывать участников канала для выбора",
+"away": "отошёл",
+"owner": "владелец",
+"admin": "админ",
+"operator": "оператор",
+"half-op": "полуоп",
+"voice": "голос",
+"Mark all as read": "Отметить всё как прочитанное",
+"Channel with new messages": "Канал с новыми сообщениями"
 }

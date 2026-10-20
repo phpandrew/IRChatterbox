@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "Alt alta: ad ve saat mesajın üstünde",
 "How each message is laid out in the chat.": "Her mesajın sohbette nasıl gösterileceği.",
 "Layout": "Düzen",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Bağlandıktan sonra sırayla çalışan komutlar. $me = rumuzunuz, /wait 3 3 saniye bekler. Otomatik katılma kanallarınıza gelen davetler kendiliğinden kabul edilir."
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Bağlandıktan sonra sırayla çalışan komutlar. $me = rumuzunuz, /wait 3 3 saniye bekler. Otomatik katılma kanallarınıza gelen davetler kendiliğinden kabul edilir.",
+"Typing @ shows the people in the channel to pick from": "@ yazınca kanaldaki kişiler seçmek için listelenir",
+"away": "uzakta",
+"owner": "sahip",
+"admin": "yönetici",
+"operator": "operatör",
+"half-op": "yarı operatör",
+"voice": "ses",
+"Mark all as read": "Tümünü okundu say",
+"Channel with new messages": "Yeni mesajı olan kanal"
 }

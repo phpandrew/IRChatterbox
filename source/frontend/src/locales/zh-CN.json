@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "堆叠：名称和时间在消息上方",
 "How each message is laid out in the chat.": "聊天中每条消息的排列方式。",
 "Layout": "布局",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "连接后按顺序运行的命令。$me = 你的昵称，/wait 3 暂停 3 秒。邀请你进入自动加入频道时会自动加入。"
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "连接后按顺序运行的命令。$me = 你的昵称，/wait 3 暂停 3 秒。邀请你进入自动加入频道时会自动加入。",
+"Typing @ shows the people in the channel to pick from": "输入 @ 时显示频道中的人以供选择",
+"away": "离开",
+"owner": "所有者",
+"admin": "管理员",
+"operator": "频道管理员",
+"half-op": "半管理员",
+"voice": "发言权",
+"Mark all as read": "全部标为已读",
+"Channel with new messages": "有新消息的频道"
 }

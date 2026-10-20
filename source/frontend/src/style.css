@@ -87,7 +87,7 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .buf .ico { width: 16px; text-align: center; color: var(--text-faint); font-weight: 600; flex: none; }
 .buf .ico svg { width: 15px; height: 15px; vertical-align: -3px; }
 .buf .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.buf.activity { color: var(--text); font-weight: 600; }
+.buf.activity { color: var(--unread, var(--text)); font-weight: 600; }
 .buf.parted { opacity: .5; font-style: italic; }
 .buf.active { background: var(--bg-active); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
 .buf.hl .nm { color: var(--hl-border); }

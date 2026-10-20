@@ -153,6 +153,16 @@ function rerenderSoon() {
 
 // ---------- read markers (bouncer) ----------
 // Tell the bouncer how far you've read, so your phone or other PC shows the same.
+// every channel and private chat on a server counted as read (and, through a bouncer, on your other devices)
+function markAllRead(srv) {
+  for (const b of srv.buffers.values()) {
+    if (!b.unread && !b.hl && !b.activity) continue;
+    b.unread = b.hl = 0;
+    b.activity = false;
+    sendRead(srv, b);
+  }
+  scheduleTree();
+}
 function sendRead(srv, b) {
   if (!srv?.cfg?.bouncer || !b || b.type === "server") return;
   let t = 0;
@@ -760,6 +770,7 @@ function serverMenu(srv, e) {
   items.push(["Reconnect", () => Go.SendInput(srv.id, "", "/reconnect")]);
   items.push(["Join channel…", () => openPrompt("Join channel", "#channel", "", (v) => v && Go.SendInput(srv.id, "", "/join " + v))]);
   if (srv.status === "connected") items.push(["Channel list…", () => openChannelList(srv)]);
+  if ([...srv.buffers.values()].some((b) => b.unread || b.hl || b.activity)) items.push(["Mark all as read", () => markAllRead(srv)]);
   items.push("-");
   items.push(["Edit server…", () => editServer(srv.cfg)]);
   const hasIcon = !!S.icons[srv.id + "/*"];
@@ -2124,6 +2135,14 @@ function updateCompletions() {
     compItems = all.filter(([c]) => c.startsWith(q)).slice(0, 12).map(([c, d]) => ({
       label: "/" + c, desc: d, apply: () => { input.value = "/" + c + " "; },
     }));
+  } else if (mentionWordBeforeCaret()) {
+    // "@ca…": people in this channel whose nick matches, recent speakers first
+    const mw = mentionWordBeforeCaret();
+    compTyped = "@" + mw.word;
+    compItems = mentionCandidates(mw.word).map((u) => ({
+      label: u.nick, desc: u.desc, color: nickColor(u.nick),
+      apply: () => replaceRange(mw.start, mw.end, u.nick + (mw.start === 0 ? ": " : " ")),
+    }));
   } else {
     const sw = shortcutWordBeforeCaret();
     if (sw) {
@@ -2137,13 +2156,39 @@ function updateCompletions() {
   if (!compItems.length) { box?.remove(); return; }
   compSel = Math.min(compSel, compItems.length - 1);
   const el = box || Object.assign(document.createElement("div"), { id: "completeBox" });
-  el.innerHTML = compItems.map((it, i) => `<div class="c ${i === compSel ? "sel" : ""}" data-i="${i}"><b>${esc(it.label)}</b><span class="d">${esc(it.desc)}</span></div>`).join("");
+  el.innerHTML = compItems.map((it, i) => `<div class="c ${i === compSel ? "sel" : ""}" data-i="${i}"><b${it.color ? ` style="color:${it.color}"` : ""}>${esc(it.label)}</b><span class="d">${esc(it.desc)}</span></div>`).join("");
   document.body.appendChild(el);
   const r = input.closest(".input-box").getBoundingClientRect();
   el.style.left = r.left + "px";
   el.style.bottom = innerHeight - r.top + 6 + "px";
   el.onmousedown = (e) => { e.preventDefault(); const c = e.target.closest("[data-i]"); if (c) acceptCompletion(+c.dataset.i); };
 }
+// The "@word" just before the caret, when the @-mention list is on (Settings → General).
+function mentionWordBeforeCaret() {
+  if (S.cfg?.settings?.mentionPopup === false || input.selectionStart !== input.selectionEnd) return null;
+  const b = activeBuffer();
+  if (!b || b.type === "server") return null;
+  const pos = input.selectionStart;
+  const m = /(^|\s)@([^\s@]{0,32})$/.exec(input.value.slice(0, pos));
+  if (!m) return null;
+  return { word: m[2], start: pos - m[2].length - 1, end: pos };
+}
+const PREFIX_NAMES = { "~": "owner", "&": "admin", "@": "operator", "%": "half-op", "+": "voice" };
+function mentionCandidates(word) {
+  const srv = activeServer(), b = activeBuffer();
+  const me = (srv?.nick || "").toLowerCase();
+  const q = word.toLowerCase();
+  const users = b.type === "channel" ? b.users : [{ nick: b.name, prefix: "" }];
+  const recent = [];
+  for (let i = b.lines.length - 1; i >= 0 && recent.length < 50; i--) { const n = b.lines[i].nick; if (n && !recent.includes(n)) recent.push(n); }
+  const rank = (n) => { const r = recent.indexOf(n); return r < 0 ? 999 : r; };
+  return users
+    .filter((u) => u.nick.toLowerCase() !== me && u.nick.toLowerCase().includes(q))
+    .sort((x, y) => (y.nick.toLowerCase().startsWith(q) - x.nick.toLowerCase().startsWith(q)) || rank(x.nick) - rank(y.nick) || x.nick.localeCompare(y.nick))
+    .slice(0, 8)
+    .map((u) => ({ nick: u.nick, desc: [PREFIX_NAMES[(u.prefix || "")[0]] ? t(PREFIX_NAMES[u.prefix[0]]) : "", u.away ? t("away") : ""].filter(Boolean).join(" · ") }));
+}
+
 function acceptCompletion(i) {
   compItems[i]?.apply();
   document.getElementById("completeBox")?.remove();

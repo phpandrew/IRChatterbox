@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "縦並び: 名前と時刻をメッセージの上に表示",
 "How each message is laid out in the chat.": "チャットでのメッセージの並べ方。",
 "Layout": "レイアウト",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "接続後に順番に実行するコマンド。$me = 自分のニックネーム、/wait 3 で3秒待ちます。自動参加チャンネルへの招待は自動で参加します。"
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "接続後に順番に実行するコマンド。$me = 自分のニックネーム、/wait 3 で3秒待ちます。自動参加チャンネルへの招待は自動で参加します。",
+"Typing @ shows the people in the channel to pick from": "@ を入力するとチャンネルの参加者を一覧表示",
+"away": "離席中",
+"owner": "オーナー",
+"admin": "管理者",
+"operator": "オペレーター",
+"half-op": "ハーフOP",
+"voice": "発言権",
+"Mark all as read": "すべて既読にする",
+"Channel with new messages": "新着メッセージのあるチャンネル"
 }

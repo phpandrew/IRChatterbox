@@ -720,5 +720,14 @@
 "Stacked: name and time above the message": "Jedno pod drugim: nazwa i czas nad wiadomością",
 "How each message is laid out in the chat.": "Jak wyświetlana jest każda wiadomość na czacie.",
 "Layout": "Układ",
-"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Polecenia wykonywane po kolei po połączeniu. $me = twój nick, /wait 3 czeka 3 sekundy. Zaproszenia na kanały z automatycznym dołączaniem są przyjmowane same."
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Polecenia wykonywane po kolei po połączeniu. $me = twój nick, /wait 3 czeka 3 sekundy. Zaproszenia na kanały z automatycznym dołączaniem są przyjmowane same.",
+"Typing @ shows the people in the channel to pick from": "Wpisanie @ pokazuje osoby z kanału do wyboru",
+"away": "zaraz wracam",
+"owner": "właściciel",
+"admin": "admin",
+"operator": "operator",
+"half-op": "half-op",
+"voice": "głos",
+"Mark all as read": "Oznacz wszystko jako przeczytane",
+"Channel with new messages": "Kanał z nowymi wiadomościami"
 }

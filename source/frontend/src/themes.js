@@ -8,6 +8,7 @@ export const THEME_VARS = [
   ["accent", "Accent"], ["accent-text", "Text on accent"], ["hl-bg", "Highlight line bg"],
   ["hl-border", "Highlight line edge"], ["mention-bg", "Mention chip"], ["link", "Links"],
   ["danger", "Errors / ping badge"], ["success", "Connected"], ["warn", "Connecting"],
+  ["unread", "Channel with new messages"],
 ];
 
 export const BUILTIN = {
@@ -745,7 +746,11 @@ export function resolveTheme(settings) {
 export function applyTheme(theme) {
   const root = document.documentElement;
   const base = theme.base === "light" ? BUILTIN.Light.vars : BUILTIN.Dark.vars;
-  for (const [k] of THEME_VARS) root.style.setProperty("--" + k, theme.vars?.[k] || base[k]);
+  for (const [k] of THEME_VARS) {
+    // "unread" is new: themes made before it keep their own text colour for unread channels
+    const fallback = k === "unread" ? theme.vars?.text || base.text : base[k];
+    root.style.setProperty("--" + k, theme.vars?.[k] || fallback);
+  }
   const light = theme.base === "light";
   root.style.setProperty("--nick-l", light ? "38%" : "68%");
   root.style.setProperty("--nick-s", light ? "70%" : "62%");

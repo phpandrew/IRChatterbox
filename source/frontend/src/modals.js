@@ -609,6 +609,7 @@ export function openSettings(startTab) {
       <div class="set-sep"></div>
       ${check("gTyping", set.sendTyping !== false, "Let others see when I'm typing")}
       ${check("gSpell", set.spellCheck !== false, "Check spelling as I type (right-click a word for suggestions)")}
+      ${check("gMention", set.mentionPopup !== false, "Typing @ shows the people in the channel to pick from")}
       <div class="hint indent">Shows “Andrew is typing…” in clients that support it, on servers that allow it.</div>`) +
       card("Messages", "The default message sent when you quit or leave a channel.", `
       <div class="fgrid">${field("Quit / part message", text("gQuit", set.quitMessage, "IRChatterbox"), "", true)}</div>`);
@@ -768,7 +769,7 @@ export function openSettings(startTab) {
       }
       $("tVars").innerHTML = `<div class="tv"><span>Base</span><select id="tB"><option value="dark">Dark</option><option value="light" ${t.base === "light" ? "selected" : ""}>Light</option></select></div><div></div>` +
         THEME_VARS.map(([k, label]) => {
-          const v = t.vars[k] || "#000000";
+          const v = t.vars[k] || (k === "unread" ? t.vars.text : "") || "#000000";
           return `<div class="tv"><input type="color" data-k="${k}" value="${v.slice(0, 7)}"><input type="text" data-kt="${k}" value="${esc(v)}"><span>${label}</span></div>`;
         }).join("");
       preview();
@@ -1023,6 +1024,7 @@ export function openSettings(startTab) {
       set.pasteWarnLines = Math.max(0, parseInt(val("gPaste")) || 0);
       set.sendTyping = on("gTyping");
       if (has("gSpell")) set.spellCheck = on("gSpell");
+      if (has("gMention")) set.mentionPopup = on("gMention");
       if (has("gModConfirm")) { set.confirmModeration = on("gModConfirm"); set.kickReason = val("gKickReason"); }
       if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");

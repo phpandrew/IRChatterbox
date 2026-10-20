@@ -283,6 +283,7 @@ export namespace core {
 	    keepAlive: boolean;
 	    linkPreviews: boolean;
 	    spellCheck: boolean;
+	    mentionPopup: boolean;
 	    confirmModeration: boolean;
 	    kickReason: string;
 	    dccFolder: string;
@@ -347,6 +348,7 @@ export namespace core {
 	        this.keepAlive = source["keepAlive"];
 	        this.linkPreviews = source["linkPreviews"];
 	        this.spellCheck = source["spellCheck"];
+	        this.mentionPopup = source["mentionPopup"];
 	        this.confirmModeration = source["confirmModeration"];
 	        this.kickReason = source["kickReason"];
 	        this.dccFolder = source["dccFolder"];
