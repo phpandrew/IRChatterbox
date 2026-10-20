@@ -2618,6 +2618,16 @@ export function applySettings() {
   afterTheme();
 }
 
+// Nick colours are worked out for the theme when a line is drawn (readable on light or dark),
+// so a light/dark switch redraws everything, keeping your place in the chat.
+function redrawForTheme() {
+  const c = $("chat");
+  const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+  const top = c.scrollTop;
+  renderAll();
+  if (!atBottom) { c.scrollTop = top; stick = false; }
+}
+
 export function renderAll() {
   renderTree(); renderHeader(); renderChat(); renderUsers(); renderStatus(); renderMe(); renderPanes();
 }
@@ -2677,7 +2687,7 @@ async function boot() {
   // and once a minute: the web view can miss the event while the app is hidden in the tray.
   let lastDark = systemIsDark();
   const recheckTheme = (force) => {
-    if (force === true || systemIsDark() !== lastDark) { lastDark = systemIsDark(); applySettings(); }
+    if (force === true || systemIsDark() !== lastDark) { lastDark = systemIsDark(); applySettings(); redrawForTheme(); }
   };
   onSystemThemeChange(() => recheckTheme(true));
   addEventListener("focus", recheckTheme);

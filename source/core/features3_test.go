@@ -238,3 +238,16 @@ func TestSearchHistory(t *testing.T) {
 		t.Fatal("no logs")
 	}
 }
+
+func TestPerformWait(t *testing.T) {
+	for in, want := range map[string]time.Duration{"/wait 5": 5 * time.Second, "/WAIT 1.5": 1500 * time.Millisecond, "/delay 2s": 2 * time.Second, "/sleep": time.Second, "/wait 999": performWaitMax} {
+		if got, ok := performWait(in); !ok || got != want {
+			t.Errorf("%q = %v %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"/msg bot !invite", "/wait abc", "/wait -3", "wait 5"} {
+		if _, ok := performWait(in); ok {
+			t.Errorf("%q accepted", in)
+		}
+	}
+}

@@ -719,5 +719,6 @@
 "Side by side: time · name · message": "Obok siebie: czas · nazwa · wiadomość",
 "Stacked: name and time above the message": "Jedno pod drugim: nazwa i czas nad wiadomością",
 "How each message is laid out in the chat.": "Jak wyświetlana jest każda wiadomość na czacie.",
-"Layout": "Układ"
+"Layout": "Układ",
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Polecenia wykonywane po kolei po połączeniu. $me = twój nick, /wait 3 czeka 3 sekundy. Zaproszenia na kanały z automatycznym dołączaniem są przyjmowane same."
 }

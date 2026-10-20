@@ -719,5 +719,6 @@
 "Side by side: time · name · message": "В строку: время · имя · сообщение",
 "Stacked: name and time above the message": "Столбиком: имя и время над сообщением",
 "How each message is laid out in the chat.": "Как сообщения выглядят в чате.",
-"Layout": "Вид"
+"Layout": "Вид",
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Команды выполняются по порядку после подключения. $me — ваш ник, /wait 3 — пауза 3 секунды. Приглашения в каналы автовхода принимаются автоматически."
 }

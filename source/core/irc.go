@@ -673,6 +673,14 @@ func (c *Conn) onRegistered() {
 		cfg, _ := c.app.store.Server(c.cfg.ID)
 		for _, p := range cfg.Perform {
 			p = strings.ReplaceAll(p, "$me", c.Nick())
+			// "/wait 5" pauses before the next line (e.g. to let services or a bot catch up)
+			if secs, ok := performWait(p); ok {
+				time.Sleep(secs)
+				if c.Status() != "connected" {
+					return
+				}
+				continue
+			}
 			c.app.runCommand(c, "", p)
 		}
 		var chans, keys []string
@@ -1148,6 +1156,7 @@ func (c *Conn) handle(m *Message) {
 
 	case "INVITE":
 		c.info("*active*", "highlight", fmt.Sprintf("%s invited %s to %s", nick, m.Param(0), m.Param(1)))
+		c.joinInvited(m.Param(0), m.Param(1))
 		c.app.plugins.Emit("invite", c, "", map[string]any{"channel": m.Param(1), "nick": nick, "invited": m.Param(0)})
 
 	case "PRIVMSG", "NOTICE":

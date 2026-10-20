@@ -313,7 +313,7 @@ export async function openServerEditor(cfg, onSaved) {
       <div class="section-title">Channels & commands</div>
       <div class="fgrid">
         ${field("Auto-join channels", `<textarea id="sJoin" placeholder="#linux&#10;#secret key">${esc((c.autoJoin || []).join("\n"))}</textarea>`, "One per line. Add a key after a space for keyed channels.")}
-        ${field("Perform on connect", `<textarea id="sPerform" placeholder="/mode $me +x&#10;/msg someone hello">${esc((c.perform || []).join("\n"))}</textarea>`, "Commands run after connecting. $me = your nick.")}
+        ${field("Perform on connect", `<textarea id="sPerform" placeholder="/mode $me +x&#10;/wait 3&#10;/msg InviteBot !invite">${esc((c.perform || []).join("\n"))}</textarea>`, "Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.")}
         <div class="full">${check("sRemember", c.rememberChannels, "Remember channels I join and leave (keeps the auto-join list up to date)")}</div>
       </div>
       </div>

@@ -216,3 +216,35 @@ func TestAwayListAndProxyOnErgo(t *testing.T) {
 		}
 	}
 }
+
+// "/wait" then "/msg bot !invite" in Perform; the invite to an auto-join channel is joined.
+func TestPerformInviteJoin(t *testing.T) {
+	id := newID()[:4]
+	ch := "#inv" + id
+	op := newBackupApp(t)
+	lo := &evLog{}
+	op.testHook = lo.add
+	op.store.Update(func(c *Config) { c.Servers = nil })
+	so := op.SaveServer(ServerConfig{Name: "Ergo", Host: "127.0.0.1", Port: 6667, Nick: "bot" + id, AutoJoin: []string{ch}})
+	op.Connect(so.ID)
+	defer op.Disconnect(so.ID)
+	lo.waitFor(t, "bot joined", func(e Event) bool { return e.Type == "buffer" && e.Buffer == ch })
+	op.SendInput(so.ID, ch, "/mode "+ch+" +i")
+	time.Sleep(300 * time.Millisecond)
+
+	me := newBackupApp(t)
+	lm := &evLog{}
+	me.testHook = lm.add
+	me.store.Update(func(c *Config) { c.Servers = nil })
+	sm := me.SaveServer(ServerConfig{Name: "Ergo", Host: "127.0.0.1", Port: 6667, Nick: "me" + id, AutoJoin: []string{ch},
+		Perform: []string{"/wait 0.5", "/msg bot" + id + " !invite please"}})
+	start := time.Now()
+	me.Connect(sm.ID)
+	defer me.Disconnect(sm.ID)
+	req := lo.waitFor(t, "invite request", func(e Event) bool { return e.Type == "msg" && e.Text == "!invite please" })
+	if time.Since(start) < 500*time.Millisecond {
+		t.Fatal("/wait didn't wait")
+	}
+	op.SendInput(so.ID, ch, "/invite "+req.Nick+" "+ch)
+	lm.waitFor(t, "joined after invite", func(e Event) bool { return e.Type == "buffer" && e.Buffer == ch })
+}

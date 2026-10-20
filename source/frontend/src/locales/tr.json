@@ -719,5 +719,6 @@
 "Side by side: time · name · message": "Yan yana: saat · ad · mesaj",
 "Stacked: name and time above the message": "Alt alta: ad ve saat mesajın üstünde",
 "How each message is laid out in the chat.": "Her mesajın sohbette nasıl gösterileceği.",
-"Layout": "Düzen"
+"Layout": "Düzen",
+"Commands run in order after connecting. $me = your nick, /wait 3 pauses 3 seconds. Invites to your auto-join channels are joined automatically.": "Bağlandıktan sonra sırayla çalışan komutlar. $me = rumuzunuz, /wait 3 3 saniye bekler. Otomatik katılma kanallarınıza gelen davetler kendiliğinden kabul edilir."
 }
