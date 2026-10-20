@@ -93,6 +93,8 @@ export const api = {
     { type: "msg", nick: "Alan-", text: "the raspberry pi 5 needs the 27W supply", time: t },
     { type: "msg", nick: "Andrew", text: "ah that explains it", time: t + 60e3 },
   ],
+  GetUIState: () => { try { return localStorage.getItem("mock-ui-json") || ""; } catch { return ""; } },
+  SaveUIState: (st) => { try { localStorage.setItem("mock-ui-json", st); } catch {} },
   SetFavourite: (s, b, on) => {
     cfg.favourites = (cfg.favourites || []).filter((f) => !(f.server === s && f.buffer.toLowerCase() === b.toLowerCase()));
     if (on) cfg.favourites.push({ server: s, buffer: b });

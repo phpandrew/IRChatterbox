@@ -64,6 +64,8 @@ export function GetStore():Promise<string>;
 
 export function GetThemes():Promise<Array<core.Theme>>;
 
+export function GetUIState():Promise<string>;
+
 export function GetVersion():Promise<string>;
 
 export function HistoryAround(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<core.Event>>;
@@ -135,6 +137,8 @@ export function SaveSettings(arg1:core.Settings):Promise<string>;
 export function SaveShortcuts(arg1:Array<core.Shortcut>):Promise<void>;
 
 export function SaveTheme(arg1:core.Theme):Promise<void>;
+
+export function SaveUIState(arg1:string):Promise<void>;
 
 export function SearchHistory(arg1:string,arg2:string,arg3:string):Promise<core.SearchResult>;
 

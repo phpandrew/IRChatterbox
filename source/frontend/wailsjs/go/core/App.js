@@ -126,6 +126,10 @@ export function GetThemes() {
   return window['go']['core']['App']['GetThemes']();
 }
 
+export function GetUIState() {
+  return window['go']['core']['App']['GetUIState']();
+}
+
 export function GetVersion() {
   return window['go']['core']['App']['GetVersion']();
 }
@@ -268,6 +272,10 @@ export function SaveShortcuts(arg1) {
 
 export function SaveTheme(arg1) {
   return window['go']['core']['App']['SaveTheme'](arg1);
+}
+
+export function SaveUIState(arg1) {
+  return window['go']['core']['App']['SaveUIState'](arg1);
 }
 
 export function SearchHistory(arg1, arg2, arg3) {

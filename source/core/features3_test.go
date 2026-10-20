@@ -251,3 +251,20 @@ func TestPerformWait(t *testing.T) {
 		}
 	}
 }
+
+func TestUIState(t *testing.T) {
+	a := newBackupApp(t)
+	if a.GetUIState() != "" {
+		t.Fatal("state before saving")
+	}
+	a.SaveUIState(`{"--side-w":250,"--nick-col":140}`)
+	if got := a.GetUIState(); got != `{"--side-w":250,"--nick-col":140}` {
+		t.Fatal(got)
+	}
+	for _, bad := range []string{"", "nope", "[1,2]", strings.Repeat("x", uiStateMax+1)} {
+		a.SaveUIState(bad)
+	}
+	if got := a.GetUIState(); got != `{"--side-w":250,"--nick-col":140}` {
+		t.Fatal("bad state overwrote the saved one:", got)
+	}
+}

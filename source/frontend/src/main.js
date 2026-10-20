@@ -28,8 +28,20 @@ export const S = {
 function loadUi() {
   try { return JSON.parse(localStorage.getItem("ui") || "{}"); } catch { return {}; }
 }
+let uiSaveTimer = 0;
 function saveUi() {
   try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
+  // also in the data folder (ui.json), which survives a renamed or newly downloaded exe
+  clearTimeout(uiSaveTimer);
+  uiSaveTimer = setTimeout(() => Go.SaveUIState(JSON.stringify(S.ui)), 500);
+}
+// Column widths etc. saved in the data folder win over the web view's copy.
+async function restoreUi() {
+  let saved = null;
+  try { saved = JSON.parse((await Go.GetUIState()) || "null"); } catch { saved = null; }
+  if (saved && typeof saved === "object") Object.assign(S.ui, saved);
+  else saveUi(); // first run of this version: move what the web view remembered into ui.json
+  for (const v of ["--side-w", "--users-w", "--nick-col"]) if (S.ui[v]) document.documentElement.style.setProperty(v, S.ui[v] + "px");
 }
 
 // ---------- model ----------
@@ -2662,6 +2674,7 @@ document.querySelector(".brand .logo").outerHTML = `<img class="logo-img" src="$
 // ---------- boot ----------
 async function boot() {
   await initApi();
+  await restoreUi();
   await detectOS();
   // frontend errors go to app.log too (Settings → About → Open logs)
   if (!android) {

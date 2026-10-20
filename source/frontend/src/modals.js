@@ -1027,6 +1027,7 @@ export function openSettings(startTab) {
       if (has("gKeep")) set.keepAlive = on("gKeep");
       S.ui.users = on("gUsers");
       try { localStorage.setItem("ui", JSON.stringify(S.ui)); } catch {}
+      Go.SaveUIState(JSON.stringify(S.ui));
     }
     if (has("aLang")) set.language = $("aLang").value;
     if (has("aLayout")) set.chatLayout = $("aLayout").value;
