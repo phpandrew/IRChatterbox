@@ -239,3 +239,21 @@ func TestFavourites(t *testing.T) {
 		t.Fatal("special buffer accepted")
 	}
 }
+
+func TestZNCReplayedISupportKeepsPrefix(t *testing.T) {
+	c := newConn(newBackupApp(t), ServerConfig{ID: "s1", Bouncer: "znc"})
+	c.connectedAt = time.Now()
+	old := time.Now().Add(-48 * time.Hour).UTC().Format("2006-01-02T15:04:05.000Z")
+	c.handle(ParseMessage("@time=" + old + " :irc.znc.in 005 me PREFIX=(qaohv)~&@%+ CHANTYPES=# :are supported by this server"))
+	c.channels["#c"] = &Channel{Name: "#c", Users: map[string]*User{}}
+	c.handle(ParseMessage(":irc.znc.in 353 me = #c :~@James &@Portugal @Seeker +Ana bob"))
+	want := map[string]string{"james": "~@", "portugal": "&@", "seeker": "@", "ana": "+", "bob": ""}
+	for n, p := range want {
+		if u := c.channels["#c"].Users[n]; u == nil || u.Prefix != p {
+			t.Fatalf("%s: got %+v, want prefix %q", n, u, p)
+		}
+	}
+	if !c.isReplay(ParseMessage("@time=" + old + " :bob!b@h PRIVMSG #c :old line")) {
+		t.Fatal("old PRIVMSG no longer treated as playback")
+	}
+}
