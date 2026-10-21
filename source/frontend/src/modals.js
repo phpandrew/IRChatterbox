@@ -896,7 +896,7 @@ export function openSettings(startTab) {
       if (!info.available) { st.className = "t-status ok"; st.textContent = `✓ You're on the latest version (${info.current}).`; return; }
       st.className = "t-status ok";
       st.innerHTML = `Version ${esc(info.latest)} is available. <button class="btn sm primary" id="abInstall">Update &amp; restart</button>`;
-      $("abInstall").textContent = info.manual ? "Download update" : "Update & restart";
+      $("abInstall").textContent = android ? "Update" : info.manual ? "Download update" : "Update & restart";
       $("abInstall").onclick = () => { closeOverlay(); showUpdateBar(info); document.getElementById("ubInstall")?.click(); };
     };
   }

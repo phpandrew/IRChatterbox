@@ -1961,7 +1961,7 @@ export function showUpdateBar(info) {
   const bar = $("updateBar");
   bar.innerHTML = `<span class="ub-text"><b>IRChatterbox ${esc(info.latest)}</b> is available — you have ${esc(info.current)}.</span>
     <span class="ub-progress hidden"><i></i></span>
-    <button class="btn sm primary" id="ubInstall">${android || info.manual ? "Download update" : "Update &amp; restart"}</button>
+    <button class="btn sm primary" id="ubInstall">${android ? "Update" : info.manual ? "Download update" : "Update &amp; restart"}</button>
     <button class="btn sm" id="ubNotes">What's new</button>
     <button class="btn sm" id="ubSkip">Skip this version</button>
     <button class="icon-btn" id="ubClose" title="Later">✕</button>`;
@@ -1969,11 +1969,13 @@ export function showUpdateBar(info) {
   $("ubNotes").onclick = () => Go.OpenURL(info.url);
   $("ubSkip").onclick = () => { Go.SkipUpdateVersion(info.latest); bar.classList.add("hidden"); };
   $("ubClose").onclick = () => bar.classList.add("hidden");
+  delete bar.dataset.state;
   $("ubInstall").onclick = async () => {
+    delete bar.dataset.state;
     // ✕ always works, so the bar can be put away while (or after) the download runs
     bar.querySelectorAll("button:not(#ubClose)").forEach((b) => (b.disabled = true));
     bar.querySelector(".ub-progress").classList.remove("hidden");
-    bar.querySelector(".ub-text").innerHTML = android || info.manual ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
+    bar.querySelector(".ub-text").innerHTML = info.manual && !android ? `Opening the download…` : `Downloading IRChatterbox ${esc(info.latest)}…`;
     const err = await Go.InstallUpdate();
     if (err) {
       toast(err, "error");
@@ -1981,9 +1983,15 @@ export function showUpdateBar(info) {
       bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
       bar.querySelector(".ub-progress").classList.add("hidden");
     } else {
-      bar.querySelector(".ub-text").textContent = android ? "Open the downloaded file to install it."
-        : info.manual ? "Unzip the download and move IRChatterbox into Applications, replacing the old one." : "Installed — restarting…";
-      if (android || info.manual) {
+      // Android: the installer has it now; updateStatus events say what happens next
+      if (android) {
+        bar.querySelector(".ub-progress").classList.add("hidden");
+        if (!bar.dataset.state) bar.querySelector(".ub-text").textContent = "Tap Update when Android asks.";
+        return;
+      }
+      bar.querySelector(".ub-text").textContent = info.manual
+        ? "Unzip the download and move IRChatterbox into Applications, replacing the old one." : "Installed — restarting…";
+      if (info.manual) {
         // the download happens in the browser: nothing more to wait for here
         bar.querySelector(".ub-progress").classList.add("hidden");
         bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
@@ -2790,6 +2798,17 @@ async function boot() {
       if (err) toast(err, "error");
       else bar.querySelector(".ub-text").textContent = "Restarting…";
     };
+  });
+  // Android in-app update: the installer's answers (Updater.kt)
+  on("updateStatus", (d) => {
+    const bar = $("updateBar");
+    if (d.state === "error") toast(d.message, "error");
+    if (!bar.querySelector(".ub-text")) return;
+    bar.dataset.state = d.state;
+    bar.classList.remove("hidden");
+    bar.querySelector(".ub-text").textContent = d.message;
+    bar.querySelector(".ub-progress")?.classList.add("hidden");
+    if (d.state === "error") bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
   });
   on("updateProgress", (d) => {
     const bar = document.querySelector("#updateBar .ub-progress i");

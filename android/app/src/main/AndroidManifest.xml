@@ -60,6 +60,19 @@
             android:name=".ActionReceiver"
             android:exported="false" />
 
+        <!-- in-app updates (GitHub build): answers from Android's package installer -->
+        <receiver
+            android:name=".Updater$InstallReceiver"
+            android:exported="false" />
+        <!-- after an update: a notification to reopen the app -->
+        <receiver
+            android:name=".Updater$ReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- lets the camera app save the photo it takes straight into our cache -->
         <provider
             android:name="androidx.core.content.FileProvider"

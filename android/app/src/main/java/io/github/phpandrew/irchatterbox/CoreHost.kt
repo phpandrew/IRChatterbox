@@ -82,6 +82,8 @@ object CoreHost : Host {
         }
     }
 
+    override fun installAPK(path: String): String = Updater.install(app, path)
+
     override fun connected(n: Long) {
         connected = n.toInt()
         main.post { updateService() }

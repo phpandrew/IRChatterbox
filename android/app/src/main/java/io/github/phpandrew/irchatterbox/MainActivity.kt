@@ -306,6 +306,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         pushStatus() // back from Android's battery or notification settings
+        Updater.resume(this) // back from "Install unknown apps" with an update waiting
+        getSystemService(android.app.NotificationManager::class.java).cancel(Updater.UPDATED_ID)
     }
 
     override fun onDestroy() {

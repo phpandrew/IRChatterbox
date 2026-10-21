@@ -8,6 +8,8 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +26,9 @@ type Host interface {
 	// Connected reports how many servers are connected, so the shell can start or stop
 	// its keep-alive foreground service.
 	Connected(n int)
+	// InstallAPK hands a downloaded update to Android's package installer, which asks the
+	// user to confirm. Returns an error message, or "" once the installer has it.
+	InstallAPK(path string) string
 }
 
 var (
@@ -51,6 +56,7 @@ func (a *App) StartAndroid(h Host) {
 	hostMu.Unlock()
 	a.notifyOK = true
 	startOnce.Do(func() {
+		os.RemoveAll(updatesDir()) // the APK from an update that's now installed (or abandoned)
 		a.plugins.LoadScripts()
 		go a.autoAwayLoop()
 		go a.autoUpdateLoop()
@@ -191,7 +197,10 @@ func (a *App) ApplyLocalUpdate() string       { return "" }
 func (a *App) SaveBackup(name, data string) string { return "Not available on Android" }
 func (a *App) OpenBackup() BackupOpen              { return BackupOpen{Error: "Not available on Android"} }
 
-// InstallUpdate opens the new APK's download; Android's installer takes it from there.
+// InstallUpdate downloads the new APK inside the app, checks it against SHA256SUMS.txt and
+// hands it to Android's installer ("Do you want to update this app?"). Android only accepts
+// it if it's signed with the same key as the installed app. The Google Play build opens the
+// store instead.
 func (a *App) InstallUpdate() string {
 	if storeName == "play" {
 		a.openBrowser("https://play.google.com/store/apps/details?id=io.github.phpandrew.irchatterbox")
@@ -206,9 +215,50 @@ func (a *App) InstallUpdate() string {
 			return err.Error()
 		}
 	}
+	if !info.Available {
+		return "You're already on the latest version."
+	}
 	if info.assetURL == "" || !strings.HasPrefix(info.assetURL, "https://") {
 		return fmt.Sprintf("No Android download in release %s", info.Latest)
 	}
-	a.openBrowser(info.assetURL)
+	h := currentHost()
+	if h == nil {
+		return "The app isn't ready yet. Try again in a moment."
+	}
+
+	dir := updatesDir()
+	os.RemoveAll(dir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err.Error()
+	}
+	apk := filepath.Join(dir, "IRChatterbox-"+safeName(info.Latest)+".apk")
+	progress := func(done, total int64) {
+		if total > 0 {
+			a.emitUI("updateProgress", map[string]any{"pct": int(done * 100 / total)})
+		}
+	}
+	sum, err := download(info.assetURL, apk, info.Size, progress)
+	if err != nil {
+		os.Remove(apk)
+		return "Download failed: " + err.Error()
+	}
+	if info.sumsURL != "" {
+		want, err := expectedSum(info.sumsURL, updateAsset)
+		if err != nil {
+			os.Remove(apk)
+			return "Couldn't verify the download: " + err.Error()
+		}
+		if want != "" && !strings.EqualFold(want, sum) {
+			os.Remove(apk)
+			return "The download didn't match its checksum, so it wasn't installed. Try again later."
+		}
+	}
+	if msg := h.InstallAPK(apk); msg != "" {
+		os.Remove(apk)
+		return msg
+	}
 	return ""
 }
+
+// updatesDir holds a downloaded update until Android has installed it.
+func updatesDir() string { return filepath.Join(appDir(), "updates") }

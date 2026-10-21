@@ -27,6 +27,8 @@ type Host interface {
 	OpenURL(url string)
 	// Connected reports how many servers are connected (keep-alive service on/off).
 	Connected(n int)
+	// InstallAPK hands a downloaded update to Android's installer. "" = the installer has it.
+	InstallAPK(path string) string
 }
 
 var (
@@ -116,6 +118,13 @@ func (adapter) Notify(title, body string, data map[string]any, silent bool) erro
 		hh.ShowNotification(title, body, server, buffer, silent)
 	}
 	return nil
+}
+
+func (adapter) InstallAPK(path string) string {
+	if hh := host(); hh != nil {
+		return hh.InstallAPK(path)
+	}
+	return "The app isn't ready yet."
 }
 
 func (adapter) OpenURL(u string) {

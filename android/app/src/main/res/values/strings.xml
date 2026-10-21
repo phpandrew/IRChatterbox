@@ -11,4 +11,8 @@
     <string name="service_text_one">Online on 1 server</string>
     <string name="service_text_many">Online on %d servers</string>
     <string name="quit">Disconnect</string>
+    <string name="channel_updates">Updates</string>
+    <string name="channel_updates_desc">Shown after IRChatterbox has updated itself</string>
+    <string name="updated_title">IRChatterbox updated to %s</string>
+    <string name="updated_text">Tap to open it again</string>
 </resources>

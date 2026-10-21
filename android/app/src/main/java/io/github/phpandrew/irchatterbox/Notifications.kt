@@ -21,6 +21,7 @@ object Notifications {
     const val CH_MENTIONS = "mentions"
     const val CH_MESSAGES = "messages"
     const val CH_SERVICE = "service"
+    const val CH_UPDATES = "updates"
     const val EXTRA_SERVER = "server"
     const val EXTRA_BUFFER = "buffer"
     const val KEY_REPLY = "reply"
@@ -39,6 +40,8 @@ object Notifications {
                     .apply { description = ctx.getString(R.string.channel_messages_desc) },
                 NotificationChannel(CH_SERVICE, ctx.getString(R.string.channel_service), NotificationManager.IMPORTANCE_MIN)
                     .apply { description = ctx.getString(R.string.channel_service_desc); setShowBadge(false) },
+                NotificationChannel(CH_UPDATES, ctx.getString(R.string.channel_updates), NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply { description = ctx.getString(R.string.channel_updates_desc); setShowBadge(false) },
             )
         )
     }
