@@ -72,7 +72,11 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 
 	// --- now playing (!music) ---
 	if m := cfg.Music; m.Enabled && m.Trigger != "" && strings.EqualFold(word, m.Trigger) && (self || !m.OnlyMe) {
-		if p.ready(c.cfg.ID+"|music|"+lower(replyTo), m.Cooldown) {
+		if !p.ready(c.cfg.ID+"|music|"+lower(replyTo), m.Cooldown) {
+			if self {
+				c.info(replyTo, "info", m.Trigger+": used a moment ago, try again in a few seconds")
+			}
+		} else {
 			go func() {
 				np, err := getNowPlaying(m)
 				if err != nil {
@@ -96,6 +100,9 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 			continue
 		}
 		if !p.ready(c.cfg.ID+"|url|"+lower(uc.Trigger)+"|"+lower(replyTo), uc.Cooldown) {
+			if self {
+				c.info(replyTo, "info", uc.Trigger+": used a moment ago, try again in a few seconds")
+			}
 			continue
 		}
 		uc := uc
@@ -117,6 +124,26 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 		"channel": replyTo, "nick": nick, "text": plain, "raw": text, "self": self,
 		"isChannel": c.isChannel(replyTo), "isPM": !c.isChannel(replyTo),
 	})
+}
+
+// hidesTrigger reports whether text, typed by me, is a command whose trigger is set to stay
+// out of the channel: it isn't sent, and the command runs as if it had been.
+func (p *Plugins) hidesTrigger(text string) bool {
+	cfg := p.app.store.Get().Plugins
+	plain := strings.TrimSpace(stripFormatting(text))
+	word, _, _ := strings.Cut(plain, " ")
+	if word == "" {
+		return false
+	}
+	if m := cfg.Music; m.Enabled && m.HideTrigger && m.Trigger != "" && strings.EqualFold(word, m.Trigger) {
+		return true
+	}
+	for _, uc := range cfg.URLCommands {
+		if uc.Enabled && uc.HideTrigger && uc.URL != "" && uc.Trigger != "" && strings.EqualFold(word, uc.Trigger) {
+			return true
+		}
+	}
+	return false
 }
 
 func channelAllowed(list []string, ch string) bool {

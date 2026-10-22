@@ -4,6 +4,8 @@ package core
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -316,4 +318,35 @@ func TestClientCertSASLExternal(t *testing.T) {
 	a.Connect(sv.ID)
 	defer a.Disconnect(sv.ID)
 	l.waitFor(t, "SASL EXTERNAL", func(e Event) bool { return e.Type == "info" && e.Text == "SASL authentication successful" })
+}
+
+func TestHiddenTriggerOnErgo(t *testing.T) {
+	web := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("Solar flux 142"))
+	}))
+	defer web.Close()
+	ch := "#ht" + newID()[:4]
+	a, _, la, lb, sa, _ := ergoPair(t, ch)
+	a.store.Update(func(c *Config) {
+		c.Plugins.URLCommands = []URLCommand{{Trigger: "!solar", URL: web.URL, MaxLines: 1, OnlyMe: true, Enabled: true, HideTrigger: true}}
+	})
+	a.SendInput(sa, ch, "!solar")
+	lb.waitFor(t, "reply", func(e Event) bool { return e.Type == "msg" && strings.Contains(e.Text, "Solar flux 142") })
+	la.waitFor(t, "own reply", func(e Event) bool { return e.Type == "msg" && e.Self && strings.Contains(e.Text, "Solar flux 142") })
+	a.SendInput(sa, ch, "ordinary line")
+	lb.waitFor(t, "ordinary line", func(e Event) bool { return e.Type == "msg" && e.Text == "ordinary line" })
+	for _, l := range []*evLog{la, lb} {
+		l.mu.Lock()
+		for _, e := range l.all {
+			if e.Type == "msg" && strings.Contains(e.Text, "!solar") {
+				t.Errorf("trigger was sent: %+v", e)
+			}
+		}
+		l.mu.Unlock()
+	}
+	// the cooldown tells me instead of silently doing nothing
+	a.store.Update(func(c *Config) { c.Plugins.URLCommands[0].Cooldown = 60 })
+	a.SendInput(sa, ch, "!solar")
+	la.waitFor(t, "cooldown note", func(e Event) bool { return e.Type == "info" && strings.Contains(e.Text, "try again") })
 }

@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "Для отдельного канала щёлкните его правой кнопкой в боковой панели.",
 "Joins and quits": "Входы и выходы",
 "Server setting (shown)": "Как у сервера (показывать)",
-"Server setting (hidden)": "Как у сервера (скрывать)"
+"Server setting (hidden)": "Как у сервера (скрывать)",
+"Don't send my trigger to the chat, only the reply": "Не отправлять мою команду в чат, только ответ",
+"used a moment ago, try again in a few seconds": "использовано только что, повторите через несколько секунд"
 }

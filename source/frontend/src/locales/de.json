@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "Für einen einzelnen Kanal: Rechtsklick darauf in der Seitenleiste.",
 "Joins and quits": "Betreten und Verlassen",
 "Server setting (shown)": "Servereinstellung (anzeigen)",
-"Server setting (hidden)": "Servereinstellung (ausblenden)"
+"Server setting (hidden)": "Servereinstellung (ausblenden)",
+"Don't send my trigger to the chat, only the reply": "Meinen Auslöser nicht in den Chat senden, nur die Antwort",
+"used a moment ago, try again in a few seconds": "gerade erst benutzt, versuche es in ein paar Sekunden erneut"
 }

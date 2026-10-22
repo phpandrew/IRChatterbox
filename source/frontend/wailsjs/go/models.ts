@@ -138,6 +138,7 @@ export namespace core {
 	    onlyMe: boolean;
 	    cooldown: number;
 	    enabled: boolean;
+	    hideTrigger?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new URLCommand(source);
@@ -152,6 +153,7 @@ export namespace core {
 	        this.onlyMe = source["onlyMe"];
 	        this.cooldown = source["cooldown"];
 	        this.enabled = source["enabled"];
+	        this.hideTrigger = source["hideTrigger"];
 	    }
 	}
 	export class MusicSettings {
@@ -163,6 +165,7 @@ export namespace core {
 	    npFormat: string;
 	    onlyMe: boolean;
 	    cooldown: number;
+	    hideTrigger?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new MusicSettings(source);
@@ -178,6 +181,7 @@ export namespace core {
 	        this.npFormat = source["npFormat"];
 	        this.onlyMe = source["onlyMe"];
 	        this.cooldown = source["cooldown"];
+	        this.hideTrigger = source["hideTrigger"];
 	    }
 	}
 	export class PluginSettings {

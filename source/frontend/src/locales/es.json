@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "Para un solo canal, haz clic derecho sobre él en la barra lateral.",
 "Joins and quits": "Entradas y salidas",
 "Server setting (shown)": "Ajuste del servidor (se muestran)",
-"Server setting (hidden)": "Ajuste del servidor (ocultas)"
+"Server setting (hidden)": "Ajuste del servidor (ocultas)",
+"Don't send my trigger to the chat, only the reply": "No enviar mi activador al chat, solo la respuesta",
+"used a moment ago, try again in a few seconds": "usado hace un momento, inténtalo de nuevo en unos segundos"
 }

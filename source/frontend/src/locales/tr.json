@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "Tek bir kanal için kenar çubuğunda ona sağ tıklayın.",
 "Joins and quits": "Katılma ve çıkışlar",
 "Server setting (shown)": "Sunucu ayarı (göster)",
-"Server setting (hidden)": "Sunucu ayarı (gizle)"
+"Server setting (hidden)": "Sunucu ayarı (gizle)",
+"Don't send my trigger to the chat, only the reply": "Tetikleyicimi sohbete gönderme, yalnızca yanıtı gönder",
+"used a moment ago, try again in a few seconds": "az önce kullanıldı, birkaç saniye sonra tekrar deneyin"
 }

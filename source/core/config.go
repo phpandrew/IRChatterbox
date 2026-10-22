@@ -88,6 +88,8 @@ type URLCommand struct {
 	OnlyMe   bool   `json:"onlyMe"`   // only respond when I type the trigger
 	Cooldown int    `json:"cooldown"` // seconds
 	Enabled  bool   `json:"enabled"`
+	// HideTrigger: when I type the trigger it isn't sent to the channel, only the reply is
+	HideTrigger bool `json:"hideTrigger,omitempty"`
 }
 
 // MusicSettings controls the !music now-playing command.
@@ -100,6 +102,8 @@ type MusicSettings struct {
 	NPFormat string `json:"npFormat"` // /np action text
 	OnlyMe   bool   `json:"onlyMe"`
 	Cooldown int    `json:"cooldown"`
+	// HideTrigger: when I type the trigger it isn't sent to the channel, only the reply is
+	HideTrigger bool `json:"hideTrigger,omitempty"`
 }
 
 type PluginSettings struct {

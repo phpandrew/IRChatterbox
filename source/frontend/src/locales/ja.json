@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "1 つのチャンネルだけなら、サイドバーで右クリックします。",
 "Joins and quits": "参加と退出",
 "Server setting (shown)": "サーバーの設定（表示）",
-"Server setting (hidden)": "サーバーの設定（非表示）"
+"Server setting (hidden)": "サーバーの設定（非表示）",
+"Don't send my trigger to the chat, only the reply": "自分のトリガーはチャットに送らず、返信だけを送る",
+"used a moment ago, try again in a few seconds": "使ったばかりです。数秒後にもう一度お試しください"
 }

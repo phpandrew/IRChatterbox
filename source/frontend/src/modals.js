@@ -1008,6 +1008,7 @@ export function openSettings(startTab) {
       card("Now playing (MusicBee)", "Replies with your current song when someone types the trigger. /np shares it as an action.", `
       ${check("muOn", plug.music.enabled, "Enabled")}
       <div class="indent">${check("muMe", plug.music.onlyMe, "Only I can trigger it")}</div>
+      <div class="indent">${check("muHide", plug.music.hideTrigger, "Don't send my trigger to the chat, only the reply")}</div>
       <div class="fgrid" style="margin-top:8px">
         ${field("Trigger", text("muTrig", plug.music.trigger, "!music"))}
         ${field("Where to read the song from", `<select id="muSrc">
@@ -1034,6 +1035,7 @@ export function openSettings(startTab) {
         <div class="urlcmd" data-i="${i}">
           <label class="check"><input type="checkbox" data-f="enabled" ${u.enabled ? "checked" : ""}> Enabled</label>
           <div class="indent"><label class="check"><input type="checkbox" data-f="onlyMe" ${u.onlyMe ? "checked" : ""}> Only I can trigger it</label></div>
+          <div class="indent"><label class="check"><input type="checkbox" data-f="hideTrigger" ${u.hideTrigger ? "checked" : ""}> Don't send my trigger to the chat, only the reply</label></div>
           <div class="fgrid" style="margin-top:8px">
             ${field("Trigger", `<input type="text" data-f="trigger" value="${esc(u.trigger)}" placeholder="!solar">`)}
             ${field("Cooldown per channel (seconds)", `<input type="number" data-f="cooldown" value="${u.cooldown ?? 30}">`)}
@@ -1063,7 +1065,7 @@ export function openSettings(startTab) {
       }
     });
     $("ucAdd").onclick = () => { plug.urlCommands.push({ trigger: "!", url: "", template: "", maxLines: 3, cooldown: 30, enabled: true, onlyMe: true }); drawUc(); };
-    const readMusic = () => ({ ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
+    const readMusic = () => ({ ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), hideTrigger: on("muHide"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
       file: val("muFile"), format: $("muFmt").value, npFormat: $("muNp").value, cooldown: parseInt(val("muCd")) || 0 });
     $("muBrowse").onclick = async () => { const f = await Go.PickFile("Choose the now-playing text file"); if (f) $("muFile").value = f; };
     $("muTest").onclick = async () => {
@@ -1113,7 +1115,7 @@ export function openSettings(startTab) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;
       plug.scriptsEnabled = on("pScripts");
-      plug.music = { ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
+      plug.music = { ...plug.music, enabled: on("muOn"), onlyMe: on("muMe"), hideTrigger: on("muHide"), trigger: val("muTrig") || "!music", source: $("muSrc").value,
         file: val("muFile"), format: $("muFmt").value, npFormat: $("muNp").value, cooldown: parseInt(val("muCd")) || 0 };
     }
   }

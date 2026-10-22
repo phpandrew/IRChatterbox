@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "Pour un seul salon, faites un clic droit dessus dans la barre latérale.",
 "Joins and quits": "Arrivées et départs",
 "Server setting (shown)": "Réglage du serveur (affichées)",
-"Server setting (hidden)": "Réglage du serveur (masquées)"
+"Server setting (hidden)": "Réglage du serveur (masquées)",
+"Don't send my trigger to the chat, only the reply": "Ne pas envoyer mon déclencheur dans la discussion, seulement la réponse",
+"used a moment ago, try again in a few seconds": "utilisé il y a un instant, réessayez dans quelques secondes"
 }

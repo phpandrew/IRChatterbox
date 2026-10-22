@@ -109,8 +109,7 @@ func (a *App) startup(ctx context.Context) {
 				return
 			}
 			info := r.Response.UserInfo
-			wruntime.WindowUnminimise(ctx)
-			wruntime.WindowShow(ctx)
+			bringToFront(ctx)
 			wruntime.EventsEmit(ctx, "focusBuffer", map[string]any{"server": info["server"], "buffer": info["buffer"]})
 		})
 	}
@@ -208,6 +207,15 @@ func (a *App) shutdown(ctx context.Context) {
 	wg.Wait()
 }
 
+// bringToFront shows the window. It un-minimises only a minimised window: on Windows
+// "un-minimise" is a restore, which would also shrink a maximised window to its normal size.
+func bringToFront(ctx context.Context) {
+	if wruntime.WindowIsMinimised(ctx) {
+		wruntime.WindowUnminimise(ctx)
+	}
+	wruntime.WindowShow(ctx)
+}
+
 // beforeClose runs when the window's close button is pressed. Returning true keeps the
 // window open while the UI asks for confirmation.
 func (a *App) beforeClose(ctx context.Context) bool {
@@ -245,8 +253,7 @@ func (a *App) beforeClose(ctx context.Context) bool {
 			}
 		}
 	}
-	wruntime.WindowUnminimise(ctx)
-	wruntime.WindowShow(ctx)
+	bringToFront(ctx)
 	wruntime.EventsEmit(ctx, "confirmClose", map[string]any{"connected": connected, "bouncer": bounced})
 	return true
 }
@@ -265,8 +272,7 @@ func (a *App) Quit(dontAsk bool) {
 
 func (a *App) secondInstance() {
 	if a.ctx != nil {
-		wruntime.WindowUnminimise(a.ctx)
-		wruntime.WindowShow(a.ctx)
+		bringToFront(a.ctx)
 	}
 }
 
@@ -274,8 +280,7 @@ func (a *App) showWindow() {
 	if a.ctx == nil {
 		return
 	}
-	wruntime.WindowShow(a.ctx)
-	wruntime.WindowUnminimise(a.ctx)
+	bringToFront(a.ctx)
 	a.clearAttention()
 }
 

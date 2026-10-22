@@ -760,5 +760,7 @@
 "For one channel, right-click it in the sidebar.": "如只针对一个频道，请在侧边栏中右键点击它。",
 "Joins and quits": "加入和退出",
 "Server setting (shown)": "跟随服务器（显示）",
-"Server setting (hidden)": "跟随服务器（隐藏）"
+"Server setting (hidden)": "跟随服务器（隐藏）",
+"Don't send my trigger to the chat, only the reply": "不把我的触发词发到聊天里，只发送回复",
+"used a moment ago, try again in a few seconds": "刚刚用过，请几秒后再试"
 }

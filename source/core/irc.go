@@ -467,6 +467,10 @@ func (c *Conn) Say(target, text string, viaPlugin bool) {
 		c.info(target, "error", "Not connected")
 		return
 	}
+	if !viaPlugin && c.app.plugins.hidesTrigger(text) {
+		c.app.plugins.OnMessage(c, target, c.Nick(), text, true) // run it without sending it
+		return
+	}
 	for _, chunk := range splitText(text, c.maxPayload("PRIVMSG", target)) {
 		// with echo-message the line is shown (and bots see it) when the server echoes it
 		if !c.sendMsg("PRIVMSG", target, chunk, viaPlugin) {
