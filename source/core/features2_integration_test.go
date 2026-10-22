@@ -107,6 +107,15 @@ func TestDCCOverIRC(t *testing.T) {
 	os.WriteFile(src, data, 0o644)
 	b.store.Update(func(c *Config) { c.Settings.DCCFolder = filepath.Join(t.TempDir(), "recv") })
 
+	// not chosen by the user (a script, a Perform line, a bug in the chat view): refused
+	if err := a.DCCSend(sa, bnick, src); !strings.Contains(err, "file dialog") {
+		t.Fatalf("sent a file nobody picked: %q", err)
+	}
+	a.runCommandFrom(a.conn(sa), "", "/dcc send "+bnick+" "+src, true)
+	if n, _ := dccPendingOffers(sb, anick); n != 0 {
+		t.Fatal("a Perform/script line could send a file")
+	}
+	allowPath(src) // as the file dialog does
 	if err := a.DCCSend(sa, bnick, src); err != "" {
 		t.Fatal(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -316,9 +317,10 @@ func defaultConfig() Config {
 
 func NewStore() *Store {
 	dir := appDir()
-	os.MkdirAll(filepath.Join(dir, "themes"), 0o755)
-	os.MkdirAll(filepath.Join(dir, "plugins"), 0o755)
-	os.MkdirAll(filepath.Join(dir, "logs"), 0o755)
+	os.MkdirAll(dir, 0o700) // chat logs and settings: no other user on this computer can read them
+	os.MkdirAll(filepath.Join(dir, "themes"), 0o700)
+	os.MkdirAll(filepath.Join(dir, "plugins"), 0o700)
+	os.MkdirAll(filepath.Join(dir, "logs"), 0o700)
 	s := &Store{dir: dir, path: filepath.Join(dir, "config.json")}
 	s.cfg = defaultConfig()
 	if b, err := os.ReadFile(s.path); err == nil {
@@ -503,9 +505,17 @@ func winReservedName(n string) bool {
 	return false
 }
 
+var themeValueRe = regexp.MustCompile(`(?i)^(#[0-9a-f]{3,8}|[a-z]{3,20}|(rgba?|hsla?)\([\d\s.,%/]+\)|color-mix\(in srgb,\s*(#[0-9a-f]{3,8}|[a-z]{3,20})\s*\d{0,3}%?,\s*(#[0-9a-f]{3,8}|[a-z]{3,20})\s*\d{0,3}%?\))$`)
+
 func (s *Store) SaveTheme(t Theme) error {
+	// a theme holds colours and nothing else (no url(), which would fetch an address)
+	for k, v := range t.Vars {
+		if !themeValueRe.MatchString(strings.TrimSpace(v)) {
+			delete(t.Vars, k)
+		}
+	}
 	b, _ := json.MarshalIndent(t, "", "  ")
-	return os.WriteFile(filepath.Join(s.dir, "themes", safeName(t.Name)+".json"), b, 0o644)
+	return os.WriteFile(filepath.Join(s.dir, "themes", safeName(t.Name)+".json"), b, 0o600)
 }
 
 func (s *Store) DeleteTheme(name string) error {

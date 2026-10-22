@@ -92,6 +92,16 @@ type mStmt struct {
 
 // ---------- loading ----------
 
+// unload stops every script and timer (scripts turned off).
+func (e *mircEngine) unload() {
+	e.stopTimers()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.aliases = map[string]*mircAlias{}
+	e.events, e.files, e.menus, e.menuNodes = nil, nil, nil, nil
+	e.nEvents.Store(0)
+}
+
 func (e *mircEngine) load(dir string) (names, errs []string) {
 	e.stopTimers()
 	e.mu.Lock()
@@ -664,8 +674,21 @@ func (x *mCtx) evalIdent(s string, i int) (string, int) {
 	if j < len(s) && s[j] == '(' {
 		end := matchParen(s, j)
 		args = splitArgs(s[j+1 : end])
-		for k := range args {
-			args[k] = x.eval(args[k])
+		if name == "iif" && len(args) > 0 {
+			// the condition is checked as written: evaluating it first and then again in
+			// cond() would run whatever a user's text ($1-) contained
+			raw := strings.TrimSpace(args[0])
+			for k := 1; k < len(args); k++ {
+				args[k] = x.eval(args[k])
+			}
+			args[0] = ""
+			if x.cond(raw) {
+				args[0] = "1"
+			}
+		} else {
+			for k := range args {
+				args[k] = x.eval(args[k])
+			}
 		}
 		hasArgs = true
 		j = end + 1
@@ -1053,10 +1076,11 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 	case "abs":
 		return mFmtNum(math.Abs(atof(arg(a, 0))))
 	case "round":
-		p := math.Pow(10, float64(atoi(arg(a, 1))))
-		return strconv.FormatFloat(math.Round(atof(arg(a, 0))*p)/p, 'f', atoi(arg(a, 1)), 64)
+		d := min(max(atoi(arg(a, 1)), 0), 20) // a huge precision from a user's text would allocate gigabytes
+		p := math.Pow(10, float64(d))
+		return strconv.FormatFloat(math.Round(atof(arg(a, 0))*p)/p, 'f', d, 64)
 	case "iif":
-		if x.cond(arg(a, 0)) {
+		if arg(a, 0) == "1" { // decided in evalIdent, on the condition as written
 			return arg(a, 1)
 		}
 		return arg(a, 2)
@@ -1639,6 +1663,13 @@ func (x *mCtx) command(line string) error {
 		return errContinue
 	}
 
+	if strings.HasPrefix(cmd, "timer") && cmd != "timers" {
+		// /timer: the leading words (flags, repeats, delay) are evaluated now; the command
+		// itself is kept as written and evaluated once, when the timer fires. Evaluating it
+		// now and again later let text from a channel ($1-) call aliases and read %variables.
+		x.timerCmd(cmd, x.timerArgs(rest))
+		return nil
+	}
 	x.missing = false
 	rest = x.eval(rest)
 	if x.missing {
@@ -1756,7 +1787,7 @@ func (x *mCtx) command(line string) error {
 			return nil
 		}
 		switch cmd {
-		case "reload", "run", "exit", "load", "unload", "write", "remove", "rename", "copy", "mkdir", "dll", "sockopen", "sockwrite", "sockclose", "dialog", "window", "play", "splay", "savebuf", "loadbuf", "fopen", "fwrite", "flushini", "writeini", "remini":
+		case "reload", "run", "exit", "load", "unload", "write", "remove", "rename", "copy", "mkdir", "dll", "sockopen", "sockwrite", "sockclose", "dialog", "window", "play", "splay", "savebuf", "loadbuf", "fopen", "fwrite", "flushini", "writeini", "remini", "dcc":
 			return nil // not available to scripts here (files, programs, sockets)
 		}
 		// everything else is a normal IRChatterbox / IRC command
@@ -1799,6 +1830,25 @@ func (x *mCtx) setVar(name, val string, global bool) {
 	}
 	x.e.vars[name] = val
 	x.e.saveVarsSoon()
+}
+
+// timerArgs evaluates a /timer line's flags, repeats and delay, and leaves the command as
+// written (with "$!" meaning "$": the usual way to say "evaluate this when it fires").
+func (x *mCtx) timerArgs(rest string) string {
+	f := strings.Fields(rest)
+	var head []string
+	i := 0
+	for ; i < len(f) && strings.HasPrefix(f[i], "-"); i++ {
+		head = append(head, f[i])
+	}
+	for n := 0; n < 2 && i < len(f); n, i = n+1, i+1 {
+		head = append(head, x.eval(f[i]))
+	}
+	if i >= len(f) { // "off", or nothing to run
+		return strings.Join(append(head, x.eval(strings.Join(f[i:], " "))), " ")
+	}
+	cmd := strings.ReplaceAll(strings.Join(f[i:], " "), "$!", "$")
+	return strings.Join(append(head, cmd), " ")
 }
 
 // /timer[name] [-m] reps delay command  ·  /timer[name] off  ·  /timers off
@@ -1872,9 +1922,8 @@ func (e *mircEngine) runTimer(t *mircTimer) {
 		}
 		ctx := *t.ctx
 		ctx.steps, ctx.locals = 0, map[string]string{}
-		// like mIRC, the command was evaluated when the timer was set and is evaluated
-		// again now (write $!nick to delay an identifier until the timer fires)
-		// not split on | again: that would let text from the event inject commands
+		// the command is evaluated once, now (the script's $nick, $chan and $1- were kept
+		// when the timer was set); its result is never evaluated again
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -1936,7 +1985,7 @@ func (e *mircEngine) saveVarsSoon() {
 		b, _ := json.MarshalIndent(e.vars, "", "  ")
 		e.mu.Unlock()
 		p := e.varsPath(e.p.pluginDir())
-		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.MkdirAll(filepath.Dir(p), 0o700)
 		if os.WriteFile(p+".tmp", b, 0o600) == nil {
 			os.Rename(p+".tmp", p)
 		}
@@ -2208,7 +2257,7 @@ on *:TEXT:hi*:#:{
 func writeExampleMirc(dir string) {
 	p := filepath.Join(dir, "_example.mrc")
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		os.WriteFile(p, []byte(exampleMirc), 0o644)
+		os.WriteFile(p, []byte(exampleMirc), 0o600)
 	}
 }
 

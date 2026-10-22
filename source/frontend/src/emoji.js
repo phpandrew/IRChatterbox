@@ -34,7 +34,7 @@ function esc(s) {
 }
 
 function cell(e, name) {
-  return `<button class="em" data-e="${esc(e)}" title="${esc(name || "")}">${e}</button>`;
+  return `<button class="em" data-e="${esc(e)}" title="${esc(name || "")}">${esc(e)}</button>`;
 }
 
 function render(query) {

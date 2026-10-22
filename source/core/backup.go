@@ -60,6 +60,8 @@ type serverSecrets struct {
 	BouncerPass string `json:"bouncerPass,omitempty"`
 	ProxyPass   string `json:"proxyPass,omitempty"`
 	ClientKey   string `json:"clientKey,omitempty"`
+	// the age private key for encrypted bouncer history: a secret like the passwords
+	EncryptionKey string `json:"encryptionKey,omitempty"`
 }
 
 func (s serverSecrets) empty() bool { return s == serverSecrets{} }
@@ -109,11 +111,11 @@ func (a *App) ExportSettings(withPasswords bool, passphrase string) BackupResult
 
 	secrets := map[string]serverSecrets{}
 	for _, sv := range cfg.Servers {
-		sec := serverSecrets{Password: sv.Password, AuthPass: sv.AuthPass, BouncerPass: sv.BouncerPass, ProxyPass: sv.ProxyPass, ClientKey: sv.ClientKey}
+		sec := serverSecrets{Password: sv.Password, AuthPass: sv.AuthPass, BouncerPass: sv.BouncerPass, ProxyPass: sv.ProxyPass, ClientKey: sv.ClientKey, EncryptionKey: sv.EncryptionKey}
 		if !sec.empty() {
 			secrets[sv.ID] = sec
 		}
-		sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass, sv.ClientKey = "", "", "", "", ""
+		sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass, sv.ClientKey, sv.EncryptionKey = "", "", "", "", "", ""
 		sv.SecretsStored = false
 		f.Servers = append(f.Servers, sv)
 	}
@@ -178,10 +180,24 @@ func (a *App) ImportSettings(data, passphrase string) string {
 			if sv.ID == "" || sv.Host == "" {
 				continue
 			}
+			if !validID(sv.ID) {
+				continue // IDs end up in element attributes; keep them to plain characters
+			}
 			sec := secrets[sv.ID]
 			sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass, sv.ClientKey = sec.Password, sec.AuthPass, sec.BouncerPass, sec.ProxyPass, sec.ClientKey
+			// an older backup may still carry the key in clear; a new one has it in the sealed block
+			if sec.EncryptionKey != "" {
+				sv.EncryptionKey = sec.EncryptionKey
+			}
+			sv.SecretsStored = false
 			if i, ok := byID[sv.ID]; ok {
 				cur := c.Servers[i]
+				if sv.EncryptionKey == "" {
+					sv.EncryptionKey = cur.EncryptionKey
+				}
+				// what belongs to this computer and this network path stays as it is
+				sv.ProxyType, sv.ProxyHost, sv.ProxyPort, sv.ProxyUser, sv.ProxyPass = cur.ProxyType, cur.ProxyHost, cur.ProxyPort, cur.ProxyUser, cur.ProxyPass
+				sv.TLSSkipVerify = cur.TLSSkipVerify
 				if sv.Password == "" {
 					sv.Password = cur.Password
 				}
@@ -199,6 +215,10 @@ func (a *App) ImportSettings(data, passphrase string) string {
 				}
 				c.Servers[i] = sv
 			} else {
+				// a server this computer hasn't seen: never start it with certificate checks off
+				// or through a proxy the file names
+				sv.TLSSkipVerify = false
+				sv.ProxyType, sv.ProxyHost, sv.ProxyPort, sv.ProxyUser, sv.ProxyPass = "", "", 0, "", ""
 				byID[sv.ID] = len(c.Servers)
 				c.Servers = append(c.Servers, sv)
 			}
@@ -209,9 +229,11 @@ func (a *App) ImportSettings(data, passphrase string) string {
 		}
 
 		s := f.Settings
-		// keep what belongs to this computer
+		// keep what belongs to this computer, and where images and files go
 		s.LogFolder = old.LogFolder
 		s.SkippedVersion = old.SkippedVersion
+		s.UploadHost, s.UploadURL = old.UploadHost, old.UploadURL
+		s.DCCFolder, s.DCCAddress, s.DCCPorts = old.DCCFolder, old.DCCAddress, old.DCCPorts
 		s.StartWithWindows, s.StartMinimized = old.StartWithWindows, old.StartMinimized
 		if s.SoundHighlight == "" && strings.HasPrefix(old.SoundHighlight, "file:") {
 			s.SoundHighlight = old.SoundHighlight
@@ -225,7 +247,9 @@ func (a *App) ImportSettings(data, passphrase string) string {
 			c.NickColors = map[string]string{}
 		}
 		for k, v := range f.NickColors {
-			c.NickColors[k] = v
+			if validColor(v) {
+				c.NickColors[k] = v
+			}
 		}
 
 		musicFile := c.Plugins.Music.File

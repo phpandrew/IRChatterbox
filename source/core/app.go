@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"os/user"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -212,11 +211,37 @@ func (a *App) isIgnored(nick, prefix string) bool {
 		if mask == lower(nick) {
 			return true
 		}
-		if ok, _ := path.Match(mask, lower(prefix)); ok {
+		if maskMatch(mask, lower(prefix)) {
 			return true
 		}
 	}
 	return false
+}
+
+// maskMatch matches an IRC mask (nick!user@host with * and ?) against a prefix. Unlike
+// path.Match, * crosses "/", which cloaked hosts like user/alice contain.
+func maskMatch(pattern, s string) bool {
+	px, sx, star, mark := 0, 0, -1, 0
+	for sx < len(s) {
+		switch {
+		case px < len(pattern) && (pattern[px] == '?' || pattern[px] == s[sx]):
+			px++
+			sx++
+		case px < len(pattern) && pattern[px] == '*':
+			star, mark = px, sx
+			px++
+		case star >= 0:
+			px = star + 1
+			mark++
+			sx = mark
+		default:
+			return false
+		}
+	}
+	for px < len(pattern) && pattern[px] == '*' {
+		px++
+	}
+	return px == len(pattern)
 }
 
 var fmtRe = regexp.MustCompile("\x03(\\d{1,2}(,\\d{1,2})?)?|[\x02\x0F\x16\x1D\x1F\x1E\x11]")
@@ -577,6 +602,13 @@ func (a *App) Disconnect(id string) {
 
 func (a *App) SaveSettings(s Settings) string {
 	old := a.store.Get().Settings
+	// a custom sound path must have come from the file picker this session
+	if s.SoundHighlight != old.SoundHighlight && isPathLike(s.SoundHighlight) && !pathAllowed(strings.TrimPrefix(s.SoundHighlight, "file:")) {
+		s.SoundHighlight = old.SoundHighlight
+	}
+	if s.SoundPM != old.SoundPM && isPathLike(s.SoundPM) && !pathAllowed(strings.TrimPrefix(s.SoundPM, "file:")) {
+		s.SoundPM = old.SoundPM
+	}
 	a.store.Update(func(c *Config) { c.Settings = s })
 	a.updateMonitors(old.NotifyList, s.NotifyList)
 	if s.LogMaxLines > 0 && (old.LogMaxLines == 0 || s.LogMaxLines < old.LogMaxLines) {
@@ -593,8 +625,19 @@ func (a *App) SaveSettings(s Settings) string {
 }
 
 func (a *App) SavePlugins(p PluginSettings) {
+	cur := a.store.Get().Plugins
+	// the now-playing file must have come from the file picker this session
+	if p.Music.File != cur.Music.File && p.Music.File != "" && !pathAllowed(p.Music.File) {
+		p.Music.File = cur.Music.File
+	}
 	a.store.Update(func(c *Config) { c.Plugins = p })
+	if p.ScriptsEnabled != cur.ScriptsEnabled {
+		go a.plugins.LoadScripts() // turning scripts off stops them; on loads them
+	}
 }
+
+// isPathLike: a file path rather than the name of a built-in sound ("chime", "ping").
+func isPathLike(s string) bool { return strings.HasPrefix(s, "file:") }
 
 // baseNick is the person behind a nick, ignoring away/alt suffixes
 // (Andrew|Slop, Andrew_, Andrew^, Andrew[afk] → andrew). Must match baseNick in format.js.
@@ -622,7 +665,7 @@ func (a *App) SetNickColor(nick, color string) {
 		delete(c.NickColors, lower(nick))
 		if color == "" {
 			delete(c.NickColors, baseNick(nick))
-		} else {
+		} else if validColor(color) {
 			c.NickColors[baseNick(nick)] = color
 		}
 	})
@@ -803,6 +846,9 @@ func (a *App) TestURLCommand(cmd URLCommand) string {
 // TestMusic reports what each now-playing source returns, for the settings page.
 func (a *App) TestMusic(m MusicSettings) []string {
 	var out []string
+	if m.File != "" && m.File != a.store.Get().Plugins.Music.File && !pathAllowed(m.File) {
+		m.File = "" // only a file the user picked
+	}
 	for _, src := range []struct{ id, name string }{{"smtc", "Windows media controls"}, {"window", "MusicBee window title"}, {"file", "Text file"}} {
 		mm := m
 		mm.Source = src.id
@@ -833,8 +879,12 @@ func (a *App) Notify(title, body string) {
 	}
 }
 
-// GetSoundData returns a custom sound file as a data: URL so the UI can play it.
+// GetSoundData returns a custom sound file as a data: URL so the UI can play it. Only the
+// sound the user picked (or saved) is served: this isn't a general file reader.
 func (a *App) GetSoundData(path string) string {
+	if !a.soundPathOK(path) {
+		return ""
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return ""

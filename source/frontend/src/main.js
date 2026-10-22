@@ -1,5 +1,5 @@
 import { Go, on, initApi, setTitle } from "./api.js";
-import { esc, ircToHtml, nickColor, iconLetters, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
+import { esc, ircToHtml, nickColor, iconLetters, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes, isLocalHost } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange, systemIsDark } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
@@ -1431,6 +1431,8 @@ function addLinkPreviews(el, urls) {
     el.append(gap1, gap2, wrap);
     getPreview(url).then((p) => {
       if (!p || p.error || !p.title) { gap1.remove(); gap2.remove(); wrap.remove(); return; }
+      // the page's picture is loaded by the chat view, so it gets the same local-network check as inline images
+      try { if (!/^https?:$/.test(new URL(p.image).protocol) || isLocalHost(new URL(p.image).hostname)) p.image = ""; } catch { p.image = ""; }
       const keep = stick;
       wrap.innerHTML = `<a class="lp${p.image ? " has-img" : ""}" href="${esc(url)}" data-url="${esc(url)}" title="${esc(url)}">
         <span class="lp-txt">${p.site ? `<span class="lp-site">${esc(p.site)}</span>` : ""}<span class="lp-title">${esc(p.title)}</span>${p.description ? `<span class="lp-desc">${esc(p.description)}</span>` : ""}</span>
@@ -1752,7 +1754,7 @@ $("chat").addEventListener("click", (e) => {
   const yt = e.target.closest(".yt[data-yt]");
   if (yt && !yt.querySelector("iframe")) {
     const id = yt.dataset.yt, start = +yt.dataset.start || 0;
-    yt.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0${start ? "&start=" + start : ""}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    yt.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0${start ? "&start=" + start : ""}" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
     return;
   }
   const em = e.target.closest(".yt[data-embed]");
@@ -1760,6 +1762,7 @@ $("chat").addEventListener("click", (e) => {
     const f = document.createElement("iframe");
     f.src = em.dataset.embed; // built by mediaFor from a fixed host + an id, never the raw link
     f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    f.sandbox = "allow-scripts allow-same-origin allow-presentation allow-forms"; // the player can't move the app window to another page
     f.allowFullscreen = true;
     f.referrerPolicy = "strict-origin-when-cross-origin";
     if (em.dataset.h) em.style.height = em.dataset.h + "px";

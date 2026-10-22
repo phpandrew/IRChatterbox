@@ -273,15 +273,15 @@ func dccAddrOK(ip net.IP, port int, serverIsLocal bool) bool {
 
 // serverIsLocal: the IRC connection goes to this computer.
 func (c *Conn) serverIsLocal() bool {
-	c.mu.Lock()
-	nc := c.conn
-	c.mu.Unlock()
-	if nc == nil {
-		return false
+	if c.cfg.proxyAddr() != "" {
+		return false // through a proxy, the socket's other end is the proxy (often local), not the server
 	}
-	host, _, err := net.SplitHostPort(nc.RemoteAddr().String())
+	host := strings.ToLower(strings.TrimSpace(c.cfg.Host))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
 	ip := net.ParseIP(host)
-	return err == nil && ip != nil && ip.IsLoopback()
+	return ip != nil && ip.IsLoopback()
 }
 
 // DCCAccept accepts an offer. Returns an error message or "".
@@ -625,6 +625,11 @@ func (a *App) DCCSend(server, nick, path string) string {
 	if nick == "" || c.isChannel(nick) || strings.ContainsAny(nick, " ,*") {
 		return "Files can only be sent to one person"
 	}
+	if !pathAllowed(path) {
+		// only files the user chose (file dialog, or typed into /dcc send): not scripts,
+		// not Perform lines, not anything else that can run a command
+		return "Choose the file to send with the file dialog"
+	}
 	st, err := os.Stat(path)
 	if err != nil || !st.Mode().IsRegular() {
 		return "Couldn't open that file"
@@ -820,6 +825,7 @@ func (a *App) dccChatSay(c *Conn, buffer, kind, text string) bool {
 		c.info(buffer, "error", "This direct chat isn't connected. Start a new one with /dcc chat "+nick)
 		return false
 	}
+	text = strings.NewReplacer("\r", "", "\n", " ").Replace(text) // one line stays one line
 	line := text
 	if kind == "action" {
 		line = "\x01ACTION " + text + "\x01"
@@ -839,7 +845,7 @@ func (a *App) dccChatSay(c *Conn, buffer, kind, text string) bool {
 // ---------- /dcc ----------
 
 // dccCommand runs /dcc send|chat|get|close <nick> [file].
-func (a *App) dccCommand(c *Conn, buffer, args string) {
+func (a *App) dccCommand(c *Conn, buffer, args string, fromScript bool) {
 	sub, rest, _ := strings.Cut(strings.TrimSpace(args), " ")
 	nick, file, _ := strings.Cut(strings.TrimSpace(rest), " ")
 	file = strings.Trim(strings.TrimSpace(file), `"`)
@@ -855,6 +861,9 @@ func (a *App) dccCommand(c *Conn, buffer, args string) {
 		if file == "" {
 			a.emitUI("dccPick", map[string]any{"server": c.cfg.ID, "nick": nick})
 			return
+		}
+		if !fromScript {
+			allowPath(file) // the user typed this path
 		}
 		if err := a.DCCSend(c.cfg.ID, nick, file); err != "" {
 			c.info(buffer, "error", err)

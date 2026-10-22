@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -54,16 +53,9 @@ func (a *App) InstallUpdate() string {
 		}
 		return "Download failed: " + err.Error()
 	}
-	if info.sumsURL != "" {
-		want, err := expectedSum(info.sumsURL, updateAsset)
-		if err != nil {
-			os.Remove(newPath)
-			return "Couldn't verify the download: " + err.Error()
-		}
-		if want != "" && !strings.EqualFold(want, sum) {
-			os.Remove(newPath)
-			return "The download didn't match its checksum, so it wasn't installed. Try again later."
-		}
+	if msg := verifyDownload(info, sum); msg != "" {
+		os.Remove(newPath)
+		return msg
 	}
 	os.Chmod(newPath, 0o755) // Linux/macOS: keep it executable
 	if msg := a.swapAndRestart(exe, newPath); msg != "" {

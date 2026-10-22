@@ -32,6 +32,11 @@ func dialServer(ctx context.Context, s ServerConfig, addr string) (net.Conn, err
 	d := &net.Dialer{Timeout: 20 * time.Second, KeepAlive: 60 * time.Second}
 	paddr := s.proxyAddr()
 	if paddr == "" {
+		if s.ProxyType != "" && s.ProxyType != "none" {
+			// a proxy is wanted but its address is missing: never fall back to a direct
+			// connection, which would show the real address
+			return nil, errors.New("the proxy's host and port aren't set (Edit server → Advanced)")
+		}
 		return d.DialContext(ctx, "tcp", addr)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

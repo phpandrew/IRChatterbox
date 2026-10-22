@@ -192,7 +192,7 @@ func (c *Conn) onTagmsg(m *Message, nick string, isMe bool) {
 	if state == "" {
 		state = m.Tags["+draft/typing"]
 	}
-	if state == "" || isMe {
+	if state == "" || isMe || c.app.isIgnored(nick, m.Prefix) {
 		return
 	}
 	target := m.Param(0)

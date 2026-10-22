@@ -211,7 +211,7 @@ func (a *App) runCommandFrom(c *Conn, buffer, line string, fromScript bool) {
 			a.emitUI("chanlistOpen", map[string]any{"server": c.cfg.ID, "filter": rest})
 		}
 	case "dcc":
-		a.dccCommand(c, buffer, rest)
+		a.dccCommand(c, buffer, rest, fromScript)
 	case "ctcp":
 		if requireConn() && arg(0) != "" && arg(1) != "" {
 			body := strings.ToUpper(arg(1))

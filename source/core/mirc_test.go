@@ -288,3 +288,38 @@ alias many {
 	}
 	e.stopTimers()
 }
+
+// Text typed by someone in a channel ($1-) must never be run as script code, however the
+// script passes it on.
+func TestMircChannelTextIsNotCode(t *testing.T) {
+	e := mircEngineFor(t, `
+alias secret { set %leaked yes | return LEAKED }
+alias remind { timer 1 1 set %out $1- }
+alias pick { return $iif($1- == x,A,B) }
+alias delayed { timer 1 1 set %out2 $!nick $1- }`)
+	x := e.newCtx(nil)
+	x.nick = "bob"
+	payload := "$secret(1) $var(%nickserv.pass) $calc(1+1)"
+	x.params = strings.Fields(payload)
+	// as an on TEXT handler would: the channel text is $1-, passed on to the aliases
+	x.command("remind $1-")
+	x.command("delayed $1-")
+	time.Sleep(1300 * time.Millisecond)
+	e.mu.Lock()
+	out, out2, leaked := e.vars["%out"], e.vars["%out2"], e.vars["%leaked"]
+	e.mu.Unlock()
+	if leaked != "" || strings.Contains(out, "LEAKED") || out != payload {
+		t.Fatalf("timer re-evaluated channel text: out=%q leaked=%q", out, leaked)
+	}
+	if out2 != "bob "+payload {
+		t.Fatalf("$!nick in a timer: %q", out2)
+	}
+	x.params = []string{"$secret(1)"}
+	if got := mircEval(e, "$pick($1-)", "$secret(1)"); got != "B" || e.vars["%leaked"] != "" {
+		t.Fatalf("$iif ran channel text: %q leaked=%q", got, e.vars["%leaked"])
+	}
+	if got := mircEval(e, "$pick(x)"); got != "A" {
+		t.Fatalf("$iif broke: %q", got)
+	}
+	e.stopTimers()
+}

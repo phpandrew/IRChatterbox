@@ -72,7 +72,9 @@ type Conn struct {
 	pingSent      time.Time
 
 	userDebounce map[string]*time.Timer
-	ctcpRecent   []time.Time // CTCP requests answered lately (ctcpAllowed)
+	ctcpRecent   []time.Time            // CTCP requests answered lately (ctcpAllowed)
+	saslStarted  bool                   // we sent AUTHENTICATE and are waiting for the server's challenge
+	modeQuery    map[string]*time.Timer // channels whose modes we'll ask for again shortly
 	stop         chan struct{}
 	running      bool          // a run() loop exists (connected, connecting or waiting to reconnect)
 	wake         chan struct{} // cuts a reconnect wait short
@@ -300,6 +302,29 @@ func (c *Conn) ctcpAllowed() bool {
 	return true
 }
 
+// queryModesSoon asks the server for a channel's modes, at most once every few seconds per
+// channel: a burst of mode changes (an op bot, a netsplit healing) would otherwise queue a
+// MODE request for each one and crowd out the lines you type.
+func (c *Conn) queryModesSoon(channel string) {
+	key := lower(channel)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.modeQuery == nil {
+		c.modeQuery = map[string]*time.Timer{}
+	}
+	if c.modeQuery[key] != nil {
+		return
+	}
+	c.modeQuery[key] = time.AfterFunc(3*time.Second, func() {
+		c.mu.Lock()
+		delete(c.modeQuery, key)
+		c.mu.Unlock()
+		if c.Status() == "connected" {
+			c.SendRaw("MODE " + channel)
+		}
+	})
+}
+
 // resetSessionLocked clears what a new connection starts without. c.mu must be held.
 func (c *Conn) resetSessionLocked() {
 	c.nick = c.cfg.Nick
@@ -309,6 +334,11 @@ func (c *Conn) resetSessionLocked() {
 	c.nickTries = 0
 	c.caps = map[string]bool{}
 	c.capLS = nil
+	c.saslStarted = false
+	for _, t := range c.modeQuery {
+		t.Stop()
+	}
+	c.modeQuery = nil
 	c.connectedAt = time.Now()
 	c.batches = map[string]string{}
 	c.histFetched = map[string]bool{}
@@ -768,7 +798,7 @@ func (c *Conn) onRegistered() {
 				}
 				continue
 			}
-			c.app.runCommand(c, "", p)
+			c.app.runCommandFrom(c, "", p, true) // from config, not typed: no file sends
 		}
 		var chans, keys []string
 		for _, a := range cfg.AutoJoin {
@@ -934,6 +964,9 @@ func (c *Conn) handle(m *Message) {
 					c.info("", "info", "Authenticating with SASL…")
 					c.SendRaw("AUTHENTICATE PLAIN")
 				}
+				c.mu.Lock()
+				c.saslStarted = true
+				c.mu.Unlock()
 			} else if !c.registered {
 				c.SendRaw("CAP END")
 			}
@@ -943,6 +976,12 @@ func (c *Conn) handle(m *Message) {
 			}
 		}
 	case "AUTHENTICATE":
+		c.mu.Lock()
+		started := c.saslStarted
+		c.mu.Unlock()
+		if !started {
+			break // we didn't start SASL: a server asking out of the blue doesn't get the password
+		}
 		if m.Param(0) == "+" {
 			if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "external" {
 				c.SendRaw("AUTHENTICATE +") // the certificate is the credential
@@ -953,9 +992,15 @@ func (c *Conn) handle(m *Message) {
 	case "900":
 		c.info("", "info", m.Trailing())
 	case "903":
+		c.mu.Lock()
+		c.saslStarted = false
+		c.mu.Unlock()
 		c.info("", "info", "SASL authentication successful")
 		c.SendRaw("CAP END")
 	case "902", "904", "905", "906", "907", "908":
+		c.mu.Lock()
+		c.saslStarted = false
+		c.mu.Unlock()
 		if c.cfg.Bouncer != "" {
 			c.info("", "error", "Bouncer login failed: "+m.Trailing()+" (check the bouncer username, password and network)")
 		} else {
@@ -1253,7 +1298,7 @@ func (c *Conn) handle(m *Message) {
 			c.applyChannelModes(target, m.From(1))
 			c.emit(Event{Type: "event", Kind: "mode", Buffer: target, Nick: nick, Text: modeStr, Time: ts, Self: isMe})
 			c.app.plugins.Emit("mode", c, target, map[string]any{"channel": target, "nick": nick, "modes": modeStr, "self": isMe, "isChannel": true})
-			c.SendRaw("MODE " + target)
+			c.queryModesSoon(target)
 		} else {
 			c.info("", "info", fmt.Sprintf("%s sets mode %s on %s", nick, modeStr, target))
 		}

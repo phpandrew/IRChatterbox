@@ -187,8 +187,11 @@ func TestProxies(t *testing.T) {
 	if _, err := dialServer(t.Context(), ServerConfig{ProxyType: "http", ProxyHost: h, ProxyPort: p}, dest); err == nil || !strings.Contains(err.Error(), "407") {
 		t.Fatalf("missing proxy password: %v", err)
 	}
-	// no proxy set: direct
-	if err := roundTrip(t, ServerConfig{ProxyType: "socks5", ProxyHost: "", ProxyPort: 1080}, dest); err != nil {
+	// a proxy wanted but not set up: never connects directly (that would show the real address)
+	if _, err := dialServer(t.Context(), ServerConfig{ProxyType: "socks5", ProxyHost: "", ProxyPort: 1080}, dest); err == nil || !strings.Contains(err.Error(), "aren't set") {
+		t.Fatalf("proxy without an address: %v", err)
+	}
+	if err := roundTrip(t, ServerConfig{}, dest); err != nil {
 		t.Fatal(err)
 	}
 }

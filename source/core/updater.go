@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -47,7 +48,51 @@ type ghRelease struct {
 	} `json:"assets"`
 }
 
-var updateClient = &http.Client{Timeout: 20 * time.Second}
+var updateClient = &http.Client{Timeout: 20 * time.Second, CheckRedirect: httpsOnlyRedirect}
+
+// httpsOnlyRedirect lets a download follow GitHub's redirect to its file store, but never to
+// a plain-http address.
+func httpsOnlyRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return errors.New("too many redirects")
+	}
+	if req.URL.Scheme != "https" {
+		return errors.New("redirected to an insecure address")
+	}
+	return nil
+}
+
+// releaseURLOK: an asset address on GitHub's release hosts, over https.
+func releaseURLOK(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com":
+		return true
+	}
+	return false
+}
+
+// verifyDownload checks a downloaded release file against the release's SHA256SUMS.txt.
+// Without a checksum to compare with, nothing is installed.
+func verifyDownload(info UpdateInfo, sum string) string {
+	if info.sumsURL == "" {
+		return "This release has no checksum file, so the download wasn't installed. You can download it from the release page instead."
+	}
+	want, err := expectedSum(info.sumsURL, updateAsset)
+	if err != nil {
+		return "Couldn't verify the download: " + err.Error()
+	}
+	if want == "" {
+		return "The release's checksum file doesn't list this download, so it wasn't installed."
+	}
+	if !strings.EqualFold(want, sum) {
+		return "The download didn't match its checksum, so it wasn't installed. Try again later."
+	}
+	return ""
+}
 
 func fetchLatestRelease() (UpdateInfo, error) {
 	info := UpdateInfo{Current: appVersion}
@@ -73,6 +118,9 @@ func fetchLatestRelease() (UpdateInfo, error) {
 	info.Notes = rel.Body
 	info.URL = rel.HTMLURL
 	for _, a := range rel.Assets {
+		if !releaseURLOK(a.URL) {
+			continue // downloads come from GitHub over https, nowhere else
+		}
 		switch a.Name {
 		case updateAsset:
 			info.assetURL, info.Size = a.URL, a.Size

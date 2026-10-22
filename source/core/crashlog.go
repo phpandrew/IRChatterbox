@@ -34,7 +34,7 @@ func (a *App) diagDir() string { return filepath.Join(a.store.dir, "diagnostics"
 // initLogs sets up app.log and crash capture. Called once at startup by the desktop host.
 func (a *App) initLogs() {
 	dir := a.diagDir()
-	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(dir, 0o700)
 
 	// app.log: keep one previous file when it passes 1 MB
 	logPath := filepath.Join(dir, "app.log")
@@ -89,7 +89,7 @@ func (a *App) DismissCrash() { a.lastCrash = "" }
 
 // OpenDiagnostics shows the folder with app.log and crash reports.
 func (a *App) OpenDiagnostics() {
-	os.MkdirAll(a.diagDir(), 0o755)
+	os.MkdirAll(a.diagDir(), 0o700)
 	openFolder(a.diagDir())
 }
 

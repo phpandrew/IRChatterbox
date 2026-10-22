@@ -32,6 +32,7 @@ type script struct {
 	p        *Plugins
 	name     string // file name, e.g. karma.js
 	vm       *goja.Runtime
+	regMu    sync.RWMutex // handlers, commands and menus: written by on()/command()/menu(), which a script may call from a handler
 	handlers map[string][]goja.Callable
 	commands map[string]goja.Callable // lower-case command name → handler
 	jobs     chan job
@@ -72,6 +73,10 @@ func (p *Plugins) LoadScripts() string {
 	for _, s := range old {
 		s.stop()
 	}
+	if !p.app.store.Get().Plugins.ScriptsEnabled {
+		p.mirc.unload()
+		return "Scripts are turned off (Settings → Plugins)"
+	}
 
 	files, _ := filepath.Glob(filepath.Join(p.pluginDir(), "*.js"))
 	sort.Strings(files)
@@ -98,7 +103,7 @@ func (p *Plugins) LoadScripts() string {
 	p.scripts = loaded
 	p.mu.Unlock()
 	for _, s := range loaded {
-		for _, fn := range s.handlers["load"] {
+		for _, fn := range s.handlersFor("load") {
 			s.enqueue(job{fn: fn, args: []any{map[string]any{}}})
 		}
 	}
@@ -136,7 +141,7 @@ func (p *Plugins) Emit(event string, c *Conn, target string, data map[string]any
 		data["target"] = target
 	}
 	for _, s := range scripts {
-		for _, fn := range s.handlers[event] {
+		for _, fn := range s.handlersFor(event) {
 			s.enqueue(job{fn: fn, args: []any{data}, conn: c, target: target})
 		}
 	}
@@ -149,7 +154,7 @@ func (p *Plugins) hasHandlers(event string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, s := range p.scripts {
-		if len(s.handlers[event]) > 0 {
+		if len(s.handlersFor(event)) > 0 {
 			return true
 		}
 	}
@@ -168,7 +173,7 @@ func (p *Plugins) RunCommand(c *Conn, buffer, name, args string) bool {
 	scripts := append([]*script(nil), p.scripts...)
 	p.mu.Unlock()
 	for _, s := range scripts {
-		if fn, ok := s.commands[strings.ToLower(name)]; ok {
+		if fn, ok := s.commandFor(name); ok {
 			e := map[string]any{
 				"command": name, "args": args, "argv": strings.Fields(args),
 				"channel": buffer, "target": buffer, "server": c.cfg.Name, "serverId": c.cfg.ID, "me": c.Nick(),
@@ -276,9 +281,9 @@ func (p *Plugins) firstConnected() *Conn {
 
 func (s *script) saveStore() {
 	b, _ := json.MarshalIndent(s.store, "", "  ")
-	os.MkdirAll(filepath.Dir(s.storePath), 0o755)
+	os.MkdirAll(filepath.Dir(s.storePath), 0o700)
 	tmp := s.storePath + ".tmp"
-	if os.WriteFile(tmp, b, 0o644) == nil {
+	if os.WriteFile(tmp, b, 0o600) == nil {
 		os.Rename(tmp, s.storePath)
 	}
 }
@@ -313,7 +318,9 @@ func (p *Plugins) newScript(name, src string) (*script, error) {
 		if !known {
 			panic(vm.NewTypeError("unknown event %q — see docs/PLUGINS.md", ev))
 		}
+		s.regMu.Lock()
 		s.handlers[ev] = append(s.handlers[ev], fn)
+		s.regMu.Unlock()
 		return goja.Undefined()
 	})
 	vm.Set("command", func(call goja.FunctionCall) goja.Value {
@@ -322,7 +329,9 @@ func (p *Plugins) newScript(name, src string) (*script, error) {
 		if !ok || name == "" {
 			panic(vm.NewTypeError("command(name, function)"))
 		}
+		s.regMu.Lock()
 		s.commands[name] = fn
+		s.regMu.Unlock()
 		return goja.Undefined()
 	})
 
@@ -348,7 +357,9 @@ func (p *Plugins) newScript(name, src string) (*script, error) {
 				path = append(path, p)
 			}
 		}
+		s.regMu.Lock()
 		s.menus = append(s.menus, jsMenu{kinds: kinds, path: path, fn: fn})
+		s.regMu.Unlock()
 		return goja.Undefined()
 	})
 
@@ -380,7 +391,7 @@ func (p *Plugins) newScript(name, src string) (*script, error) {
 	})
 	vm.Set("run", func(line string) { // run a command as if typed, e.g. run("/join #test")
 		if s.cur != nil {
-			s.p.app.runCommand(s.cur, s.curTgt, line)
+			s.p.app.runCommandFrom(s.cur, s.curTgt, line, true)
 		}
 	})
 
@@ -573,7 +584,7 @@ on("message", function (e) {
 func writeExamplePlugin(dir string) {
 	p := filepath.Join(dir, "_example.js")
 	if b, err := os.ReadFile(p); os.IsNotExist(err) || (err == nil && !strings.Contains(string(b), "docs/PLUGINS.md")) {
-		os.WriteFile(p, []byte(examplePlugin), 0o644)
+		os.WriteFile(p, []byte(examplePlugin), 0o600)
 	}
 }
 
@@ -584,7 +595,7 @@ func (p *Plugins) jsMenuItems(kind string) []MenuItem {
 	p.mu.Unlock()
 	var out []MenuItem
 	for _, s := range scripts {
-		for i, m := range s.menus {
+		for i, m := range s.menuList() {
 			if !containsStr(m.kinds, kind) || len(m.path) == 0 {
 				continue
 			}
@@ -632,7 +643,8 @@ func (p *Plugins) runJSMenu(c *Conn, mc MenuContext, ref string) {
 	scripts := append([]*script(nil), p.scripts...)
 	p.mu.Unlock()
 	for _, s := range scripts {
-		if s.name != name || n < 0 || n >= len(s.menus) {
+		menus := s.menuList()
+		if s.name != name || n < 0 || n >= len(menus) {
 			continue
 		}
 		e := map[string]any{
@@ -643,7 +655,26 @@ func (p *Plugins) runJSMenu(c *Conn, mc MenuContext, ref string) {
 		if target == "" && mc.Kind == "nicklist" {
 			target = mc.Nick
 		}
-		s.enqueue(job{fn: s.menus[n].fn, args: []any{e}, conn: c, target: target})
+		s.enqueue(job{fn: menus[n].fn, args: []any{e}, conn: c, target: target})
 		return
 	}
+}
+
+func (s *script) handlersFor(event string) []goja.Callable {
+	s.regMu.RLock()
+	defer s.regMu.RUnlock()
+	return append([]goja.Callable(nil), s.handlers[event]...)
+}
+
+func (s *script) commandFor(name string) (goja.Callable, bool) {
+	s.regMu.RLock()
+	defer s.regMu.RUnlock()
+	fn, ok := s.commands[strings.ToLower(name)]
+	return fn, ok
+}
+
+func (s *script) menuList() []jsMenu {
+	s.regMu.RLock()
+	defer s.regMu.RUnlock()
+	return append([]jsMenu(nil), s.menus...)
 }

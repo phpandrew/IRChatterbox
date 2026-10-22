@@ -612,7 +612,7 @@ export function openSettings(startTab) {
         </select>
         <button class="btn sm" data-test-sound="${id}">▶ Test</button></div>
         <div class="snd-file ${(value || "").startsWith("file:") ? "" : "hidden"}" id="${id}File" style="display:flex;gap:8px;margin-top:6px">
-          <input type="text" id="${id}Path" value="${esc((value || "").startsWith("file:") ? value.slice(5) : "")}" placeholder="C:\\Sounds\\ping.wav" style="flex:1">
+          <input type="text" id="${id}Path" readonly value="${esc((value || "").startsWith("file:") ? value.slice(5) : "")}" placeholder="${esc(t("Choose a file with Browse…"))}" style="flex:1">
           <button class="btn sm" data-browse-sound="${id}">Browse…</button></div>`;
   const readSound = (id) => {
     const v = $(id).value;
@@ -1014,7 +1014,7 @@ export function openSettings(startTab) {
         ${field("Where to read the song from", `<select id="muSrc">
           ${[["auto", "Automatic (try each below)"], ["smtc", "Windows media controls"], ["window", "MusicBee window title"], ["file", "Text file (Now Playing plugin)"]]
             .map(([v, l]) => `<option value="${v}" ${plug.music.source === v ? "selected" : ""}>${l}</option>`).join("")}</select>`)}
-        <div class="field full"><label>Text file</label><div style="display:flex;gap:8px"><input type="text" id="muFile" value="${esc(plug.music.file || "")}" placeholder="e.g. C:\\Users\\Andrew\\Documents\\nowplaying.txt" style="flex:1"><button class="btn sm" id="muBrowse">Browse…</button></div>
+        <div class="field full"><label>Text file</label><div style="display:flex;gap:8px"><input type="text" id="muFile" readonly value="${esc(plug.music.file || "")}" placeholder="${esc(t("Choose a file with Browse…"))}" style="flex:1"><button class="btn sm" id="muBrowse">Browse…</button></div>
           <div class="hint">Optional. Written by MusicBee's “Now Playing to External Files” plugin.</div></div>
         ${field("Reply", text("muFmt", plug.music.format, "Now playing: {np}"), "{np} = Artist - Title · also {artist} {title} {album} {player}")}
         ${field("/np action", text("muNp", plug.music.npFormat, "is listening to {np}"), "Typing /np sends “* you is listening to …”")}

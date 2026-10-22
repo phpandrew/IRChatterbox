@@ -15,7 +15,7 @@ import (
 // (hashing it on the way) and look up its expected hash in SHA256SUMS.txt.
 
 func download(url, dest string, size int64, progress func(done, total int64)) (string, error) {
-	resp, err := (&http.Client{Timeout: 10 * time.Minute}).Get(url)
+	resp, err := (&http.Client{Timeout: 10 * time.Minute, CheckRedirect: httpsOnlyRedirect}).Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -65,6 +65,9 @@ func expectedSum(url, name string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("checksum file: HTTP %s", resp.Status)
+	}
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	for _, line := range strings.Split(string(b), "\n") {
 		f := strings.Fields(line)

@@ -242,16 +242,9 @@ func (a *App) InstallUpdate() string {
 		os.Remove(apk)
 		return "Download failed: " + err.Error()
 	}
-	if info.sumsURL != "" {
-		want, err := expectedSum(info.sumsURL, updateAsset)
-		if err != nil {
-			os.Remove(apk)
-			return "Couldn't verify the download: " + err.Error()
-		}
-		if want != "" && !strings.EqualFold(want, sum) {
-			os.Remove(apk)
-			return "The download didn't match its checksum, so it wasn't installed. Try again later."
-		}
+	if msg := verifyDownload(info, sum); msg != "" {
+		os.Remove(apk)
+		return msg
 	}
 	if msg := h.InstallAPK(apk); msg != "" {
 		os.Remove(apk)

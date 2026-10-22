@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -96,36 +97,50 @@ var (
 	procIsWindowVisible      = user32.NewProc("IsWindowVisible")
 )
 
+// enumTitles collects the titles of visible MusicBee windows while EnumWindows runs.
+// Windows callbacks are never freed by Go (and capped at about 2000 per process), so one is
+// made once and reused; enumMu keeps two lookups from sharing the slice.
+var (
+	enumMu     sync.Mutex
+	enumTitles []string
+	enumCB     = sync.OnceValue(func() uintptr {
+		return windows.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
+			if v, _, _ := procIsWindowVisible.Call(hwnd); v == 0 {
+				return 1
+			}
+			var pid uint32
+			windows.GetWindowThreadProcessId(windows.HWND(hwnd), &pid)
+			h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+			if err != nil {
+				return 1
+			}
+			buf := make([]uint16, windows.MAX_PATH)
+			n := uint32(len(buf))
+			err = windows.QueryFullProcessImageName(h, 0, &buf[0], &n)
+			windows.CloseHandle(h)
+			if err != nil || !strings.EqualFold(filepath.Base(windows.UTF16ToString(buf[:n])), "MusicBee.exe") {
+				return 1
+			}
+			l, _, _ := procGetWindowTextLengthW.Call(hwnd)
+			if l == 0 {
+				return 1
+			}
+			tb := make([]uint16, l+1)
+			procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&tb[0])), uintptr(len(tb)))
+			enumTitles = append(enumTitles, windows.UTF16ToString(tb))
+			return 1
+		})
+	})
+)
+
 // nowPlayingWindow reads the title of MusicBee's main window.
 func nowPlayingWindow() (NowPlaying, error) {
-	var titles []string
-	cb := windows.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
-		if v, _, _ := procIsWindowVisible.Call(hwnd); v == 0 {
-			return 1
-		}
-		var pid uint32
-		windows.GetWindowThreadProcessId(windows.HWND(hwnd), &pid)
-		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-		if err != nil {
-			return 1
-		}
-		buf := make([]uint16, windows.MAX_PATH)
-		n := uint32(len(buf))
-		err = windows.QueryFullProcessImageName(h, 0, &buf[0], &n)
-		windows.CloseHandle(h)
-		if err != nil || !strings.EqualFold(filepath.Base(windows.UTF16ToString(buf[:n])), "MusicBee.exe") {
-			return 1
-		}
-		l, _, _ := procGetWindowTextLengthW.Call(hwnd)
-		if l == 0 {
-			return 1
-		}
-		tb := make([]uint16, l+1)
-		procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&tb[0])), uintptr(len(tb)))
-		titles = append(titles, windows.UTF16ToString(tb))
-		return 1
-	})
-	procEnumWindows.Call(cb, 0)
+	enumMu.Lock()
+	enumTitles = nil
+	procEnumWindows.Call(enumCB(), 0)
+	titles := enumTitles
+	enumTitles = nil
+	enumMu.Unlock()
 	if len(titles) == 0 {
 		return NowPlaying{}, errors.New("MusicBee isn't running")
 	}

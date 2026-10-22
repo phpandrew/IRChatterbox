@@ -743,13 +743,23 @@ export function resolveTheme(settings) {
   return getTheme(name) || (systemIsDark() ? BUILTIN.Dark : BUILTIN.Light);
 }
 
+// A theme variable is a colour, nothing more: "url(…)" in a theme file would make the app
+// fetch that address (and show the viewer's IP to whoever made the theme).
+export function safeThemeValue(v) {
+  v = String(v ?? "").trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(v) || /^[a-z]{3,20}$/i.test(v)) return v;
+  if (/^(?:rgba?|hsla?)\([\d\s.,%/]+\)$/i.test(v)) return v;
+  if (/^color-mix\(in srgb,\s*(?:#[0-9a-f]{3,8}|[a-z]{3,20})\s*\d{1,3}%?,\s*(?:#[0-9a-f]{3,8}|[a-z]{3,20})\s*\d{0,3}%?\)$/i.test(v)) return v;
+  return "";
+}
+
 export function applyTheme(theme) {
   const root = document.documentElement;
   const base = theme.base === "light" ? BUILTIN.Light.vars : BUILTIN.Dark.vars;
   for (const [k] of THEME_VARS) {
     // "unread" is new: themes made before it keep their own text colour for unread channels
-    const fallback = k === "unread" ? theme.vars?.text || base.text : base[k];
-    root.style.setProperty("--" + k, theme.vars?.[k] || fallback);
+    const fallback = k === "unread" ? safeThemeValue(theme.vars?.text) || base.text : base[k];
+    root.style.setProperty("--" + k, safeThemeValue(theme.vars?.[k]) || fallback);
   }
   const light = theme.base === "light";
   root.style.setProperty("--nick-l", light ? "38%" : "68%");
@@ -757,7 +767,8 @@ export function applyTheme(theme) {
   root.style.colorScheme = light ? "light" : "dark";
   root.dataset.base = light ? "light" : "dark";
   root.dataset.style = theme.style || "";
-  if (theme.font) root.style.setProperty("--font", theme.font); else root.style.removeProperty("--font");
+  const font = String(theme.font || "").replace(/[^\w\s,'"-]/g, "").trim(); // font names only
+  if (font) root.style.setProperty("--font", font); else root.style.removeProperty("--font");
   root.style.setProperty("--theme-chat-font", theme.chatFont || "var(--font)");
   root.style.setProperty("--crt-hue", theme.crtHue || "0deg");
 }

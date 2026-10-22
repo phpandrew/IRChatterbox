@@ -193,3 +193,19 @@ func TestUnclosedBatchesAreCapped(t *testing.T) {
 		t.Fatalf("%d multiline, %d batches open", len(c.mlBatches), len(c.batches))
 	}
 }
+
+func TestIgnoreMasks(t *testing.T) {
+	yes := [][2]string{{"troll!*@*", "troll!~t@user/troll"}, {"*!*@user/troll", "troll2!x@user/troll"}, {"*!*@*.example.net", "a!b@h1.example.net"},
+		{"tr?ll!*@*", "troll!a@b"}, {"*", "anything!x@y"}, {"*troll*", "xtrollx!a@b"}}
+	no := [][2]string{{"troll!*@*", "trolly!~t@user/troll"}, {"*!*@user/troll", "a!b@user/troll2"}, {"[", "x!y@z"}, {"", "x!y@z"}}
+	for _, c := range yes {
+		if !maskMatch(c[0], c[1]) {
+			t.Errorf("%q should match %q", c[0], c[1])
+		}
+	}
+	for _, c := range no {
+		if maskMatch(c[0], c[1]) {
+			t.Errorf("%q should not match %q", c[0], c[1])
+		}
+	}
+}

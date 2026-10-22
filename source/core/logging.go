@@ -106,8 +106,8 @@ func textLine(ev Event) string {
 // appendLog adds lines to a file and trims it to the newest max lines (0 = unlimited).
 // Trimming happens in batches (10% slack) so the file isn't rewritten on every line.
 func (a *App) appendLog(path string, lines []string, max int) {
-	os.MkdirAll(filepath.Dir(path), 0o755)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	os.MkdirAll(filepath.Dir(path), 0o700)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
@@ -162,7 +162,7 @@ func trimFile(path string, max int) int {
 	}
 	f.Close()
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strings.Join(ring, "\n")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(strings.Join(ring, "\n")+"\n"), 0o600); err != nil {
 		return len(ring)
 	}
 	os.Rename(tmp, path)

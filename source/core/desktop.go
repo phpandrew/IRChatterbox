@@ -303,7 +303,7 @@ func (a *App) PickFolder(title string) string {
 func (a *App) PickFile(title string) string {
 	p, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: title,
 		Filters: []wruntime.FileFilter{{DisplayName: "Text files (*.txt)", Pattern: "*.txt"}, {DisplayName: "All files", Pattern: "*.*"}}})
-	return p
+	return allowPath(p)
 }
 
 // SaveBackup asks where to save a settings backup and writes it. "" = saved or cancelled.
@@ -350,13 +350,17 @@ func (a *App) OpenBackup() BackupOpen {
 func (a *App) PickSoundFile() string {
 	p, _ := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{Title: "Choose a notification sound",
 		Filters: []wruntime.FileFilter{{DisplayName: "Sounds (*.wav;*.mp3;*.ogg;*.m4a)", Pattern: "*.wav;*.mp3;*.ogg;*.m4a"}}})
-	return p
+	return allowPath(p)
 }
 
 func (a *App) OpenDataFolder() { openFolder(a.store.dir) }
 
 // openFolder shows a folder in Explorer, Finder or the Linux file manager.
 func openFolder(dir string) {
+	// only ever a folder: "explorer <file>" would run a program given its path
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return
+	}
 	switch runtime.GOOS {
 	case "windows":
 		exec.Command("explorer", dir).Start()
@@ -370,7 +374,7 @@ func openFolder(dir string) {
 // OpenLogFolder opens the folder the .txt logs are written to.
 func (a *App) OpenLogFolder() {
 	dir := a.textLogDir()
-	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(dir, 0o700)
 	openFolder(dir)
 }
 

@@ -212,9 +212,18 @@ export function readableColor(color) {
   return out;
 }
 
+// A colour value that can go into a style attribute: #rgb, #rrggbb, #rrggbbaa, rgb()/hsl()
+// with plain numbers, or a colour name. Anything else (from a backup, theme or hand-edited
+// config) is dropped rather than written into the page.
+export function safeColor(c) {
+  c = String(c ?? "").trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(c) || /^[a-z]{3,20}$/i.test(c) || /^(?:rgba?|hsla?)\([\d\s.,%/]+\)$/i.test(c)) return c;
+  return "";
+}
+
 export function nickColor(nick) {
   if (!nick) return "var(--text)";
-  const o = overrides[nick.toLowerCase()] || overrides[baseNick(nick)];
+  const o = safeColor(overrides[nick.toLowerCase()] || overrides[baseNick(nick)]);
   if (o) return readableColor(o);
   const h = HUES[hash(baseNick(nick)) % HUES.length];
   return `hsl(${h} var(--nick-s) var(--nick-l))`;
