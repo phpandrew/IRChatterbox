@@ -226,9 +226,27 @@ const VIDEO_RE = /\.(mp4|webm|mov|m4v|ogv)$/i;
 const AUDIO_RE = /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac)$/i;
 const YT_RE = /(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/|youtube-nocookie\.com\/embed\/)([\w-]{11})/i;
 
+// Hosts on this computer or the local network: media from them isn't loaded inline, so a
+// link in a channel can't make the app send requests to your router or other machines.
+export function isLocalHost(host) {
+  const h = String(host || "").toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (!h || !h.includes(".") && !h.includes(":")) return true; // localhost, router, nas…
+  if (/\.(local|lan|home|internal|intranet|corp|localdomain|home\.arpa)$/.test(h) || h.endsWith(".localhost")) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (v4) {
+    const [a, b] = [+v4[1], +v4[2]];
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && +v4[3] === 0) || (a === 198 && (b === 18 || b === 19));
+  }
+  if (/^\d+$/.test(h) || /^0x[0-9a-f]+$/.test(h)) return true; // 2130706433, 0x7f000001
+  if (h.includes(":")) return h === "::1" || h === "::" || /^(fe[89ab]|f[cd]|::ffff:)/.test(h);
+  return false;
+}
+
 export function mediaFor(url) {
   let u;
   try { u = new URL(url); } catch { return null; }
+  if (isLocalHost(u.hostname)) return null;
   const yt = YT_RE.exec(url);
   if (yt) {
     const t = u.searchParams.get("t") || u.searchParams.get("start");

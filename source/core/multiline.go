@@ -123,6 +123,12 @@ func (c *Conn) SayMultiline(target string, lines []string) bool {
 	return true
 }
 
+// Batches a server may leave open at once; more are ignored.
+const (
+	maxOpenBatches   = 256
+	maxOpenMultiline = 16
+)
+
 // onMultiline collects incoming multi-line batches. It reports whether it took m; when a
 // batch ends, the whole message is handled as one PRIVMSG/NOTICE.
 func (c *Conn) onMultiline(m *Message) bool {
@@ -143,6 +149,10 @@ func (c *Conn) onMultiline(m *Message) bool {
 			c.mu.Lock()
 			if c.mlBatches == nil {
 				c.mlBatches = map[string]*multilineBatch{}
+			}
+			if len(c.mlBatches) >= maxOpenMultiline {
+				c.mu.Unlock()
+				return true // too many unfinished: ignore (each holds up to 64 KB)
 			}
 			c.mlBatches[ref[1:]] = &multilineBatch{tags: tags, target: m.Param(2)}
 			c.mu.Unlock()

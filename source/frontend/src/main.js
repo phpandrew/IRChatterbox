@@ -1826,6 +1826,14 @@ document.addEventListener("click", (e) => {
   const a = e.target.closest("a[href]");
   if (a && !e.defaultPrevented) { e.preventDefault(); Go.OpenURL(a.dataset.url || a.href); }
 });
+// middle-click (or a new-window click) on a link would otherwise open it in a window of the
+// app itself; send it to the browser like a normal click
+document.addEventListener("auxclick", (e) => {
+  const a = e.target.closest?.("a[href]");
+  if (!a) return;
+  e.preventDefault();
+  if (e.button === 1) Go.OpenURL(a.dataset.url || a.href);
+});
 
 function insertMention(nick) {
   const inp = $("input");

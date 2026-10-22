@@ -138,10 +138,7 @@ func cleanFileName(name string) string {
 	if name == "" {
 		name = "file"
 	}
-	base := strings.ToUpper(strings.TrimSuffix(name, filepath.Ext(name)))
-	switch base {
-	case "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+	if winReservedName(name) {
 		name = "_" + name
 	}
 	if len(name) > 180 {
@@ -199,6 +196,13 @@ func (c *Conn) onDCC(nick, prefix, arg string) {
 	if it.ip == nil || it.port < 0 || it.port > 65535 || it.Size < 0 || (it.port == 0 && it.token == "") {
 		return
 	}
+	if !dccAddrOK(it.ip, it.port, c.serverIsLocal()) {
+		c.info(nick, "error", fmt.Sprintf("%s sent a DCC offer pointing at %s, which isn't a real transfer address. It was ignored.", nick, net.JoinHostPort(it.ip.String(), strconv.Itoa(it.port))))
+		return
+	}
+	if n, fromNick := dccPendingOffers(c.cfg.ID, nick); n >= dccMaxOffers || fromNick >= dccMaxOffersPerNick {
+		return // a flood of offers
+	}
 	// the answer to one of our own passive offers would come here; we don't make those
 	if it.port == 0 {
 		it.Addr = "(they're behind a router: you'll listen for them)"
@@ -227,6 +231,57 @@ func (c *Conn) onDCC(nick, prefix, arg string) {
 			c.app.dccUpdate(it)
 		}
 	})
+}
+
+// Unanswered offers kept at once, per server and per sender.
+const (
+	dccMaxOffers        = 10
+	dccMaxOffersPerNick = 3
+)
+
+func dccPendingOffers(server, nick string) (all, fromNick int) {
+	dccMu.Lock()
+	defer dccMu.Unlock()
+	for _, it := range dccItems {
+		if it.Server == server && it.Dir == "in" && it.State == "offer" {
+			all++
+			if strings.EqualFold(it.Nick, nick) {
+				fromNick++
+			}
+		}
+	}
+	return
+}
+
+// dccAddrOK refuses offers that would make us connect to this computer, a broadcast or
+// multicast address, or a well-known service port (SSH, mail, file sharing…): accepting such
+// an "offer" would talk to a local service, not to the sender. Port 0 is a passive offer
+// (we listen; nothing is dialled). LAN addresses stay allowed, for transfers between
+// machines at home.
+func dccAddrOK(ip net.IP, port int, serverIsLocal bool) bool {
+	if ip.IsLoopback() && serverIsLocal {
+		return port == 0 || port >= 1024 // everyone is on this computer (a local server)
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
+		return false
+	}
+	if v4 := ip.To4(); v4 != nil && (v4[0] == 0 || v4[0] >= 240 || v4[0] == 127) {
+		return false
+	}
+	return port == 0 || port >= 1024
+}
+
+// serverIsLocal: the IRC connection goes to this computer.
+func (c *Conn) serverIsLocal() bool {
+	c.mu.Lock()
+	nc := c.conn
+	c.mu.Unlock()
+	if nc == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(nc.RemoteAddr().String())
+	ip := net.ParseIP(host)
+	return err == nil && ip != nil && ip.IsLoopback()
 }
 
 // DCCAccept accepts an offer. Returns an error message or "".

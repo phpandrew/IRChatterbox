@@ -472,7 +472,35 @@ func (s *Store) Themes() []Theme {
 
 func safeName(n string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
-	return strings.TrimSpace(r.Replace(n))
+	n = strings.TrimSpace(r.Replace(n))
+	n = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return '_'
+		}
+		return r
+	}, n)
+	if winReservedName(n) {
+		n = "_" + n // a nick like CON or COM1 would otherwise name a device, not a file
+	}
+	return n
+}
+
+// winReservedName: names Windows treats as devices whatever their extension (CON, NUL,
+// COM1, LPT1.txt, CONIN$…).
+func winReservedName(n string) bool {
+	stem, _, _ := strings.Cut(strings.ToUpper(n), ".")
+	stem = strings.TrimRight(stem, " ")
+	switch stem {
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$":
+		return true
+	}
+	if len(stem) >= 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) {
+		switch stem[3:] {
+		case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "¹", "²", "³":
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) SaveTheme(t Theme) error {

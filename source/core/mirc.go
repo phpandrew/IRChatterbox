@@ -14,11 +14,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -497,6 +499,24 @@ var errBudget = errors.New("script ran too long (stopped)")
 
 const mircMaxSteps = 200000
 
+// Limits, so text from a channel can't make a script use memory without end.
+const (
+	mircMaxValue  = 64 * 1024 // longest variable or $str() result
+	mircMaxTimers = 200       // timers running at once
+)
+
+// clipValue keeps a value within mircMaxValue bytes, on a UTF-8 boundary.
+func clipValue(v string) string {
+	if len(v) <= mircMaxValue {
+		return v
+	}
+	cut := mircMaxValue
+	for cut > 0 && v[cut]&0xC0 == 0x80 {
+		cut--
+	}
+	return v[:cut]
+}
+
 func (e *mircEngine) newCtx(c *Conn) *mCtx {
 	return &mCtx{e: e, c: c, extra: map[string]string{}, locals: map[string]string{}}
 }
@@ -929,7 +949,11 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 		if hi < lo {
 			lo, hi = hi, lo
 		}
-		return strconv.Itoa(lo + rand.Intn(hi-lo+1))
+		span := uint64(int64(hi)-int64(lo)) + 1 // can't overflow into a negative range
+		if span == 0 {                          // the whole int64 range
+			return strconv.FormatInt(int64(rand.Uint64()), 10)
+		}
+		return strconv.FormatInt(int64(lo)+int64(rand.Uint64()%span), 10)
 	case "len":
 		return strconv.Itoa(len([]rune(arg(a, 0))))
 	case "upper":
@@ -1003,6 +1027,9 @@ func (x *mCtx) ident(name string, a []string, hasArgs bool, prop string) string 
 		n := atoi(arg(a, 1))
 		if n < 0 || n > 1000 {
 			n = 0
+		}
+		if len(arg(a, 0))*n > mircMaxValue {
+			n = mircMaxValue / max(1, len(arg(a, 0)))
 		}
 		return strings.Repeat(arg(a, 0), n)
 	case "strip":
@@ -1225,10 +1252,10 @@ func (x *mCtx) cond(s string) bool {
 		}
 		return true
 	}
-	if strings.HasPrefix(s, "!(") && matchParen(s, 1) == len(s)-1 {
+	if len(s) >= 3 && strings.HasPrefix(s, "!(") && matchParen(s, 1) == len(s)-1 {
 		return !x.cond(s[2 : len(s)-1])
 	}
-	if strings.HasPrefix(s, "(") && matchParen(s, 0) == len(s)-1 {
+	if len(s) >= 2 && strings.HasPrefix(s, "(") && matchParen(s, 0) == len(s)-1 {
 		return x.cond(s[1 : len(s)-1])
 	}
 	words := strings.Fields(s)
@@ -1553,7 +1580,7 @@ func (x *mCtx) command(line string) error {
 			}
 			name = strings.ToLower(strings.TrimSpace(name))
 			if strings.HasPrefix(name, "%") {
-				x.locals[name] = x.evalAssign(val)
+				x.locals[name] = clipValue(x.evalAssign(val))
 			}
 		}
 		return nil
@@ -1761,6 +1788,7 @@ func (x *mCtx) setVar(name, val string, global bool) {
 	if !strings.HasPrefix(name, "%") {
 		return
 	}
+	val = clipValue(val)
 	if _, local := x.locals[name]; local && !global {
 		x.locals[name] = val
 		return
@@ -1817,6 +1845,9 @@ func (x *mCtx) timerCmd(cmd, rest string) {
 	key := strings.ToLower(name)
 	if old := e.timers[key]; old != nil {
 		close(old.stop)
+	} else if len(e.timers) >= mircMaxTimers {
+		log.Printf("mIRC script: more than %d timers running; /timer%s ignored", mircMaxTimers, name)
+		return
 	}
 	ctx := &mCtx{e: e, c: x.c, nick: x.nick, address: x.address, chan_: x.chan_, target: x.target, params: x.params, extra: x.extra, locals: map[string]string{}}
 	t := &mircTimer{name: key, stop: make(chan struct{}), conn: x.c, reps: reps, delay: d, cmd: strings.Join(f[2:], " "), ctx: ctx}
@@ -1844,7 +1875,14 @@ func (e *mircEngine) runTimer(t *mircTimer) {
 		// like mIRC, the command was evaluated when the timer was set and is evaluated
 		// again now (write $!nick to delay an identifier until the timer fires)
 		// not split on | again: that would let text from the event inject commands
-		ctx.command(t.cmd)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("mIRC script: timer %s crashed: %v", t.name, r)
+				}
+			}()
+			ctx.command(t.cmd)
+		}()
 		n++
 		done := t.reps > 0 && n >= t.reps
 		if done {
@@ -1918,10 +1956,21 @@ func (e *mircEngine) dispatch(event string, c *Conn, target string, d map[string
 
 func (e *mircEngine) worker() {
 	for fn := range e.jobs {
-		e.mu.Lock()
-		fn()
-		e.mu.Unlock()
+		e.runJob(fn)
 	}
+}
+
+// runJob runs one script job. A crash in a script (or in the engine, on odd input) is
+// logged and that job dropped; the lock is always released.
+func (e *mircEngine) runJob(fn func()) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("mIRC script: crashed: %v\n%s", r, debug.Stack())
+		}
+	}()
+	fn()
 }
 
 func (e *mircEngine) handleEvent(event string, c *Conn, target string, d map[string]any) {

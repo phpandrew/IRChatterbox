@@ -34,6 +34,14 @@ func (m *Message) Param(i int) string {
 	return ""
 }
 
+// From returns the parameters from index i on (none if there aren't that many).
+func (m *Message) From(i int) []string {
+	if i < len(m.Params) {
+		return m.Params[i:]
+	}
+	return nil
+}
+
 func (m *Message) Trailing() string {
 	if len(m.Params) == 0 {
 		return ""

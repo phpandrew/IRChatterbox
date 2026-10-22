@@ -190,8 +190,8 @@ func (a *App) pushToast(title, body string, data map[string]any, silent bool) er
 	}
 	j, _ := json.Marshal(payload)
 	n := toast.Notification{
-		Title:               title,
-		Body:                body,
+		Title:               toastText(title),
+		Body:                toastText(body),
 		ActivationType:      toast.Foreground,
 		ActivationArguments: base64.StdEncoding.EncodeToString(j),
 		Audio:               toast.Default,

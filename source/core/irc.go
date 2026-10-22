@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,6 +72,7 @@ type Conn struct {
 	pingSent      time.Time
 
 	userDebounce map[string]*time.Timer
+	ctcpRecent   []time.Time // CTCP requests answered lately (ctcpAllowed)
 	stop         chan struct{}
 	running      bool          // a run() loop exists (connected, connecting or waiting to reconnect)
 	wake         chan struct{} // cuts a reconnect wait short
@@ -272,30 +274,34 @@ func (c *Conn) run() {
 	}
 }
 
-func (c *Conn) session(addr string) error {
-	nc, err := dialServer(context.Background(), c.cfg, addr)
-	if err != nil {
-		return err
-	}
-	if c.cfg.TLS {
-		certs, err := c.cfg.tlsClientCerts()
-		if err != nil {
-			nc.Close()
-			return err
-		}
-		tc := tls.Client(nc, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify, Certificates: certs})
-		tc.SetDeadline(time.Now().Add(20 * time.Second))
-		if err := tc.Handshake(); err != nil {
-			nc.Close()
-			return err
-		}
-		tc.SetDeadline(time.Time{})
-		nc = tc
-	}
-	out := make(chan string, 512)
+// CTCP requests answered per ctcpWindow. Beyond that they're ignored: answering a flood
+// would fill the send queue, and lines you type would be dropped behind the replies.
+const (
+	ctcpBurst  = 5
+	ctcpWindow = 15 * time.Second
+)
+
+// ctcpAllowed reports whether another CTCP request (or DCC offer) may be handled now.
+func (c *Conn) ctcpAllowed() bool {
 	c.mu.Lock()
-	c.conn = nc
-	c.out = out
+	defer c.mu.Unlock()
+	now := time.Now()
+	keep := c.ctcpRecent[:0]
+	for _, t := range c.ctcpRecent {
+		if now.Sub(t) < ctcpWindow {
+			keep = append(keep, t)
+		}
+	}
+	c.ctcpRecent = keep
+	if len(keep) >= ctcpBurst {
+		return false
+	}
+	c.ctcpRecent = append(c.ctcpRecent, now)
+	return true
+}
+
+// resetSessionLocked clears what a new connection starts without. c.mu must be held.
+func (c *Conn) resetSessionLocked() {
 	c.nick = c.cfg.Nick
 	if c.nick == "" {
 		c.nick = "chatterbox" + newID()[:4]
@@ -321,6 +327,33 @@ func (c *Conn) session(addr string) error {
 		c.recentSelf = map[string][]selfLine{}
 		c.readMarks = map[string]int64{}
 	}
+}
+
+func (c *Conn) session(addr string) error {
+	nc, err := dialServer(context.Background(), c.cfg, addr)
+	if err != nil {
+		return err
+	}
+	if c.cfg.TLS {
+		certs, err := c.cfg.tlsClientCerts()
+		if err != nil {
+			nc.Close()
+			return err
+		}
+		tc := tls.Client(nc, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify, Certificates: certs})
+		tc.SetDeadline(time.Now().Add(20 * time.Second))
+		if err := tc.Handshake(); err != nil {
+			nc.Close()
+			return err
+		}
+		tc.SetDeadline(time.Time{})
+		nc = tc
+	}
+	out := make(chan string, 512)
+	c.mu.Lock()
+	c.conn = nc
+	c.out = out
+	c.resetSessionLocked()
 	c.mu.Unlock()
 
 	done := make(chan struct{})
@@ -371,16 +404,57 @@ func (c *Conn) session(addr string) error {
 	r := bufio.NewReaderSize(nc, 64*1024)
 	for {
 		nc.SetReadDeadline(time.Now().Add(240 * time.Second))
-		line, err := r.ReadString('\n')
+		raw, err := readLine(r)
 		if err != nil {
 			return err
 		}
-		line = c.decode(line)
+		line := c.decode(raw)
 		if debugRaw != nil {
 			debugRaw("<< " + strings.TrimRight(line, "\r\n"))
 		}
-		c.handle(ParseMessage(line))
+		c.safeHandle(line)
 	}
+}
+
+// maxLineBytes: IRC lines are at most 8191 bytes of tags plus 512 of message; allow some
+// slack. Longer lines are dropped, so a server can't make the app buffer without end.
+const maxLineBytes = 16 * 1024
+
+// readLine reads one line, skipping (not storing) any that run past maxLineBytes.
+func readLine(r *bufio.Reader) (string, error) {
+	var buf []byte
+	tooLong := false
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !tooLong {
+			if len(buf)+len(chunk) > maxLineBytes {
+				tooLong, buf = true, nil
+			} else {
+				buf = append(buf, chunk...)
+			}
+		}
+		switch {
+		case err == bufio.ErrBufferFull:
+			continue
+		case err != nil:
+			return "", err
+		case tooLong:
+			tooLong = false // that over-long line is done: read the next one
+			continue
+		}
+		return string(buf), nil
+	}
+}
+
+// safeHandle handles one line. A bug in handling one odd line is logged and the line is
+// skipped, instead of taking the whole app (and every other network) down with it.
+func (c *Conn) safeHandle(line string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("%s: couldn't handle %.200q: %v\n%s", c.cfg.Name, line, r, debug.Stack())
+		}
+	}()
+	c.handle(ParseMessage(line))
 }
 
 // writer sends lines with simple flood protection (burst of 5, then 1 every 500ms).
@@ -799,7 +873,7 @@ func (c *Conn) handle(m *Message) {
 	case "734":
 		c.info("", "error", "Your friends list is longer than this server allows ("+m.Param(1)+"); the rest aren't watched")
 	case "WARN", "NOTE":
-		c.info("*active*", "info", strings.Join(m.Params[2:], " "))
+		c.info("*active*", "info", strings.Join(m.From(2), " "))
 	case "ACK":
 		// labeled-response: the server got a labeled command that has no other reply
 	case "BATCH":
@@ -812,7 +886,7 @@ func (c *Conn) handle(m *Message) {
 		if m.Param(0) == "CHATHISTORY" || m.Param(0) == "MARKREAD" {
 			return // history/read markers unavailable for that target; nothing to show
 		}
-		c.info("*active*", "error", strings.Join(m.Params[1:], " "))
+		c.info("*active*", "error", strings.Join(m.From(1), " "))
 
 	case "CAP":
 		sub := strings.ToUpper(m.Param(1))
@@ -908,7 +982,8 @@ func (c *Conn) handle(m *Message) {
 			switch k {
 			case "PREFIX":
 				if strings.HasPrefix(v, "(") {
-					if i := strings.IndexByte(v, ')'); i > 0 {
+					// modes and symbols must pair up one to one, or lookups between them break
+					if i := strings.IndexByte(v, ')'); i > 0 && len(v[1:i]) == len(v[i+1:]) {
 						c.mu.Lock()
 						c.prefixModes, c.prefixSymbols = v[1:i], v[i+1:]
 						c.mu.Unlock()
@@ -947,7 +1022,7 @@ func (c *Conn) handle(m *Message) {
 				c.setStatus("connected")
 			}
 		}
-		c.info("", "server", strings.Join(m.Params[1:], " "))
+		c.info("", "server", strings.Join(m.From(1), " "))
 	case "433", "432":
 		if !c.registered {
 			c.nickTries++
@@ -1152,7 +1227,7 @@ func (c *Conn) handle(m *Message) {
 		if c.onAutoWho(m) {
 			return
 		}
-		c.info("", "server", strings.Join(m.Params[1:], " "))
+		c.info("", "server", strings.Join(m.From(1), " "))
 	case "321", "322", "323":
 		if c.onList(m) {
 			return
@@ -1160,22 +1235,22 @@ func (c *Conn) handle(m *Message) {
 		if m.Command == "322" {
 			c.info("", "list", fmt.Sprintf("%-20s %5s  %s", m.Param(1), m.Param(2), m.Trailing()))
 		} else {
-			c.info("", "server", strings.Join(m.Params[1:], " "))
+			c.info("", "server", strings.Join(m.From(1), " "))
 		}
 
 	case "324":
 		c.mu.Lock()
 		if ch, ok := c.channels[lower(m.Param(1))]; ok {
-			ch.Modes = strings.Join(m.Params[2:], " ")
+			ch.Modes = strings.Join(m.From(2), " ")
 		}
 		c.mu.Unlock()
-		c.emit(Event{Type: "modes", Buffer: m.Param(1), Text: strings.Join(m.Params[2:], " ")})
+		c.emit(Event{Type: "modes", Buffer: m.Param(1), Text: strings.Join(m.From(2), " ")})
 
 	case "MODE":
 		target := m.Param(0)
-		modeStr := strings.Join(m.Params[1:], " ")
+		modeStr := strings.Join(m.From(1), " ")
 		if c.isChannel(target) {
-			c.applyChannelModes(target, m.Params[1:])
+			c.applyChannelModes(target, m.From(1))
 			c.emit(Event{Type: "event", Kind: "mode", Buffer: target, Nick: nick, Text: modeStr, Time: ts, Self: isMe})
 			c.app.plugins.Emit("mode", c, target, map[string]any{"channel": target, "nick": nick, "modes": modeStr, "self": isMe, "isChannel": true})
 			c.SendRaw("MODE " + target)
@@ -1184,6 +1259,9 @@ func (c *Conn) handle(m *Message) {
 		}
 
 	case "INVITE":
+		if c.app.isIgnored(nick, m.Prefix) {
+			break
+		}
 		c.info("*active*", "highlight", fmt.Sprintf("%s invited %s to %s", nick, m.Param(0), m.Param(1)))
 		c.joinInvited(m.Param(0), m.Param(1))
 		c.app.plugins.Emit("invite", c, "", map[string]any{"channel": m.Param(1), "nick": nick, "invited": m.Param(0)})
@@ -1223,12 +1301,12 @@ func (c *Conn) handle(m *Message) {
 	case "372", "375", "376", "422":
 		c.info("", "motd", m.Trailing())
 	case "401", "402", "403", "404", "405", "406", "411", "412", "421", "441", "442", "443", "461", "471", "473", "474", "475", "477", "478", "481", "482":
-		c.info("*active*", "error", strings.Join(m.Params[1:], " "))
+		c.info("*active*", "error", strings.Join(m.From(1), " "))
 	case "391":
-		c.info("", "server", strings.Join(m.Params[1:], " "))
+		c.info("", "server", strings.Join(m.From(1), " "))
 	default:
 		if len(m.Command) == 3 && m.Command[0] >= '0' && m.Command[0] <= '9' {
-			c.info("", "server", strings.Join(m.Params[1:], " "))
+			c.info("", "server", strings.Join(m.From(1), " "))
 		}
 	}
 }
@@ -1309,7 +1387,7 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		cmd, arg, _ := strings.Cut(body, " ")
 		cmd = strings.ToUpper(cmd)
 		if cmd == "DCC" {
-			if !isMe && m.Command == "PRIVMSG" && !c.isChannel(target) {
+			if !isMe && m.Command == "PRIVMSG" && !c.isChannel(target) && c.ctcpAllowed() {
 				c.onDCC(nick, m.Prefix, arg)
 			}
 			return
@@ -1320,6 +1398,9 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		} else {
 			if isMe {
 				return // our own CTCP request echoed back: never answer ourselves
+			}
+			if !c.ctcpAllowed() {
+				return // a flood of CTCP requests: don't answer (or show) more than a few
 			}
 			if m.Command == "PRIVMSG" {
 				switch cmd {

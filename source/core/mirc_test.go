@@ -259,3 +259,32 @@ func TestMircCharCodes(t *testing.T) {
 		}
 	}
 }
+
+func TestMircMemoryLimits(t *testing.T) {
+	e := mircEngineFor(t, `
+alias grow {
+  var %x = abcdefgh
+  while (1) {
+    %x = $str(%x,1000)
+    set %g %x
+  }
+}
+alias many {
+  var %i = 0
+  while (%i < 500) {
+    inc %i
+    timer 0 3600 echo hi
+  }
+}`)
+	x := e.newCtx(nil)
+	x.command("grow")
+	if len(e.vars["%g"]) > mircMaxValue {
+		t.Fatalf("variable grew to %d bytes", len(e.vars["%g"]))
+	}
+	x = e.newCtx(nil)
+	x.command("many")
+	if n := len(e.timers); n > mircMaxTimers {
+		t.Fatalf("%d timers", n)
+	}
+	e.stopTimers()
+}

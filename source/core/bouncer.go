@@ -56,7 +56,9 @@ func (c *Conn) onBatch(m *Message) {
 	defer c.mu.Unlock()
 	switch ref[0] {
 	case '+':
-		c.batches[ref[1:]] = m.Param(1)
+		if len(c.batches) < maxOpenBatches { // a server that never closes them can't grow this forever
+			c.batches[ref[1:]] = m.Param(1)
+		}
 	case '-':
 		typ := c.batches[ref[1:]]
 		delete(c.batches, ref[1:])
