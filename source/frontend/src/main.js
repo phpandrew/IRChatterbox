@@ -1,5 +1,5 @@
 import { Go, on, initApi, setTitle } from "./api.js";
-import { esc, ircToHtml, nickColor, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
+import { esc, ircToHtml, nickColor, iconLetters, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange, systemIsDark } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
@@ -263,7 +263,7 @@ function onIrc(ev) {
     case "event": {
       const b = ensureBuffer(srv, ev.buffer);
       if (ev.kind === "join" && ev.self) b.joined = true;
-      if (!set.showJoinsParts && ["join", "part", "quit"].includes(ev.kind) && !ev.self) break;
+      if (!showJoins(srv, b) && JOIN_KINDS.includes(ev.kind) && !ev.self) break;
       addLine(srv, b, evToLine(ev));
       break;
     }
@@ -506,8 +506,10 @@ function setSidebarMini(on) {
 function srvIcon(srv) {
   const u = S.icons[srv.id + "/*"];
   const ok = u && /^data:image\/(png|webp|jpeg);base64,/.test(u);
-  const letter = esc(((srv.cfg.name || srv.cfg.host || "?")[0] || "?").toUpperCase());
-  return `<span class="srv-ico${ok ? " pic" : ""}" style="--tile:${nickColor(srv.cfg.name || srv.cfg.host || "")}">${ok ? `<img src="${u}" alt="">` : letter}</span>`;
+  const letters = iconLetters(srv.cfg.iconText, srv.cfg.name || srv.cfg.host);
+  const letter = esc(letters);
+  const cls = ok ? " pic" : (srv.cfg.letterIcon ? " letters" : "") + (Array.from(letters).length > 1 ? " two" : "");
+  return `<span class="srv-ico${cls}" style="--tile:${nickColor(srv.cfg.name || srv.cfg.host || "")}">${ok ? `<img src="${u}" alt="">` : letter}</span>`;
 }
 
 function renderTree() {
@@ -552,6 +554,33 @@ function renderTree() {
   tree.innerHTML = html;
   updateTitle();
   afterTree(S.servers, S.active);
+}
+
+// ---------- joins, parts and quits: channel setting, else the server's, else Settings ----------
+const JOIN_KINDS = ["join", "part", "quit"];
+function joinsMode(srv, b) { return (b && S.cfg?.channelJoins?.[srv.id + "/" + b.key]) || ""; }
+function showJoins(srv, b) {
+  const m = joinsMode(srv, b) || srv.cfg.joinsParts;
+  return m ? m === "show" : S.cfg.settings.showJoinsParts !== false;
+}
+function joinsMenu(srv, b) {
+  const set = (m) => () => Go.SetChannelJoins(srv.id, b.name, m);
+  const mode = joinsMode(srv, b);
+  const srvMode = srv.cfg.joinsParts || (S.cfg.settings.showJoinsParts !== false ? "show" : "hide");
+  return [
+    [srvMode === "show" ? "Server setting (shown)" : "Server setting (hidden)", set(""), "", !mode],
+    ["Show", set("show"), "", mode === "show"],
+    ["Hide", set("hide"), "", mode === "hide"],
+  ];
+}
+function serverJoinsMenu(srv) {
+  const setTo = (m) => () => Go.SetServerJoins(srv.id, m);
+  const m = srv.cfg.joinsParts || "";
+  return [
+    [S.cfg.settings.showJoinsParts !== false ? "As in Settings (shown)" : "As in Settings (hidden)", setTo(""), "", !m],
+    ["Show", setTo("show"), "", m === "show"],
+    ["Hide", setTo("hide"), "", m === "hide"],
+  ];
 }
 
 // ---------- per-channel notifications ----------
@@ -755,6 +784,7 @@ $("tree").addEventListener("contextmenu", (e) => {
       toast(isStart ? "IRChatterbox will open where you left off" : `IRChatterbox will open on ${b.name}`, "ok");
     }, "", isStart]);
     items.push(["Notifications", notifyMenu(srv, b)]);
+    if (b.type === "channel") items.push(["Joins and quits", joinsMenu(srv, b)]);
     items.push(["Show in split view", () => showInSplit(srv, b)]);
     items.push([chanIcon(srv, b) ? "Change icon…" : "Set icon…", () => pickChannelIcon(srv, b)]);
     if (chanIcon(srv, b)) items.push(["Remove icon", () => Go.SetChannelIcon(srv.id, b.name, "")]);
@@ -779,6 +809,7 @@ function serverMenu(srv, e) {
   if ([...srv.buffers.values()].some((b) => b.unread || b.hl || b.activity)) items.push(["Mark all as read", () => markAllRead(srv)]);
   items.push("-");
   items.push(["Edit server…", () => editServer(srv.cfg)]);
+  items.push(["Joins and quits", serverJoinsMenu(srv)]);
   const hasIcon = !!S.icons[srv.id + "/*"];
   items.push([hasIcon ? "Change server icon…" : "Set server icon…", () => pickIcon(srv.id, "*", srv.cfg.name || srv.cfg.host)]);
   if (hasIcon) items.push(["Remove server icon", () => Go.SetChannelIcon(srv.id, "*", "")]);
@@ -1031,7 +1062,7 @@ function lineEl(srv, b, line, prev) {
   if (line.type === "dcc") return dccLineEl(srv, b, line);
   const el = document.createElement("div");
   const isEv = line.type === "event";
-  el.className = "line " + [line.kind, isEv ? "ev" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : "",
+  el.className = "line " + [line.kind, isEv ? "ev" : "", isEv && !line.self && JOIN_KINDS.includes(line.kind) && !showJoins(srv, b) ? "jp-off" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : "",
     stackedLayout() && continues(prev === undefined ? prevLine(b, line) : prev, line) ? "cont" : ""].join(" ");
   let who = "", msg = "";
   const ctx = ctxFor(srv);
@@ -2690,8 +2721,6 @@ export function applySettings() {
   root.setProperty("--ts-col", probe.offsetWidth + 2 + "px");
   probe.remove();
   if (typeof positionNickHandle === "function") requestAnimationFrame(positionNickHandle);
-  // joins/parts/quits already on screen hide too when they're switched off (new ones aren't kept)
-  document.body.classList.toggle("no-joins", set.showJoinsParts === false);
   const box = $("input");
   box.spellcheck = set.spellCheck !== false;
   box.lang = document.documentElement.lang || "en";
@@ -2822,7 +2851,11 @@ async function boot() {
     if (bar) bar.style.width = d.pct + "%";
   });
   Go.PluginCommands().then((list) => { pluginCommands = list || []; });
-  on("config", (cfg) => { S.cfg = cfg; applySettings(); renderAll(); });
+  on("config", (cfg) => {
+    S.cfg = cfg;
+    for (const sc of cfg?.servers || []) if (S.byId[sc.id]) S.byId[sc.id].cfg = sc;
+    applySettings(); renderAll();
+  });
   on("dcc", onDCC);
   on("chanlist", onChanList);
   on("chanlistOpen", (x) => { const srv = S.byId[x.server]; if (srv) openChannelList(srv, x.filter || ""); });

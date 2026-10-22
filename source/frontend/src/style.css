@@ -709,14 +709,23 @@ body.os-darwin .win-only, body.os-linux .win-only { display: none !important; }
 .se-icon { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .se-icon-pic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--bg-hover); font-weight: 700; font-size: 18px; color: var(--text-muted); overflow: hidden; flex: none; }
 .se-icon-pic img { width: 100%; height: 100%; object-fit: cover; }
+.se-icon-pic.letters { background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-size: 17px; letter-spacing: -.02em; }
+.se-letters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 2px; }
+.se-letters label { font-size: 13px; font-weight: 600; }
+.se-letters input { width: 64px; text-align: center; }
 
 /* server icons in the sidebar: shown when set; in the compact sidebar always (letter if none) */
 .srv-ico { display: none; }
 .srv-ico.pic { display: grid; width: 20px; height: 20px; border-radius: 6px; overflow: hidden; flex: none; }
 .srv-ico img { width: 100%; height: 100%; object-fit: cover; }
+.srv-ico.letters { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; flex: none; overflow: hidden;
+  background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-weight: 700; font-size: 12px; line-height: 1; }
+.srv-ico.letters.two { font-size: 10.5px; letter-spacing: -.03em; }
 @media (min-width: 760px) {
   body.sb-mini .srv-head { flex-direction: column; gap: 3px; }
   body.sb-mini .srv-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb, var(--tile) 22%, var(--bg-elev)); color: var(--tile); font-weight: 700; font-size: 16px; overflow: hidden; }
+  body.sb-mini .srv-ico.letters { width: 40px; height: 40px; border-radius: 12px; font-size: 16px; }
+  body.sb-mini .srv-ico.two { font-size: 14px; letter-spacing: -.02em; }
   body.sb-mini .srv-head > div { width: 100%; }
 }
 
@@ -903,8 +912,8 @@ body .stacked .line.hl { padding-top: 7px; }
 body .stacked.compact .line { padding-top: 3px; }
 body .stacked.compact .line.cont { padding-top: 0; }
 
-/* Settings → General → "Show joins, parts and quits" off */
-body.no-joins .line.ev.join:not(.self), body.no-joins .line.ev.part:not(.self), body.no-joins .line.ev.quit:not(.self) { display: none; }
+/* joins, parts and quits switched off (Settings, the server, or the channel) */
+.line.jp-off { display: none; }
 .modal.sm.paste-dlg { width: min(640px, 94vw); }
 
 /* client certificate in the server editor */

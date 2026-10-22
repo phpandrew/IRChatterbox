@@ -58,7 +58,12 @@ export const api = {
   PickSoundFile: () => "C:\\Sounds\\airhorn.mp3",
   GetSoundData: () => "",
   GetDefaultNick: () => "Andrew",
-  SaveServer: (sv) => ({ ...sv, id: sv.id || "new1" }),
+  SaveServer: (sv) => {
+    const out = { ...sv, id: sv.id || "new1" };
+    const i = cfg.servers.findIndex((x) => x.id === out.id);
+    if (i >= 0) cfg.servers[i] = out; else cfg.servers.push(out);
+    return out;
+  },
   Connect: () => {},
   SaveSettings: (st) => { cfg.settings = st; return ""; },
   UploadImage: () => new Promise((r) => setTimeout(() => r({ url: "https://i.irchatterbox.com/k3x9Qa2mZp.webp", expires: "2026-10-24T18:00:00Z", host: "irchatterbox" }), 800)),
@@ -110,6 +115,17 @@ export const api = {
     cfg.channelNotify ||= {};
     const k = s + "/" + b.toLowerCase();
     if (!level) delete cfg.channelNotify[k]; else cfg.channelNotify[k] = { level, until: level === "mute" && minutes ? Date.now() + minutes * 60e3 : 0 };
+    setTimeout(() => emit("config", structuredClone(cfg)));
+  },
+  SetChannelJoins: (s, b, mode) => {
+    cfg.channelJoins ||= {};
+    const k = s + "/" + b.toLowerCase();
+    if (!mode) delete cfg.channelJoins[k]; else cfg.channelJoins[k] = mode;
+    setTimeout(() => emit("config", structuredClone(cfg)));
+  },
+  SetServerJoins: (s, mode) => {
+    const sv = cfg.servers.find((x) => x.id === s);
+    if (sv) sv.joinsParts = mode;
     setTimeout(() => emit("config", structuredClone(cfg)));
   },
   DCCAccept: (id) => { dccDemo(id); return ""; },

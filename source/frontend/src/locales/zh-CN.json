@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": "。之后在上方选择“客户端证书”作为方式。私钥与你的密码一起保存。",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "替换此证书？已登记其指纹的服务在你重新添加之前不会识别新证书。",
 "Create or import a client certificate to log in with it": "创建或导入客户端证书以用它登录",
-"Logging in with a certificate needs TLS (Connection tab)": "证书登录需要 TLS（连接选项卡）"
+"Logging in with a certificate needs TLS (Connection tab)": "证书登录需要 TLS（连接选项卡）",
+"Letters": "字母",
+"Up to 2, used when there's no picture.": "最多 2 个，没有图片时使用。",
+"Show the letters in the sidebar when there's no picture": "没有图片时在侧边栏显示字母",
+"Chat": "聊天",
+"Joins, parts and quits": "加入、离开和退出",
+"As in Settings (shown)": "跟随设置（显示）",
+"As in Settings (hidden)": "跟随设置（隐藏）",
+"Show": "显示",
+"Hide": "隐藏",
+"For one channel, right-click it in the sidebar.": "如只针对一个频道，请在侧边栏中右键点击它。",
+"Joins and quits": "加入和退出",
+"Server setting (shown)": "跟随服务器（显示）",
+"Server setting (hidden)": "跟随服务器（隐藏）"
 }

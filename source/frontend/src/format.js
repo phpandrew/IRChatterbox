@@ -268,3 +268,9 @@ export function mediaFor(url) {
     return { type: "image", src: `https://i.imgur.com${u.pathname}.jpg`, name: u.pathname.slice(1) };
   return null;
 }
+
+// The letters on a server's badge: what was typed (up to 2, as typed), or the name's first letter.
+export function iconLetters(text, name) {
+  const typed = Array.from((text || "").replace(/\s+/g, "")).slice(0, 2).join("");
+  return typed || (Array.from((name || "").trim() || "?")[0] || "?").toUpperCase();
+}

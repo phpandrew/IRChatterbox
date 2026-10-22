@@ -480,6 +480,10 @@ func (a *App) SaveServer(s ServerConfig) ServerConfig {
 	if s.Perform == nil {
 		s.Perform = []string{}
 	}
+	s.IconText = cleanIconText(s.IconText)
+	if s.JoinsParts != "show" && s.JoinsParts != "hide" {
+		s.JoinsParts = ""
+	}
 	a.store.Update(func(c *Config) {
 		for i := range c.Servers {
 			if c.Servers[i].ID == s.ID {
@@ -507,6 +511,11 @@ func (a *App) DeleteServer(id string) {
 			}
 		}
 		c.Favourites = favs
+		for k := range c.ChannelJoins {
+			if strings.HasPrefix(k, id+"/") {
+				delete(c.ChannelJoins, k)
+			}
+		}
 		for i := range c.Servers {
 			if c.Servers[i].ID == id {
 				c.Servers = append(c.Servers[:i], c.Servers[i+1:]...)

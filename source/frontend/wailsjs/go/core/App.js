@@ -326,6 +326,10 @@ export function SetChannelIcon(arg1, arg2, arg3) {
   return window['go']['core']['App']['SetChannelIcon'](arg1, arg2, arg3);
 }
 
+export function SetChannelJoins(arg1, arg2, arg3) {
+  return window['go']['core']['App']['SetChannelJoins'](arg1, arg2, arg3);
+}
+
 export function SetChannelNotify(arg1, arg2, arg3, arg4) {
   return window['go']['core']['App']['SetChannelNotify'](arg1, arg2, arg3, arg4);
 }
@@ -348,6 +352,10 @@ export function SetFocus(arg1) {
 
 export function SetNickColor(arg1, arg2) {
   return window['go']['core']['App']['SetNickColor'](arg1, arg2);
+}
+
+export function SetServerJoins(arg1, arg2) {
+  return window['go']['core']['App']['SetServerJoins'](arg1, arg2);
 }
 
 export function SetStartView(arg1, arg2) {

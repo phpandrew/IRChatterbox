@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": ". Затем выберите «Клиентский сертификат» как способ выше. Закрытый ключ хранится вместе с паролями.",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "Заменить сертификат? Сервисы, знающие его отпечаток, не узнают новый, пока вы не добавите его снова.",
 "Create or import a client certificate to log in with it": "Создайте или импортируйте клиентский сертификат для входа",
-"Logging in with a certificate needs TLS (Connection tab)": "Для входа по сертификату нужен TLS (вкладка «Подключение»)"
+"Logging in with a certificate needs TLS (Connection tab)": "Для входа по сертификату нужен TLS (вкладка «Подключение»)",
+"Letters": "Буквы",
+"Up to 2, used when there's no picture.": "До 2, если нет картинки.",
+"Show the letters in the sidebar when there's no picture": "Показывать буквы в боковой панели, если нет картинки",
+"Chat": "Чат",
+"Joins, parts and quits": "Входы, выходы и отключения",
+"As in Settings (shown)": "Как в настройках (показывать)",
+"As in Settings (hidden)": "Как в настройках (скрывать)",
+"Show": "Показывать",
+"Hide": "Скрывать",
+"For one channel, right-click it in the sidebar.": "Для отдельного канала щёлкните его правой кнопкой в боковой панели.",
+"Joins and quits": "Входы и выходы",
+"Server setting (shown)": "Как у сервера (показывать)",
+"Server setting (hidden)": "Как у сервера (скрывать)"
 }

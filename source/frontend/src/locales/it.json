@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": ". Poi scegli «Certificato client» come metodo qui sopra. La chiave privata è conservata con le tue password.",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "Sostituire questo certificato? I servizi che conoscono la sua impronta non riconosceranno il nuovo finché non lo aggiungi di nuovo.",
 "Create or import a client certificate to log in with it": "Crea o importa un certificato client per accedere con esso",
-"Logging in with a certificate needs TLS (Connection tab)": "L'accesso con certificato richiede TLS (scheda Connessione)"
+"Logging in with a certificate needs TLS (Connection tab)": "L'accesso con certificato richiede TLS (scheda Connessione)",
+"Letters": "Lettere",
+"Up to 2, used when there's no picture.": "Fino a 2, usate quando non c'è un'immagine.",
+"Show the letters in the sidebar when there's no picture": "Mostra le lettere nella barra laterale quando non c'è un'immagine",
+"Chat": "Chat",
+"Joins, parts and quits": "Ingressi, uscite e disconnessioni",
+"As in Settings (shown)": "Come nelle Impostazioni (mostrati)",
+"As in Settings (hidden)": "Come nelle Impostazioni (nascosti)",
+"Show": "Mostra",
+"Hide": "Nascondi",
+"For one channel, right-click it in the sidebar.": "Per un solo canale, fai clic destro su di esso nella barra laterale.",
+"Joins and quits": "Ingressi e uscite",
+"Server setting (shown)": "Impostazione del server (mostrati)",
+"Server setting (hidden)": "Impostazione del server (nascosti)"
 }

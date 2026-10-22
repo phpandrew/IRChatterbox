@@ -9,7 +9,7 @@ import { os } from "./platform.js";
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
-import { esc, nickColor } from "./format.js";
+import { esc, nickColor, iconLetters } from "./format.js";
 import { LANGUAGES, setLanguage, t } from "./i18n.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
@@ -335,6 +335,16 @@ export async function openServerEditor(cfg, onSaved) {
       <div class="se-icon"><span class="se-icon-pic" id="sIconPic"></span>
         <button class="btn sm" id="sIconPick">Choose…</button><button class="btn sm" id="sIconDel">Remove</button>
         <span class="hint" style="margin:0">Shown in the sidebar. Only you can see it.</span></div>
+      <div class="se-letters"><label for="sIconTxt">Letters</label><input id="sIconTxt" class="no-i18n" maxlength="4" spellcheck="false" autocomplete="off" value="${esc(c.iconText || "")}">
+        <span class="hint" style="margin:0">Up to 2, used when there's no picture.</span></div>
+      <div class="field full">${check("sLetterIco", c.letterIcon, "Show the letters in the sidebar when there's no picture")}</div>
+      <div class="section-title">Chat</div>
+      <div class="fgrid">
+        ${field("Joins, parts and quits", `<select id="sJoins">
+          <option value="">${S.cfg.settings.showJoinsParts === false ? "As in Settings (hidden)" : "As in Settings (shown)"}</option>
+          <option value="show" ${c.joinsParts === "show" ? "selected" : ""}>Show</option>
+          <option value="hide" ${c.joinsParts === "hide" ? "selected" : ""}>Hide</option></select>`, "For one channel, right-click it in the sidebar.", true)}
+      </div>
       <div class="section-title">Connection options</div>
       <div class="fgrid">
         ${field("Text encoding", `<select id="sEnc"></select>`, "Older networks may use a regional encoding. Automatic suits almost every server.", true)}
@@ -399,9 +409,16 @@ export async function openServerEditor(cfg, onSaved) {
   $("sCertDel").onclick = () => { cert = null; drawCert(); if ($("sAuthM").value === "external") $("sAuthM").value = "none"; };
   const drawIcon = () => {
     const cur = icon !== undefined ? icon : (c.id ? S.icons?.[c.id + "/*"] || "" : "");
-    $("sIconPic").innerHTML = cur ? `<img src="${cur}" alt="">` : esc(((val("sName") || val("sHost") || "?")[0] || "?").toUpperCase());
+    const name = val("sName") || val("sHost") || "?";
+    const pic = $("sIconPic");
+    pic.innerHTML = cur ? `<img src="${cur}" alt="">` : esc(iconLetters($("sIconTxt").value, name));
+    pic.classList.toggle("letters", !cur);
+    pic.style.setProperty("--tile", nickColor(name));
+    $("sIconTxt").placeholder = iconLetters("", name);
     $("sIconDel").classList.toggle("hidden", !cur);
   };
+  $("sIconTxt").addEventListener("input", drawIcon);
+  $("sName").addEventListener("input", drawIcon);
   $("sIconPick").onclick = () => pickSquareImage((url) => { icon = url; drawIcon(); });
   $("sIconDel").onclick = () => { icon = ""; drawIcon(); };
   drawIcon();
@@ -491,6 +508,7 @@ export async function openServerEditor(cfg, onSaved) {
       rememberChannels: on("sRemember"), autoJoin: lines("sJoin"), perform: lines("sPerform"), encoding: $("sEnc").value,
       bouncer: bnc ? $("sBnc").value : "", bouncerUser: val("sBncUser"), bouncerPass: $("sBncPass").value, bouncerNetwork: val("sBncNet"),
       encryptionKey: $("sEncKey").value.trim(),
+      iconText: Array.from($("sIconTxt").value.replace(/\s+/g, "")).slice(0, 2).join(""), letterIcon: on("sLetterIco"), joinsParts: $("sJoins").value,
       proxyType: $("sPxType").value, proxyHost: val("sPxHost"), proxyPort: parseInt(val("sPxPort")) || 0, proxyUser: val("sPxUser"), proxyPass: $("sPxPass").value,
     };
     out.clientCert = cert?.cert || "";

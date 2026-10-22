@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": ". Ardından yukarıda yöntem olarak “İstemci sertifikası”nı seçin. Özel anahtar parolalarınızla birlikte saklanır.",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "Bu sertifika değiştirilsin mi? Parmak izini bilen servisler yenisini tekrar ekleyene kadar tanımaz.",
 "Create or import a client certificate to log in with it": "Giriş için bir istemci sertifikası oluşturun veya içe aktarın",
-"Logging in with a certificate needs TLS (Connection tab)": "Sertifikayla giriş TLS gerektirir (Bağlantı sekmesi)"
+"Logging in with a certificate needs TLS (Connection tab)": "Sertifikayla giriş TLS gerektirir (Bağlantı sekmesi)",
+"Letters": "Harfler",
+"Up to 2, used when there's no picture.": "En fazla 2; resim yoksa kullanılır.",
+"Show the letters in the sidebar when there's no picture": "Resim yoksa harfleri kenar çubuğunda göster",
+"Chat": "Sohbet",
+"Joins, parts and quits": "Katılma, ayrılma ve çıkışlar",
+"As in Settings (shown)": "Ayarlardaki gibi (göster)",
+"As in Settings (hidden)": "Ayarlardaki gibi (gizle)",
+"Show": "Göster",
+"Hide": "Gizle",
+"For one channel, right-click it in the sidebar.": "Tek bir kanal için kenar çubuğunda ona sağ tıklayın.",
+"Joins and quits": "Katılma ve çıkışlar",
+"Server setting (shown)": "Sunucu ayarı (göster)",
+"Server setting (hidden)": "Sunucu ayarı (gizle)"
 }

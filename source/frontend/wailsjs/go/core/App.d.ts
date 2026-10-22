@@ -164,6 +164,8 @@ export function SetAutoJoin(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function SetChannelIcon(arg1:string,arg2:string,arg3:string):Promise<string>;
 
+export function SetChannelJoins(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function SetChannelNotify(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
 
 export function SetChannelOrder(arg1:string,arg2:Array<string>):Promise<void>;
@@ -175,6 +177,8 @@ export function SetFavouriteOrder(arg1:Array<core.Favourite>):Promise<void>;
 export function SetFocus(arg1:boolean):Promise<void>;
 
 export function SetNickColor(arg1:string,arg2:string):Promise<void>;
+
+export function SetServerJoins(arg1:string,arg2:string):Promise<void>;
 
 export function SetStartView(arg1:string,arg2:string):Promise<void>;
 

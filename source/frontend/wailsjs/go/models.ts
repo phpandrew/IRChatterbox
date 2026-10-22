@@ -423,6 +423,9 @@ export namespace core {
 	    clientCert?: string;
 	    clientKey?: string;
 	    secretsStored?: boolean;
+	    iconText?: string;
+	    letterIcon?: boolean;
+	    joinsParts?: string;
 	    proxyType?: string;
 	    proxyHost?: string;
 	    proxyPort?: number;
@@ -463,6 +466,9 @@ export namespace core {
 	        this.clientCert = source["clientCert"];
 	        this.clientKey = source["clientKey"];
 	        this.secretsStored = source["secretsStored"];
+	        this.iconText = source["iconText"];
+	        this.letterIcon = source["letterIcon"];
+	        this.joinsParts = source["joinsParts"];
 	        this.proxyType = source["proxyType"];
 	        this.proxyHost = source["proxyHost"];
 	        this.proxyPort = source["proxyPort"];
@@ -516,6 +522,7 @@ export namespace core {
 	    settings: Settings;
 	    nickColors: Record<string, string>;
 	    channelNotify?: Record<string, NotifyRule>;
+	    channelJoins?: Record<string, string>;
 	    favourites?: Favourite[];
 	    plugins: PluginSettings;
 	    installId: string;
@@ -533,6 +540,7 @@ export namespace core {
 	        this.settings = this.convertValues(source["settings"], Settings);
 	        this.nickColors = source["nickColors"];
 	        this.channelNotify = this.convertValues(source["channelNotify"], NotifyRule, true);
+	        this.channelJoins = source["channelJoins"];
 	        this.favourites = this.convertValues(source["favourites"], Favourite);
 	        this.plugins = this.convertValues(source["plugins"], PluginSettings);
 	        this.installId = source["installId"];

@@ -50,6 +50,14 @@ type ServerConfig struct {
 	// true when this server's passwords are in the OS credential store, not in this file (secrets.go)
 	SecretsStored bool `json:"secretsStored,omitempty"`
 
+	// sidebar badge when there's no picture: LetterIcon shows it in the full sidebar too
+	// (it's always shown in the narrow one); IconText is up to 2 letters ("" = first letter)
+	IconText   string `json:"iconText,omitempty"`
+	LetterIcon bool   `json:"letterIcon,omitempty"`
+
+	// joins, parts and quits on this server: "" = as in Settings, "show" or "hide"
+	JoinsParts string `json:"joinsParts,omitempty"`
+
 	// proxy (proxy.go): "" / none | socks5 | http
 	ProxyType string `json:"proxyType,omitempty"`
 	ProxyHost string `json:"proxyHost,omitempty"`
@@ -232,6 +240,9 @@ type Config struct {
 
 	// per-channel notification settings, keyed "serverID/lowercase buffer" (chanotify.go)
 	ChannelNotify map[string]NotifyRule `json:"channelNotify,omitempty"`
+
+	// per-channel joins/parts/quits: "show" or "hide", keyed like ChannelNotify (joinsparts.go)
+	ChannelJoins map[string]string `json:"channelJoins,omitempty"`
 
 	// channels and private chats pinned to the top of the sidebar (favourites.go)
 	Favourites []Favourite    `json:"favourites,omitempty"`

@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": ". Ensuite, choisissez « Certificat client » comme méthode ci-dessus. La clé privée est conservée avec vos mots de passe.",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "Remplacer ce certificat ? Les services qui connaissent son empreinte ne reconnaîtront pas le nouveau tant que vous ne l'aurez pas ajouté à nouveau.",
 "Create or import a client certificate to log in with it": "Créez ou importez un certificat client pour vous connecter avec",
-"Logging in with a certificate needs TLS (Connection tab)": "La connexion par certificat nécessite TLS (onglet Connexion)"
+"Logging in with a certificate needs TLS (Connection tab)": "La connexion par certificat nécessite TLS (onglet Connexion)",
+"Letters": "Lettres",
+"Up to 2, used when there's no picture.": "2 au maximum, utilisées s'il n'y a pas d'image.",
+"Show the letters in the sidebar when there's no picture": "Afficher les lettres dans la barre latérale s'il n'y a pas d'image",
+"Chat": "Discussion",
+"Joins, parts and quits": "Arrivées, départs et déconnexions",
+"As in Settings (shown)": "Comme dans les réglages (affichées)",
+"As in Settings (hidden)": "Comme dans les réglages (masquées)",
+"Show": "Afficher",
+"Hide": "Masquer",
+"For one channel, right-click it in the sidebar.": "Pour un seul salon, faites un clic droit dessus dans la barre latérale.",
+"Joins and quits": "Arrivées et départs",
+"Server setting (shown)": "Réglage du serveur (affichées)",
+"Server setting (hidden)": "Réglage du serveur (masquées)"
 }

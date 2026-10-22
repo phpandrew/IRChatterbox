@@ -747,5 +747,18 @@
 ". After that, choose “Client certificate” as the method above. The private key is kept with your passwords.": "。その後、上の方式で「クライアント証明書」を選びます。秘密鍵はパスワードと一緒に保管されます。",
 "Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again.": "この証明書を置き換えますか？フィンガープリントを登録済みのサービスは、再登録するまで新しい証明書を認識しません。",
 "Create or import a client certificate to log in with it": "ログインに使うクライアント証明書を作成またはインポートしてください",
-"Logging in with a certificate needs TLS (Connection tab)": "証明書でのログインには TLS が必要です（接続タブ）"
+"Logging in with a certificate needs TLS (Connection tab)": "証明書でのログインには TLS が必要です（接続タブ）",
+"Letters": "文字",
+"Up to 2, used when there's no picture.": "2 文字まで。画像がないときに使います。",
+"Show the letters in the sidebar when there's no picture": "画像がないときはサイドバーに文字を表示",
+"Chat": "チャット",
+"Joins, parts and quits": "参加・退出・切断",
+"As in Settings (shown)": "設定に従う（表示）",
+"As in Settings (hidden)": "設定に従う（非表示）",
+"Show": "表示",
+"Hide": "非表示",
+"For one channel, right-click it in the sidebar.": "1 つのチャンネルだけなら、サイドバーで右クリックします。",
+"Joins and quits": "参加と退出",
+"Server setting (shown)": "サーバーの設定（表示）",
+"Server setting (hidden)": "サーバーの設定（非表示）"
 }
