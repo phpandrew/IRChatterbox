@@ -696,6 +696,14 @@ func (a *App) SendInput(server, buffer, text string) {
 			return
 		}
 	}
+	if lines := pastedLines(text); lines != nil && buffer != "" && !strings.HasPrefix(buffer, "*") {
+		for i := range lines {
+			lines[i] = a.expandShortcuts(lines[i])
+		}
+		if c.SayMultiline(buffer, lines) {
+			return // went out as one multi-line message
+		}
+	}
 	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue

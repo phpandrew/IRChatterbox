@@ -905,3 +905,9 @@ body .stacked.compact .line.cont { padding-top: 0; }
 
 /* Settings → General → "Show joins, parts and quits" off */
 body.no-joins .line.ev.join:not(.self), body.no-joins .line.ev.part:not(.self), body.no-joins .line.ev.quit:not(.self) { display: none; }
+.modal.sm.paste-dlg { width: min(640px, 94vw); }
+
+/* client certificate in the server editor */
+.cert-box { margin-top: 4px; }
+.cert-info { font-size: 13px; line-height: 1.5; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-input); overflow-wrap: anywhere; }
+.cert-info .mono { font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); }

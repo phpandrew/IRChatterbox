@@ -2435,10 +2435,17 @@ function send() {
   const warnAt = S.cfg.settings.pasteWarnLines ?? 5;
   if (warnAt > 0 && lines.length >= warnAt && b.type !== "server" && !text.trim().startsWith("/")) {
     // big paste: confirm first (sending lots of lines can get you kicked for flooding)
-    openPasteConfirm(lines, b.name, (mode) => {
+    Go.CanSendMultiline(srv.id, lines.length).then((one) => openPasteConfirm(lines, b.name, async (mode) => {
       if (!mode) { input.focus(); return; }
-      finishSend(srv, b, text, mode === "join" ? lines.map((l) => l.trim()).join(" ") : lines.join("\n"));
-    });
+      if (mode === "link") {
+        toast(t("Uploading the paste…"), "");
+        const r = await Go.UploadPaste(text);
+        if (!r?.url) { toast(r?.error || t("Couldn't upload the paste"), "error"); input.focus(); return; }
+        finishSend(srv, b, text, r.url);
+        return;
+      }
+      finishSend(srv, b, text, mode === "join" ? lines.map((l) => l.trim()).join(" ") : one ? text.replace(/\r\n/g, "\n").trim() : lines.join("\n"));
+    }, !!one));
     return;
   }
   finishSend(srv, b, text, text);

@@ -90,11 +90,12 @@ type Conn struct {
 
 	// IRCv3 extras (ircv3.go)
 	labelSeq      int
-	pending       []pendingMsg    // sent, waiting for echo-message
-	clientTagDeny string          // ISUPPORT CLIENTTAGDENY
-	whox          bool            // ISUPPORT WHOX
-	autoWho       map[string]bool // channels we sent WHO for, to learn who's away (lowercase)
-	listing       []ChanListItem  // channel list (LIST) being collected for the browser
+	pending       []pendingMsg               // sent, waiting for echo-message
+	clientTagDeny string                     // ISUPPORT CLIENTTAGDENY
+	mlBatches     map[string]*multilineBatch // incoming draft/multiline batches (multiline.go)
+	whox          bool                       // ISUPPORT WHOX
+	autoWho       map[string]bool            // channels we sent WHO for, to learn who's away (lowercase)
+	listing       []ChanListItem             // channel list (LIST) being collected for the browser
 	listActive    bool
 	monitorMax    int       // ISUPPORT MONITOR: -1 = not supported, 0 = no limit
 	monInitial    bool      // first MONITOR replies after connecting (no toasts)
@@ -277,7 +278,12 @@ func (c *Conn) session(addr string) error {
 		return err
 	}
 	if c.cfg.TLS {
-		tc := tls.Client(nc, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify})
+		certs, err := c.cfg.tlsClientCerts()
+		if err != nil {
+			nc.Close()
+			return err
+		}
+		tc := tls.Client(nc, &tls.Config{ServerName: c.cfg.Host, InsecureSkipVerify: c.cfg.TLSSkipVerify, Certificates: certs})
 		tc.SetDeadline(time.Now().Add(20 * time.Second))
 		if err := tc.Handshake(); err != nil {
 			nc.Close()
@@ -303,6 +309,7 @@ func (c *Conn) session(addr string) error {
 	c.replayBase = map[string]int64{}
 	c.pending = nil
 	c.clientTagDeny = ""
+	c.mlBatches = nil
 	c.whox = false
 	c.autoWho = map[string]bool{}
 	c.listing, c.listActive = nil, false
@@ -630,13 +637,15 @@ func (c *Conn) ChannelStates() []ChannelState {
 
 func (c *Conn) wantedCaps() []string {
 	want := []string{"multi-prefix", "away-notify", "account-notify", "server-time", "extended-join", "chghost", "userhost-in-names", "message-tags", "invite-notify", "cap-notify",
-		"batch", "draft/chathistory", "draft/read-marker",
+		"batch", "draft/chathistory", "draft/read-marker", "draft/multiline",
 		"echo-message", "labeled-response", "setname", "account-tag", "extended-monitor", "draft/message-redaction", "standard-replies",
 		encTag} // encTag: our soju build sends encrypted history even on networks without message-tags
 	switch {
 	case c.cfg.Bouncer == "soju" && c.cfg.BouncerPass != "":
 		want = append(want, "sasl")
 	case c.cfg.Bouncer == "" && c.cfg.AuthMethod == "sasl" && c.cfg.AuthPass != "":
+		want = append(want, "sasl")
+	case c.cfg.Bouncer == "" && c.cfg.AuthMethod == "external" && c.cfg.ClientCert != "" && c.cfg.TLS:
 		want = append(want, "sasl")
 	}
 	return want
@@ -737,6 +746,9 @@ func (c *Conn) saslPlain() {
 
 func (c *Conn) handle(m *Message) {
 	c.decryptStored(m)
+	if c.onMultiline(m) {
+		return // part of a multi-line message: handled as one when its batch ends
+	}
 	nick := m.Nick()
 	ts := m.Time().UnixMilli()
 	if uh := m.UserHost(); uh != "" {
@@ -837,8 +849,13 @@ func (c *Conn) handle(m *Message) {
 				c.caps[strings.TrimPrefix(cp, "-")] = !strings.HasPrefix(cp, "-")
 			}
 			if c.caps["sasl"] && !c.registered {
-				c.info("", "info", "Authenticating with SASL…")
-				c.SendRaw("AUTHENTICATE PLAIN")
+				if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "external" {
+					c.info("", "info", "Logging in with your client certificate (SASL EXTERNAL)…")
+					c.SendRaw("AUTHENTICATE EXTERNAL")
+				} else {
+					c.info("", "info", "Authenticating with SASL…")
+					c.SendRaw("AUTHENTICATE PLAIN")
+				}
 			} else if !c.registered {
 				c.SendRaw("CAP END")
 			}
@@ -849,7 +866,11 @@ func (c *Conn) handle(m *Message) {
 		}
 	case "AUTHENTICATE":
 		if m.Param(0) == "+" {
-			c.saslPlain()
+			if c.cfg.Bouncer == "" && c.cfg.AuthMethod == "external" {
+				c.SendRaw("AUTHENTICATE +") // the certificate is the credential
+			} else {
+				c.saslPlain()
+			}
 		}
 	case "900":
 		c.info("", "info", m.Trailing())
@@ -860,7 +881,11 @@ func (c *Conn) handle(m *Message) {
 		if c.cfg.Bouncer != "" {
 			c.info("", "error", "Bouncer login failed: "+m.Trailing()+" (check the bouncer username, password and network)")
 		} else {
-			c.info("", "error", "SASL: "+m.Trailing())
+			msg := "SASL: " + m.Trailing()
+			if c.cfg.AuthMethod == "external" {
+				msg += " (has this certificate's fingerprint been added to your account? Log in with your password and run /msg NickServ CERT ADD)"
+			}
+			c.info("", "error", msg)
 		}
 		c.SendRaw("CAP END")
 

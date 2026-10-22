@@ -24,7 +24,7 @@ type ServerConfig struct {
 	AltNick       string   `json:"altNick"`
 	Username      string   `json:"username"`
 	Realname      string   `json:"realname"`
-	AuthMethod    string   `json:"authMethod"` // none | sasl | nickserv
+	AuthMethod    string   `json:"authMethod"` // none | sasl | nickserv | external (client certificate)
 	AuthUser      string   `json:"authUser"`
 	AuthPass      string   `json:"authPass"`
 	AutoConnect   bool     `json:"autoConnect"`
@@ -42,6 +42,13 @@ type ServerConfig struct {
 	BouncerNetwork string `json:"bouncerNetwork"` // which of the bouncer's networks (optional)
 	// age private key(s) for reading encrypted bouncer history; never sent anywhere
 	EncryptionKey string `json:"encryptionKey,omitempty"`
+
+	// client certificate (clientcert.go): PEM; the key is a secret like the passwords
+	ClientCert string `json:"clientCert,omitempty"`
+	ClientKey  string `json:"clientKey,omitempty"`
+
+	// true when this server's passwords are in the OS credential store, not in this file (secrets.go)
+	SecretsStored bool `json:"secretsStored,omitempty"`
 
 	// proxy (proxy.go): "" / none | socks5 | http
 	ProxyType string `json:"proxyType,omitempty"`
@@ -304,6 +311,7 @@ func NewStore() *Store {
 		c = defaultConfig()
 		c.Servers = nil
 		if json.Unmarshal(b, &c) == nil {
+			loadSecrets(&c) // passwords kept in the OS credential store (secrets.go)
 			s.cfg = c
 		}
 	} else {
@@ -340,7 +348,7 @@ func NewStore() *Store {
 }
 
 func (s *Store) saveLocked() error {
-	b, _ := json.MarshalIndent(s.cfg, "", "  ")
+	b, _ := json.MarshalIndent(configForDisk(s.cfg), "", "  ")
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err

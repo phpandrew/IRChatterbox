@@ -95,6 +95,11 @@ export const api = {
   ],
   GetUIState: () => { try { return localStorage.getItem("mock-ui-json") || ""; } catch { return ""; } },
   SaveUIState: (st) => { try { localStorage.setItem("mock-ui-json", st); } catch {} },
+  CanSendMultiline: () => true,
+  GenerateClientCert: (nick) => ({ cert: "-----BEGIN CERTIFICATE-----", key: "-----BEGIN EC PRIVATE KEY-----", fingerprint: "9f3c1a0be2d47c55e8a1f0b6c3d2e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1", subject: nick || "IRChatterbox", expires: "2036-10-22" }),
+  DescribeClientCert: () => ({}),
+  ImportClientCert: () => ({}),
+  UploadPaste: (t) => new Promise((r) => setTimeout(() => r({ url: "https://paste.rs/AbC1" }), 400)),
   SetFavourite: (s, b, on) => {
     cfg.favourites = (cfg.favourites || []).filter((f) => !(f.server === s && f.buffer.toLowerCase() === b.toLowerCase()));
     if (on) cfg.favourites.push({ server: s, buffer: b });

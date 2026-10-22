@@ -10,7 +10,7 @@ import { os } from "./platform.js";
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor } from "./format.js";
-import { LANGUAGES, setLanguage } from "./i18n.js";
+import { LANGUAGES, setLanguage, t } from "./i18n.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
 const $ = (id) => document.getElementById(id);
@@ -172,18 +172,23 @@ export function openColorPicker(nick, current, onPick) {
 }
 
 // ---------- big paste confirmation ----------
-export function openPasteConfirm(lines, target, done) {
+export function openPasteConfirm(lines, target, done, oneMessage = false) {
   const n = lines.length;
   const secs = Math.max(0, Math.ceil((n - 5) / 2));
   const preview = lines.slice(0, 6).map((l) => esc(l.length > 140 ? l.slice(0, 140) + "…" : l)).join("\n") + (n > 6 ? `\n… and ${n - 6} more` : "");
+  const note = oneMessage
+    ? "This server supports multi-line messages, so it arrives as one message with its line breaks, without flooding the channel."
+    : `Sending many lines at once can get you kicked for flooding.${secs ? ` IRChatterbox paces them, so this takes about ${secs} second${secs === 1 ? "" : "s"}.` : ""}`;
   open(`<div class="modal-head">Send ${n} lines to ${esc(target)}?</div>
     <div class="modal-body">
-      <p style="margin:0 0 10px" class="muted">Sending many lines at once can get you kicked for flooding.${secs ? ` IRChatterbox paces them, so this takes about ${secs} second${secs === 1 ? "" : "s"}.` : ""}</p>
+      <p style="margin:0 0 10px" class="muted">${note}</p>
       <pre class="paste-preview">${preview}</pre>
+      <p class="hint" style="margin:10px 0 0">Upload as a link puts the text on paste.rs, a free public paste site, and sends just the link. Anyone with the link can read it.</p>
     </div>
-    <div class="modal-foot"><button class="btn left" id="pcCancel">Cancel</button><button class="btn" id="pcJoin">Join into one line</button><button class="btn primary" id="pcSend">Send ${n} lines</button></div>`, "sm", true);
+    <div class="modal-foot"><button class="btn left" id="pcCancel">Cancel</button><button class="btn" id="pcLink">Upload as a link</button><button class="btn" id="pcJoin">Join into one line</button><button class="btn primary" id="pcSend">${oneMessage ? "Send as one message" : `Send ${n} lines`}</button></div>`, "sm paste-dlg", true);
   const finish = (mode) => { closeOverlay(); done(mode); };
   $("pcCancel").onclick = () => finish(null);
+  $("pcLink").onclick = () => finish("link");
   $("pcJoin").onclick = () => finish("join");
   $("pcSend").onclick = () => finish("send");
   $("pcSend").focus();
@@ -303,10 +308,18 @@ export async function openServerEditor(cfg, onSaved) {
         ${field("Method", `<select id="sAuthM">
             <option value="none" ${c.authMethod === "none" ? "selected" : ""}>None</option>
             <option value="sasl" ${c.authMethod === "sasl" ? "selected" : ""}>SASL PLAIN (recommended)</option>
-            <option value="nickserv" ${c.authMethod === "nickserv" ? "selected" : ""}>NickServ IDENTIFY</option></select>`)}
+            <option value="nickserv" ${c.authMethod === "nickserv" ? "selected" : ""}>NickServ IDENTIFY</option>
+            <option value="external" ${c.authMethod === "external" ? "selected" : ""}>Client certificate (SASL EXTERNAL)</option></select>`)}
         <div></div>
         ${field("Account name", text("sAuthU", c.authUser, "defaults to nickname"))}
         ${field("Password", text("sAuthP", c.authPass, "", "password"))}
+      </div>
+      <div class="section-title only-direct">Client certificate (CertFP)</div>
+      <div class="only-direct cert-box">
+        <div id="sCertInfo" class="cert-info"></div>
+        <div class="btn-row"><button class="btn sm" id="sCertGen">Create a certificate</button><button class="btn sm" id="sCertImp">Import…</button>
+          <button class="btn sm" id="sCertCopy">Copy fingerprint</button><button class="btn sm danger" id="sCertDel">Remove</button></div>
+        <div class="hint">Log in without sending a password. Create a certificate, save and connect (with TLS on), log in with your password once, then run <code>/msg NickServ CERT ADD</code>. After that, choose “Client certificate” as the method above. The private key is kept with your passwords.</div>
       </div>
       </div>
       <div class="st-panel hidden" data-panel="chan">
@@ -357,6 +370,33 @@ export async function openServerEditor(cfg, onSaved) {
   document.querySelector(".se-tabs").onclick = (e) => { const t = e.target.closest("[data-st]"); if (t) showTab(t.dataset.st); };
   // server icon: picked here, saved with the server
   let icon; // undefined = unchanged, "" = remove, data URL = new
+  // client certificate: { cert, key, fingerprint, subject, expires } or null
+  let cert = null;
+  const drawCert = () => {
+    const box = $("sCertInfo");
+    const has = !!cert?.cert;
+    box.innerHTML = has
+      ? `<b class="no-i18n">${esc(cert.subject || "")}</b> · <span>expires</span> <span class="no-i18n">${esc(cert.expires || "")}</span><br><span class="no-i18n mono">SHA-256 ${esc(cert.fingerprint || "")}</span>`
+      : `<span class="muted">None</span>`;
+    $("sCertCopy").classList.toggle("hidden", !has);
+    $("sCertDel").classList.toggle("hidden", !has);
+    $("sCertGen").textContent = has ? "Create a new one" : "Create a certificate";
+  };
+  if (c.clientCert) Go.DescribeClientCert(c.clientCert, c.clientKey || "").then((d) => { cert = d?.cert ? d : { cert: c.clientCert, key: c.clientKey, subject: d?.error || "" }; drawCert(); });
+  setTimeout(drawCert);
+  $("sCertGen").onclick = async () => {
+    if (cert?.cert && !confirm(t("Replace this certificate? Services that know its fingerprint won't recognise the new one until you add it again."))) return;
+    const d = await Go.GenerateClientCert(val("sNick") || c.nick || "");
+    if (d?.error) { $("sErr").textContent = d.error; return; }
+    cert = d; drawCert();
+  };
+  $("sCertImp").onclick = async () => {
+    const d = await Go.ImportClientCert();
+    if (d?.error) { $("sErr").textContent = d.error; return; }
+    if (d?.cert) { cert = d; drawCert(); }
+  };
+  $("sCertCopy").onclick = () => cert?.fingerprint && navigator.clipboard.writeText(cert.fingerprint);
+  $("sCertDel").onclick = () => { cert = null; drawCert(); if ($("sAuthM").value === "external") $("sAuthM").value = "none"; };
   const drawIcon = () => {
     const cur = icon !== undefined ? icon : (c.id ? S.icons?.[c.id + "/*"] || "" : "");
     $("sIconPic").innerHTML = cur ? `<img src="${cur}" alt="">` : esc(((val("sName") || val("sHost") || "?")[0] || "?").toUpperCase());
@@ -453,6 +493,13 @@ export async function openServerEditor(cfg, onSaved) {
       encryptionKey: $("sEncKey").value.trim(),
       proxyType: $("sPxType").value, proxyHost: val("sPxHost"), proxyPort: parseInt(val("sPxPort")) || 0, proxyUser: val("sPxUser"), proxyPass: $("sPxPass").value,
     };
+    out.clientCert = cert?.cert || "";
+    out.clientKey = cert?.cert ? cert.key || "" : "";
+    if (out.authMethod === "external" && !bnc && (!out.clientCert || !out.tls)) {
+      showTab("id");
+      $("sErr").textContent = !out.clientCert ? "Create or import a client certificate to log in with it" : "Logging in with a certificate needs TLS (Connection tab)";
+      return;
+    }
     if (out.proxyType && (!out.proxyHost || !out.proxyPort)) {
       showTab("adv");
       $("sErr").textContent = "Enter the proxy's host and port, or choose No proxy";

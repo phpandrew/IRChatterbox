@@ -6,6 +6,8 @@ export function ApplyLocalUpdate():Promise<string>;
 
 export function AutoConnect():Promise<void>;
 
+export function CanSendMultiline(arg1:string,arg2:number):Promise<boolean>;
+
 export function CancelClose():Promise<void>;
 
 export function CheckForUpdate():Promise<core.UpdateInfo>;
@@ -26,6 +28,8 @@ export function DeleteServer(arg1:string):Promise<void>;
 
 export function DeleteTheme(arg1:string):Promise<void>;
 
+export function DescribeClientCert(arg1:string,arg2:string):Promise<core.ClientCert>;
+
 export function Disconnect(arg1:string):Promise<void>;
 
 export function DismissCrash():Promise<void>;
@@ -33,6 +37,8 @@ export function DismissCrash():Promise<void>;
 export function EncryptionPublicKeys(arg1:string):Promise<Array<string>>;
 
 export function ExportSettings(arg1:boolean,arg2:string):Promise<core.BackupResult>;
+
+export function GenerateClientCert(arg1:string):Promise<core.ClientCert>;
 
 export function GenerateEncryptionKey():Promise<core.EncryptionKeyPair>;
 
@@ -69,6 +75,8 @@ export function GetUIState():Promise<string>;
 export function GetVersion():Promise<string>;
 
 export function HistoryAround(arg1:string,arg2:string,arg3:number,arg4:number):Promise<Array<core.Event>>;
+
+export function ImportClientCert():Promise<core.ClientCert>;
 
 export function ImportSettings(arg1:string,arg2:string):Promise<string>;
 
@@ -183,3 +191,5 @@ export function ToggleFullscreen():Promise<void>;
 export function TrimAllLogs():Promise<void>;
 
 export function UploadImage(arg1:string):Promise<core.UploadResult>;
+
+export function UploadPaste(arg1:string):Promise<core.PasteResult>;

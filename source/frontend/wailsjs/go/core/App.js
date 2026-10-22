@@ -10,6 +10,10 @@ export function AutoConnect() {
   return window['go']['core']['App']['AutoConnect']();
 }
 
+export function CanSendMultiline(arg1, arg2) {
+  return window['go']['core']['App']['CanSendMultiline'](arg1, arg2);
+}
+
 export function CancelClose() {
   return window['go']['core']['App']['CancelClose']();
 }
@@ -50,6 +54,10 @@ export function DeleteTheme(arg1) {
   return window['go']['core']['App']['DeleteTheme'](arg1);
 }
 
+export function DescribeClientCert(arg1, arg2) {
+  return window['go']['core']['App']['DescribeClientCert'](arg1, arg2);
+}
+
 export function Disconnect(arg1) {
   return window['go']['core']['App']['Disconnect'](arg1);
 }
@@ -64,6 +72,10 @@ export function EncryptionPublicKeys(arg1) {
 
 export function ExportSettings(arg1, arg2) {
   return window['go']['core']['App']['ExportSettings'](arg1, arg2);
+}
+
+export function GenerateClientCert(arg1) {
+  return window['go']['core']['App']['GenerateClientCert'](arg1);
 }
 
 export function GenerateEncryptionKey() {
@@ -136,6 +148,10 @@ export function GetVersion() {
 
 export function HistoryAround(arg1, arg2, arg3, arg4) {
   return window['go']['core']['App']['HistoryAround'](arg1, arg2, arg3, arg4);
+}
+
+export function ImportClientCert() {
+  return window['go']['core']['App']['ImportClientCert']();
 }
 
 export function ImportSettings(arg1, arg2) {
@@ -364,4 +380,8 @@ export function TrimAllLogs() {
 
 export function UploadImage(arg1) {
   return window['go']['core']['App']['UploadImage'](arg1);
+}
+
+export function UploadPaste(arg1) {
+  return window['go']['core']['App']['UploadPaste'](arg1);
 }

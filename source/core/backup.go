@@ -59,6 +59,7 @@ type serverSecrets struct {
 	AuthPass    string `json:"authPass,omitempty"`
 	BouncerPass string `json:"bouncerPass,omitempty"`
 	ProxyPass   string `json:"proxyPass,omitempty"`
+	ClientKey   string `json:"clientKey,omitempty"`
 }
 
 func (s serverSecrets) empty() bool { return s == serverSecrets{} }
@@ -108,11 +109,12 @@ func (a *App) ExportSettings(withPasswords bool, passphrase string) BackupResult
 
 	secrets := map[string]serverSecrets{}
 	for _, sv := range cfg.Servers {
-		sec := serverSecrets{Password: sv.Password, AuthPass: sv.AuthPass, BouncerPass: sv.BouncerPass, ProxyPass: sv.ProxyPass}
+		sec := serverSecrets{Password: sv.Password, AuthPass: sv.AuthPass, BouncerPass: sv.BouncerPass, ProxyPass: sv.ProxyPass, ClientKey: sv.ClientKey}
 		if !sec.empty() {
 			secrets[sv.ID] = sec
 		}
-		sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass = "", "", "", ""
+		sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass, sv.ClientKey = "", "", "", "", ""
+		sv.SecretsStored = false
 		f.Servers = append(f.Servers, sv)
 	}
 	if withPasswords && len(secrets) > 0 {
@@ -177,7 +179,7 @@ func (a *App) ImportSettings(data, passphrase string) string {
 				continue
 			}
 			sec := secrets[sv.ID]
-			sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass = sec.Password, sec.AuthPass, sec.BouncerPass, sec.ProxyPass
+			sv.Password, sv.AuthPass, sv.BouncerPass, sv.ProxyPass, sv.ClientKey = sec.Password, sec.AuthPass, sec.BouncerPass, sec.ProxyPass, sec.ClientKey
 			if i, ok := byID[sv.ID]; ok {
 				cur := c.Servers[i]
 				if sv.Password == "" {
@@ -191,6 +193,9 @@ func (a *App) ImportSettings(data, passphrase string) string {
 				}
 				if sv.ProxyPass == "" {
 					sv.ProxyPass = cur.ProxyPass
+				}
+				if sv.ClientKey == "" && sv.ClientCert == cur.ClientCert {
+					sv.ClientKey = cur.ClientKey
 				}
 				c.Servers[i] = sv
 			} else {

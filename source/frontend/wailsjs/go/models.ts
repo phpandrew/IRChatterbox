@@ -106,6 +106,30 @@ export namespace core {
 		    return a;
 		}
 	}
+	export class ClientCert {
+	    cert: string;
+	    key: string;
+	    fingerprint: string;
+	    sha512: string;
+	    subject: string;
+	    expires: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClientCert(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cert = source["cert"];
+	        this.key = source["key"];
+	        this.fingerprint = source["fingerprint"];
+	        this.sha512 = source["sha512"];
+	        this.subject = source["subject"];
+	        this.expires = source["expires"];
+	        this.error = source["error"];
+	    }
+	}
 	export class URLCommand {
 	    trigger: string;
 	    url: string;
@@ -396,6 +420,9 @@ export namespace core {
 	    bouncerPass: string;
 	    bouncerNetwork: string;
 	    encryptionKey?: string;
+	    clientCert?: string;
+	    clientKey?: string;
+	    secretsStored?: boolean;
 	    proxyType?: string;
 	    proxyHost?: string;
 	    proxyPort?: number;
@@ -433,6 +460,9 @@ export namespace core {
 	        this.bouncerPass = source["bouncerPass"];
 	        this.bouncerNetwork = source["bouncerNetwork"];
 	        this.encryptionKey = source["encryptionKey"];
+	        this.clientCert = source["clientCert"];
+	        this.clientKey = source["clientKey"];
+	        this.secretsStored = source["secretsStored"];
 	        this.proxyType = source["proxyType"];
 	        this.proxyHost = source["proxyHost"];
 	        this.proxyPort = source["proxyPort"];
@@ -715,6 +745,20 @@ export namespace core {
 	}
 	
 	
+	export class PasteResult {
+	    url: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PasteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.error = source["error"];
+	    }
+	}
 	
 	export class ReportInput {
 	    server: string;
