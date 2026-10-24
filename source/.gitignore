@@ -5,3 +5,4 @@ frontend/dist/*
 frontend/wailsjs
 SHA256SUMS.txt
 *.zip
+frontend/dist-web/

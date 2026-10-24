@@ -20,3 +20,5 @@ deploy/
 self-hosting/config.local.php
 self-hosting/i/
 _to_delete/
+# Private: source of the web client at web.irchatterbox.com (built into website/chat/)
+web-client/

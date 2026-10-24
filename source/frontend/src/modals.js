@@ -6,6 +6,8 @@ import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
 import { showUpdateBar } from "./main.js";
 import { android } from "./mobile.js";
 import { os } from "./platform.js";
+// the browser version at irchatterbox.com/chat (web/backend.js marks the page)
+const web = () => document.body.classList.contains("web");
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
@@ -58,8 +60,8 @@ function androidBackup(start) {
 function openBackupExport() {
   open(`<div class="modal-head">Export settings</div>
     <div class="modal-body">
-      <p class="hint" style="margin:0 0 12px">Your servers, shortcuts, settings, nick colours, plugins and custom themes go into one .json file.</p>
-      ${check("bkPw", false, "Include passwords (server, SASL / NickServ and bouncer)")}
+      <p class="hint" style="margin:0 0 12px">${web() ? "Your shortcuts, settings, nick colours and custom themes go into one .json file." : "Your servers, shortcuts, settings, nick colours, plugins and custom themes go into one .json file."}</p>
+      <div class="not-web">${check("bkPw", false, "Include passwords (server, SASL / NickServ and bouncer)")}</div>
       <div id="bkPwBox" class="hidden" style="margin-top:10px">
         <div class="fgrid">
           ${field("Passphrase", `<input type="password" id="bkPass" autocomplete="new-password" placeholder="at least 8 characters">`)}
@@ -67,7 +69,7 @@ function openBackupExport() {
         </div>
         <div class="hint">The passwords are encrypted with this passphrase. You'll need it to import them, and it can't be recovered.</div>
       </div>
-      <div class="hint" style="margin-top:10px">Without passwords you type them again after importing. Bot URL commands are saved as they are, so check them for API keys before sharing the file.</div>
+      <div class="hint not-web" style="margin-top:10px">Without passwords you type them again after importing. Bot URL commands are saved as they are, so check them for API keys before sharing the file.</div>
       <div id="bkErr" class="t-status bad" style="margin-top:8px"></div>
     </div>
     <div class="modal-foot"><button class="btn" id="bkCancel">Cancel</button><button class="btn primary" id="bkOk">Export</button></div>`, "sm", true);
@@ -117,9 +119,9 @@ async function openBackupImport() {
     <div class="modal-body">
       <p style="margin:0 0 10px">Backup${info.version ? ` from IRChatterbox ${esc(info.version)}` : ""}${when ? `, made ${esc(when)}` : ""}:
         ${n(info.servers, "server", "servers")}, ${n(info.shortcuts, "shortcut", "shortcuts")}, ${n(info.themes, "custom theme", "custom themes")}.</p>
-      <p class="hint" style="margin:0 0 10px">Servers in the backup replace the same servers here, and new ones are added. Shortcuts, settings and plugins are replaced; nick colours and themes are added to yours.</p>
+      ${web() ? `<p class="hint" style="margin:0">Shortcuts and settings are replaced; nick colours and themes are added to yours. Servers, passwords and plugins are skipped: the web client uses the networks on your bouncer.</p>` : `<p class="hint" style="margin:0 0 10px">Servers in the backup replace the same servers here, and new ones are added. Shortcuts, settings and plugins are replaced; nick colours and themes are added to yours.</p>
       ${info.hasPasswords ? field("Passphrase", `<input type="password" id="biPass" autocomplete="off">`, "This backup has encrypted passwords. Leave it empty to import without them.") :
-        `<p class="hint" style="margin:0">This backup has no passwords. Servers you already have keep theirs.</p>`}
+        `<p class="hint" style="margin:0">This backup has no passwords. Servers you already have keep theirs.</p>`}`}
       <div id="biErr" class="t-status bad" style="margin-top:8px"></div>
     </div>
     <div class="modal-foot"><button class="btn" id="biCancel">Cancel</button><button class="btn primary" id="biOk">Import</button></div>`, "sm", true);
@@ -608,7 +610,7 @@ export function openSettings(startTab) {
         <select id="${id}" style="flex:1">
           <option value="">None</option>
           ${BUILTIN_SOUNDS.map(([v, l]) => `<option value="${v}" ${value === v ? "selected" : ""}>${l}</option>`).join("")}
-          ${android ? "" : `<option value="file" ${(value || "").startsWith("file:") ? "selected" : ""}>Custom sound file…</option>`}
+          ${android || web() ? "" : `<option value="file" ${(value || "").startsWith("file:") ? "selected" : ""}>Custom sound file…</option>`}
         </select>
         <button class="btn sm" data-test-sound="${id}">▶ Test</button></div>
         <div class="snd-file ${(value || "").startsWith("file:") ? "" : "hidden"}" id="${id}File" style="display:flex;gap:8px;margin-top:6px">
@@ -643,7 +645,7 @@ export function openSettings(startTab) {
       <div class="hint indent">Readable logs like <code>[2026-10-16 09:41:22] &lt;@Andrew&gt; hello</code> — one file per channel and private chat.</div>
       <div class="field" id="gTxtRow" style="margin-top:10px"><label>Log folder</label>
         <div style="display:flex;gap:8px"><input type="text" id="gFolder" value="${esc(set.logFolder || "")}" placeholder="Default: the IRChatterbox data folder\\logs" style="flex:1">
-        <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div></div>`) +
+        <button class="btn sm" id="gBrowse">Browse…</button><button class="btn sm" id="gOpenLogs">Open</button></div></div></div>`, "not-web") +
       card("Moderation", "For channels where you're an operator.", `
       ${check("gModConfirm", set.confirmModeration !== false, "Ask before kicking or banning someone, with a box for the reason")}
       <div class="fgrid" style="margin-top:10px">
@@ -668,7 +670,7 @@ export function openSettings(startTab) {
         ${field(android ? "After this many minutes in the background" : "After this many minutes without keyboard or mouse input", text("gAwayMin", set.autoAwayMinutes ?? 15, "15", "number"))}
         ${field("Away message", text("gAwayMsg", set.autoAwayMessage ?? "Away from keyboard", "Away from keyboard"))}
       </div>
-      <div class="hint">You're set back as soon as you ${android ? "open the app" : "use your PC"} again. A manual <code>/away</code> is never undone automatically.</div>`) +
+      <div class="hint">You're set back as soon as you ${android ? "open the app" : "use your PC"} again. A manual <code>/away</code> is never undone automatically.</div>`, "not-web") +
       card("Sending", "Protection against flooding a channel by accident.", `
       <div class="fgrid">${field("Ask before sending a paste of this many lines or more", text("gPaste", set.pasteWarnLines ?? 5, "5", "number"), "0 = never ask. You can send it as-is, join it into one line, or cancel.")}</div>
       <div class="set-sep"></div>
@@ -682,7 +684,7 @@ export function openSettings(startTab) {
     else if (tab === "highlights") body.innerHTML =
       card("Highlight words", "Lines containing your nick or these words are highlighted, badged in red and trigger a notification.", `
       ${field("Words", `<textarea id="hWords" placeholder="andrew&#10;tshirtgang">${esc((set.highlightWords || []).join("\n"))}</textarea>`, "One per line. Your current nick is always a highlight.")}`) +
-      card(android || os !== "windows" ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
+      card(android || web() || os !== "windows" ? "Notifications" : "Windows notifications", "Pop-up alerts when someone needs your attention.", `
       ${check("hNotify", set.notifications, "Notify me when I'm highlighted and not looking at that channel")}
       ${check("hPm", set.notifyPMs, "Also notify for private messages")}
       <div class="hint">To get every message from a channel, or to mute one, right-click it in the sidebar and choose Notifications.</div>
@@ -693,13 +695,13 @@ export function openSettings(startTab) {
         ${field("For private messages", soundPicker("sndPm", set.soundPM ?? "ping"))}
         ${field("Volume", `<div style="display:flex;gap:10px;align-items:center"><input type="range" id="sndVol" min="0" max="100" value="${set.soundVolume ?? 70}" style="flex:1"><span id="sndVolOut" class="muted" style="width:36px">${set.soundVolume ?? 70}%</span></div>`)}
       </div>
-      <div class="hint">Custom sounds can be .wav, .mp3, .ogg or .m4a. When a sound is set, the Windows notification itself stays silent so you don't hear two.</div>`) +
+      <div class="hint not-web">Custom sounds can be .wav, .mp3, .ogg or .m4a. When a sound is set, the Windows notification itself stays silent so you don't hear two.</div>`) +
       card("Tray & taskbar", "Get your attention when you're in another app.", `
       ${check("hFlash", set.flashOnPing !== false, "Flash the tray icon and taskbar button when I'm mentioned or messaged")}
       <div class="hint indent">Flashing stops as soon as you switch back to IRChatterbox. Tray icon options are in General → Startup & closing.</div>`, "desktop-only win-only") +
       card("Friends", "Get told when these people come online or go offline (on servers that support MONITOR).", `
       ${field("Nicks to watch", `<textarea id="hFriends" placeholder="Friendname1&#10;AndrewBot">${esc((set.notifyList || []).join("\n"))}</textarea>`, "One per line.")}
-      ${check("hFriendsNotify", set.notifyFriends !== false, "Show a notification when one comes online")}`) +
+      ${check("hFriendsNotify", set.notifyFriends !== false, "Show a notification when one comes online")}`, "not-web") +
       card("Blocked people", "Hide everything from these people. Block someone from their nick's menu, or with /ignore.", `
       ${field("Blocked nicks or masks", `<textarea id="hIgnore" placeholder="spammer&#10;*!*@bad.host">${esc((set.ignore || []).join("\n"))}</textarea>`, "Nick, or a nick!user@host mask with * wildcards.")}`) +
       card("Word filter", "Words you never want to see are replaced with •••• in chat, history and notifications.", `
@@ -710,7 +712,7 @@ export function openSettings(startTab) {
       ${check("mImg", set.inlineImages, "Show images inline (PNG, JPG, GIF, WEBP, AVIF, SVG, imgur and Giphy links)")}
       ${check("mYt", set.inlineYouTube, "Show YouTube previews — click to play inside the chat")}
       ${check("mVid", set.inlineVideos ?? true, "Show video and audio players (MP4, WEBM, MOV, MP3, OGG, imgur GIFV) and Vimeo, Streamable or Spotify — click to play")}
-      ${check("mLinks", set.linkPreviews !== false, "Show a preview under web links (title, description and picture)")}
+      <div class="not-web">${check("mLinks", set.linkPreviews !== false, "Show a preview under web links (title, description and picture)")}</div>
       <div class="hint" style="margin-top:10px">Previews load directly from the linked site, which means that site sees your IP address. Turn these off if that matters to you.</div>`) +
       card("Image uploads", "Attach, paste or drop a JPG, PNG, WebP or BMP image in the message box to share it as a link.", `
       ${field("Upload to", `<select id="uHost">
@@ -724,7 +726,7 @@ export function openSettings(startTab) {
       </div>
       <div id="uCustomRow" style="margin-top:10px">
         ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. Run your own with <a href="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting" data-url="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting">self-hosting/upload.php</a> on GitHub.`)}
-      </div>`) +
+      </div>`, "not-web") +
       card("DCC", "Send files and chat directly with someone, without going through the server. Right-click a nick and choose Send file… or Direct chat, or use /dcc.", `
       ${field("Save received files to", `<div style="display:flex;gap:8px"><input type="text" id="dFolder" value="${esc(set.dccFolder || "")}" placeholder="Default: your Downloads folder" style="flex:1"><button class="btn" id="dBrowse">Choose…</button></div>`)}
       <div class="fgrid">
@@ -933,8 +935,14 @@ export function openSettings(startTab) {
           <button class="btn sm" id="abCheck">Check for updates</button>
           <span id="abStatus" class="muted" style="font-size:12.5px"></span>
         </div>
-        <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`)}
-      ${card("Back up settings", "Move your setup to another computer or phone, or keep a copy.", `
+        <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`, "not-web")}
+      ${web() ? card("Back up settings", "Keep a copy of your settings, or bring them over from IRChatterbox on your computer or phone.", `
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" id="abExport">Export settings…</button>
+          <button class="btn sm" id="abImport">Import settings…</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Saves your shortcuts, settings, nick colours and custom themes to one file, which the app can import too. Backups from the app work here; their servers, passwords and plugins are skipped, since the web client uses the networks on your bouncer.</div>`) :
+      card("Back up settings", "Move your setup to another computer or phone, or keep a copy.", `
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn sm" id="abExport">Export settings…</button>
           <button class="btn sm" id="abImport">Import settings…</button>

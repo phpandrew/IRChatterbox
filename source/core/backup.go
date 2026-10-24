@@ -170,7 +170,16 @@ func (a *App) ImportSettings(data, passphrase string) string {
 		}
 	}
 
+	// Settings and plugins are laid over the current ones, so a backup that leaves some out
+	// (one from the web client, or from an older version) doesn't reset the rest.
+	var raw struct {
+		Settings json.RawMessage `json:"settings"`
+		Plugins  json.RawMessage `json:"plugins"`
+	}
+	_ = json.Unmarshal([]byte(data), &raw)
+
 	old := a.store.Get().Settings
+	var notify []string
 	a.store.Update(func(c *Config) {
 		byID := map[string]int{}
 		for i, sv := range c.Servers {
@@ -228,7 +237,10 @@ func (a *App) ImportSettings(data, passphrase string) string {
 			c.Shortcuts = f.Shortcuts
 		}
 
-		s := f.Settings
+		s := old
+		if hasJSON(raw.Settings) {
+			_ = json.Unmarshal(raw.Settings, &s)
+		}
 		// keep what belongs to this computer, and where images and files go
 		s.LogFolder = old.LogFolder
 		s.SkippedVersion = old.SkippedVersion
@@ -242,6 +254,7 @@ func (a *App) ImportSettings(data, passphrase string) string {
 			s.SoundPM = old.SoundPM
 		}
 		c.Settings = s
+		notify = s.NotifyList
 
 		if c.NickColors == nil {
 			c.NickColors = map[string]string{}
@@ -253,7 +266,11 @@ func (a *App) ImportSettings(data, passphrase string) string {
 		}
 
 		musicFile := c.Plugins.Music.File
-		c.Plugins = f.Plugins
+		if hasJSON(raw.Plugins) {
+			p := c.Plugins
+			_ = json.Unmarshal(raw.Plugins, &p)
+			c.Plugins = p
+		}
 		c.Plugins.Music.File = musicFile
 	})
 	for _, t := range f.Themes {
@@ -261,8 +278,13 @@ func (a *App) ImportSettings(data, passphrase string) string {
 			a.store.SaveTheme(t)
 		}
 	}
-	a.updateMonitors(old.NotifyList, f.Settings.NotifyList)
+	a.updateMonitors(old.NotifyList, notify)
 	return ""
+}
+
+// hasJSON: the field was in the file and isn't null.
+func hasJSON(m json.RawMessage) bool {
+	return len(m) > 0 && string(m) != "null"
 }
 
 func parseBackup(data string) (backupFile, error) {

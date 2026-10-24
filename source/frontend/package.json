@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:web": "vite build --mode web --outDir dist-web --base ./"
   },
   "devDependencies": {
     "vite": "^7.0.0"

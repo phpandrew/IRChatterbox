@@ -26,11 +26,20 @@ key stays in IRChatterbox (server settings → Bouncer → History decryption ke
 - **Requires** `message-store db` with SQLite. Postgres can store keys, but encrypting existing
   history isn't supported there.
 
-Keys are set per user:
+Keys are set per user, and a network can have its own key that takes priority (handy for trying
+encryption on one network first):
 
-    /msg BouncerServ user update -encryption-key age1...           (your own account)
-    /msg BouncerServ user update sam -encryption-key age1...       (admin, someone else's)
-    /msg BouncerServ user update -encryption-key ""                (remove)
+    /msg BouncerServ user update -encryption-key age1...             (your whole account)
+    /msg BouncerServ user update sam -encryption-key age1...         (admin, someone else's)
+    /msg BouncerServ user update -encryption-key ""                  (remove)
+    /msg BouncerServ network update libera -encryption-key age1...   (one network only)
+    /msg BouncerServ network update libera -encryption-key ""        (back to the account key)
+
+Setting a key encrypts the stored history it covers, in the background: a network key covers that
+network; the account key covers every network without its own key. Changing only a network's key
+doesn't reconnect it. `network status` shows `encrypted (network key)` or `encrypted (account key)`.
+In IRChatterbox, put the matching private key in that server's settings (each bouncer network is
+its own server there).
 
 On the hosted IRChatterbox bouncer, the account page does this for you.
 

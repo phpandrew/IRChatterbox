@@ -1,31 +1,32 @@
-From 1e44463d76ed02dbcbb2000432a747c278348c41 Mon Sep 17 00:00:00 2001
+From ba93c18a5bfc117558969e695d211517c4497980 Mon Sep 17 00:00:00 2001
 From: IRChatterbox <noreply@irchatterbox.com>
-Date: Sun, 18 Oct 2026 12:15:37 -0400
-Subject: [PATCH] Encrypt stored message history with a per-user age public key
+Date: Thu, 22 Oct 2026 19:00:20 -0400
+Subject: [PATCH] Encrypt stored message history with age public keys (per
+ user, or per network)
 
 ---
- database/database.go       |   5 +
- database/encryptionkey.go  | 185 +++++++++++++++++++++++++++++++++++++
+ database/database.go       |   8 +
+ database/encryptionkey.go  | 300 +++++++++++++++++++++++++++++++++++++
  database/sqlite_mattn.go   |   2 +-
  database/sqlite_modernc.go |   2 +-
- downstream.go              |   6 ++
+ downstream.go              |   6 +
  go.mod                     |   1 +
  go.sum                     |   2 +
- msgstore/db.go             |  22 +++++
- msgstore/encrypt.go        |  64 +++++++++++++
- service.go                 |  29 +++++-
- user.go                    |   8 +-
- user_encrypt.go            |  88 ++++++++++++++++++
- 12 files changed, 410 insertions(+), 4 deletions(-)
+ msgstore/db.go             |  23 +++
+ msgstore/encrypt.go        |  64 ++++++++
+ service.go                 |  79 +++++++++-
+ user.go                    |   9 +-
+ user_encrypt.go            | 183 ++++++++++++++++++++++
+ 12 files changed, 669 insertions(+), 10 deletions(-)
  create mode 100644 database/encryptionkey.go
  create mode 100644 msgstore/encrypt.go
  create mode 100644 user_encrypt.go
 
 diff --git a/database/database.go b/database/database.go
-index ec23b3c..07febc4 100644
+index ec23b3c..9e41748 100644
 --- a/database/database.go
 +++ b/database/database.go
-@@ -76,6 +76,11 @@ type Database interface {
+@@ -76,6 +76,14 @@ type Database interface {
  	ListMessageLastPerTarget(ctx context.Context, networkID int64, options *MessageOptions) ([]MessageTargetLast, error)
  	ListMessages(ctx context.Context, networkID int64, name string, options *MessageOptions) ([]*irc.Message, error)
  	DeleteMessagesBefore(ctx context.Context, before time.Time) error
@@ -34,15 +35,18 @@ index ec23b3c..07febc4 100644
 +	GetEncryptionKey(ctx context.Context, userID int64) (string, error)
 +	StoreEncryptionKey(ctx context.Context, userID int64, recipient string) error
 +	TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error)
++	TransformNetworkMessages(ctx context.Context, networkID int64, transform MessageTransform) (int, error)
++	ListNetworkEncryptionKeys(ctx context.Context, userID int64) (map[int64]string, error)
++	StoreNetworkEncryptionKey(ctx context.Context, networkID int64, recipient string) error
  }
  
  type MetricsCollectorDatabase interface {
 diff --git a/database/encryptionkey.go b/database/encryptionkey.go
 new file mode 100644
-index 0000000..97600df
+index 0000000..e412f99
 --- /dev/null
 +++ b/database/encryptionkey.go
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,300 @@
 +package database
 +
 +// IRChatterbox addition: a per-user age public key ("recipient"). When a user has one, the
@@ -70,6 +74,22 @@ index 0000000..97600df
 +const postgresEncryptionKeySchema = `
 +CREATE TABLE IF NOT EXISTS "EncryptionKey" (
 +	"user" INTEGER PRIMARY KEY REFERENCES "User"(id) ON DELETE CASCADE,
++	recipient TEXT NOT NULL,
++	updated TIMESTAMP WITH TIME ZONE NOT NULL
++)`
++
++// A network's own key takes priority over the user's. Rows go when their network does.
++const sqliteNetworkEncryptionKeySchema = `
++CREATE TABLE IF NOT EXISTS NetworkEncryptionKey (
++	network INTEGER PRIMARY KEY,
++	recipient TEXT NOT NULL,
++	updated TEXT NOT NULL,
++	FOREIGN KEY(network) REFERENCES Network(id) ON DELETE CASCADE
++)`
++
++const postgresNetworkEncryptionKeySchema = `
++CREATE TABLE IF NOT EXISTS "NetworkEncryptionKey" (
++	network INTEGER PRIMARY KEY REFERENCES "Network"(id) ON DELETE CASCADE,
 +	recipient TEXT NOT NULL,
 +	updated TIMESTAMP WITH TIME ZONE NOT NULL
 +)`
@@ -113,10 +133,63 @@ index 0000000..97600df
 +	return err
 +}
 +
-+// TransformUserMessages rewrites every stored message of a user's networks, in batches so the
-+// bouncer stays responsive. Afterwards it merges the full-text index and checkpoints the WAL so
-+// the old text doesn't linger in the database files (secure_delete zeroes freed space).
++// ListNetworkEncryptionKeys returns network ID → recipient for a user's networks that have their own key.
++func (db *SqliteDB) ListNetworkEncryptionKeys(ctx context.Context, userID int64) (map[int64]string, error) {
++	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, sqliteNetworkEncryptionKeySchema); err != nil {
++		return nil, err
++	}
++	rows, err := db.db.QueryContext(ctx, `
++		SELECT k.network, k.recipient FROM NetworkEncryptionKey k
++		JOIN Network n ON n.id = k.network WHERE n.user = ?`, userID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	out := map[int64]string{}
++	for rows.Next() {
++		var id int64
++		var r string
++		if err := rows.Scan(&id, &r); err != nil {
++			return nil, err
++		}
++		out[id] = r
++	}
++	return out, rows.Err()
++}
++
++func (db *SqliteDB) StoreNetworkEncryptionKey(ctx context.Context, networkID int64, recipient string) error {
++	ctx, cancel := context.WithTimeout(ctx, sqliteQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, sqliteNetworkEncryptionKeySchema); err != nil {
++		return err
++	}
++	if recipient == "" {
++		_, err := db.db.ExecContext(ctx, `DELETE FROM NetworkEncryptionKey WHERE network = ?`, networkID)
++		return err
++	}
++	_, err := db.db.ExecContext(ctx, `
++		INSERT INTO NetworkEncryptionKey(network, recipient, updated) VALUES (?, ?, ?)
++		ON CONFLICT(network) DO UPDATE SET recipient = excluded.recipient, updated = excluded.updated`,
++		networkID, recipient, sqliteTime{time.Now()})
++	return err
++}
++
++// TransformUserMessages rewrites every stored message of a user's networks.
 +func (db *SqliteDB) TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error) {
++	return db.transformMessages(ctx, "n.user = ?", userID, transform)
++}
++
++// TransformNetworkMessages rewrites every stored message of one network.
++func (db *SqliteDB) TransformNetworkMessages(ctx context.Context, networkID int64, transform MessageTransform) (int, error) {
++	return db.transformMessages(ctx, "n.id = ?", networkID, transform)
++}
++
++// transformMessages rewrites stored messages in batches so the bouncer stays responsive.
++// Afterwards it merges the full-text index and checkpoints the WAL so the old text doesn't
++// linger in the database files (secure_delete zeroes freed space).
++func (db *SqliteDB) transformMessages(ctx context.Context, where string, arg int64, transform MessageTransform) (int, error) {
 +	const batch = 500
 +	changed := 0
 +	lastID := int64(0)
@@ -125,8 +198,8 @@ index 0000000..97600df
 +			SELECT m.id, m.raw FROM Message m
 +			JOIN MessageTarget t ON t.id = m.target
 +			JOIN Network n ON n.id = t.network
-+			WHERE n.user = ? AND m.id > ?
-+			ORDER BY m.id LIMIT ?`, userID, lastID, batch)
++			WHERE `+where+` AND m.id > ?
++			ORDER BY m.id LIMIT ?`, arg, lastID, batch)
 +		if err != nil {
 +			return changed, err
 +		}
@@ -228,6 +301,52 @@ index 0000000..97600df
 +func (db *PostgresDB) TransformUserMessages(ctx context.Context, userID int64, transform MessageTransform) (int, error) {
 +	return 0, errors.New("encrypting existing history is only supported with the SQLite database")
 +}
++
++func (db *PostgresDB) TransformNetworkMessages(ctx context.Context, networkID int64, transform MessageTransform) (int, error) {
++	return 0, errors.New("encrypting existing history is only supported with the SQLite database")
++}
++
++func (db *PostgresDB) ListNetworkEncryptionKeys(ctx context.Context, userID int64) (map[int64]string, error) {
++	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, postgresNetworkEncryptionKeySchema); err != nil {
++		return nil, err
++	}
++	rows, err := db.db.QueryContext(ctx, `
++		SELECT k.network, k.recipient FROM "NetworkEncryptionKey" k
++		JOIN "Network" n ON n.id = k.network WHERE n."user" = $1`, userID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	out := map[int64]string{}
++	for rows.Next() {
++		var id int64
++		var r string
++		if err := rows.Scan(&id, &r); err != nil {
++			return nil, err
++		}
++		out[id] = r
++	}
++	return out, rows.Err()
++}
++
++func (db *PostgresDB) StoreNetworkEncryptionKey(ctx context.Context, networkID int64, recipient string) error {
++	ctx, cancel := context.WithTimeout(ctx, postgresQueryTimeout)
++	defer cancel()
++	if _, err := db.db.ExecContext(ctx, postgresNetworkEncryptionKeySchema); err != nil {
++		return err
++	}
++	if recipient == "" {
++		_, err := db.db.ExecContext(ctx, `DELETE FROM "NetworkEncryptionKey" WHERE network = $1`, networkID)
++		return err
++	}
++	_, err := db.db.ExecContext(ctx, `
++		INSERT INTO "NetworkEncryptionKey"(network, recipient, updated) VALUES ($1, $2, NOW())
++		ON CONFLICT (network) DO UPDATE SET recipient = EXCLUDED.recipient, updated = EXCLUDED.updated`,
++		networkID, recipient)
++	return err
++}
 diff --git a/database/sqlite_mattn.go b/database/sqlite_mattn.go
 index b9d22e0..3268b46 100644
 --- a/database/sqlite_mattn.go
@@ -304,7 +423,7 @@ index 3dc14cd..a13eb86 100644
  git.sr.ht/~sircmpwn/go-bare v0.0.0-20260710064527-109149d5bf76 h1:O8N/nNjpQBptKX6im+6HerVDMGautxCT6BCfRVZz820=
  git.sr.ht/~sircmpwn/go-bare v0.0.0-20260710064527-109149d5bf76/go.mod h1:BVJwbDfVjCjoFiKrhkei6NdGcZYpkDkdyCdg1ukytRA=
 diff --git a/msgstore/db.go b/msgstore/db.go
-index 823a63d..248ba59 100644
+index 823a63d..06faff1 100644
 --- a/msgstore/db.go
 +++ b/msgstore/db.go
 @@ -2,8 +2,11 @@ package msgstore
@@ -319,27 +438,28 @@ index 823a63d..248ba59 100644
  	"codeberg.org/emersion/soju/database"
  	"git.sr.ht/~sircmpwn/go-bare"
  	"gopkg.in/irc.v4"
-@@ -35,6 +38,14 @@ func formatDBMsgID(netID int64, target string, msgID int64) string {
+@@ -35,6 +38,15 @@ func formatDBMsgID(netID int64, target string, msgID int64) string {
  // stores messages in the soju database.
  type dbMessageStore struct {
  	db database.Database
 +
-+	// IRChatterbox: when set, returns the recipient to encrypt stored text with (nil = don't).
-+	recipient func() age.Recipient
++	// IRChatterbox: when set, returns the recipient to encrypt a network's stored text with
++	// (nil = don't).
++	recipient func(networkID int64) age.Recipient
 +}
 +
 +// SetEncryption makes Append encrypt message text with the recipient f returns (see encrypt.go).
-+func (ms *dbMessageStore) SetEncryption(f func() age.Recipient) {
++func (ms *dbMessageStore) SetEncryption(f func(networkID int64) age.Recipient) {
 +	ms.recipient = f
  }
  
  var (
-@@ -81,6 +92,17 @@ func (ms *dbMessageStore) LoadLatestID(ctx context.Context, id string, options *
+@@ -81,6 +93,17 @@ func (ms *dbMessageStore) LoadLatestID(ctx context.Context, id string, options *
  }
  
  func (ms *dbMessageStore) Append(ctx context.Context, network *database.Network, entity string, msg *irc.Message) (string, error) {
 +	if ms.recipient != nil {
-+		if r := ms.recipient(); r != nil {
++		if r := ms.recipient(network.ID); r != nil {
 +			enc, ok, err := EncryptMessage(msg, r)
 +			if err != nil {
 +				return "", fmt.Errorf("encrypt message: %w", err)
@@ -423,10 +543,44 @@ index 0000000..b5e757a
 +	return out, true, nil
 +}
 diff --git a/service.go b/service.go
-index d41500b..3ee2d9d 100644
+index d41500b..479b089 100644
 --- a/service.go
 +++ b/service.go
-@@ -301,7 +301,7 @@ func init() {
+@@ -11,6 +11,7 @@ import (
+ 	"fmt"
+ 	"io/ioutil"
+ 	"net"
++	"reflect"
+ 	"sort"
+ 	"strconv"
+ 	"strings"
+@@ -20,6 +21,7 @@ import (
+ 	"gopkg.in/irc.v4"
+ 
+ 	"codeberg.org/emersion/soju/database"
++	"codeberg.org/emersion/soju/msgstore"
+ )
+ 
+ const serviceNick = "BouncerServ"
+@@ -226,7 +228,7 @@ func init() {
+ 		"network": {
+ 			children: serviceCommandSet{
+ 				"create": {
+-					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]...",
++					usage:  "-addr <addr> [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]... [-encryption-key <age1...>]",
+ 					desc:   "add a new network",
+ 					handle: handleServiceNetworkCreate,
+ 				},
+@@ -235,7 +237,7 @@ func init() {
+ 					handle: handleServiceNetworkStatus,
+ 				},
+ 				"update": {
+-					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]...",
++					usage:  "[name] [-addr addr] [-name name] [-username username] [-pass pass] [-realname realname] [-certfp fingerprint] [-nick nick] [-auto-away auto-away] [-enabled enabled] [-ignore-limit ignore-limit] [-connect-command command]... [-encryption-key <age1...>]",
+ 					desc:   "update a network",
+ 					handle: handleServiceNetworkUpdate,
+ 				},
+@@ -301,7 +303,7 @@ func init() {
  					global: true,
  				},
  				"update": {
@@ -435,7 +589,94 @@ index d41500b..3ee2d9d 100644
  					desc:   "update a user",
  					handle: handleUserUpdate,
  					global: true,
-@@ -1093,6 +1093,8 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
+@@ -538,6 +540,7 @@ type networkFlagSet struct {
+ 	AutoAway, Enabled                                  *bool
+ 	IgnoreLimit                                        bool
+ 	ConnectCommands                                    []string
++	EncryptionKey                                      *string // IRChatterbox: this network's own key
+ }
+ 
+ func newNetworkFlagSet() *networkFlagSet {
+@@ -553,6 +556,7 @@ func newNetworkFlagSet() *networkFlagSet {
+ 	fs.Var(boolPtrFlag{&fs.Enabled}, "enabled", "")
+ 	fs.BoolVar(&fs.IgnoreLimit, "ignore-limit", false, "")
+ 	fs.Var((*stringSliceFlag)(&fs.ConnectCommands), "connect-command", "")
++	fs.Var(stringPtrFlag{&fs.EncryptionKey}, "encryption-key", "")
+ 	return fs
+ }
+ 
+@@ -646,12 +650,25 @@ func handleServiceNetworkCreate(ctx *serviceContext, params []string) error {
+ 		return err
+ 	}
+ 
++	if fs.EncryptionKey != nil && *fs.EncryptionKey != "" {
++		if _, err := msgstore.ParseRecipient(*fs.EncryptionKey); err != nil {
++			return err // check before creating, so a typo doesn't leave a half-made network
++		}
++	}
++
+ 	network, err := ctx.user.createNetwork(ctx, record, !fs.IgnoreLimit)
+ 	if err != nil {
+ 		return fmt.Errorf("could not create network: %v", err)
+ 	}
+ 
+ 	ctx.print(fmt.Sprintf("created network %q", network.GetName()))
++	if fs.EncryptionKey != nil {
++		msg, err := ctx.user.setNetworkEncryptionKey(ctx, network, *fs.EncryptionKey)
++		if err != nil {
++			return err
++		}
++		ctx.print(msg)
++	}
+ 	return nil
+ }
+ 
+@@ -683,6 +700,11 @@ func handleServiceNetworkStatus(ctx *serviceContext, params []string) error {
+ 		if net == ctx.network {
+ 			statuses = append(statuses, "current")
+ 		}
++		if ctx.user.networkKeyOwn(net.ID) {
++			statuses = append(statuses, "encrypted (network key)")
++		} else if ctx.user.recipientFor(net.ID) != nil {
++			statuses = append(statuses, "encrypted (account key)")
++		}
+ 
+ 		name := net.GetName()
+ 		if name != net.Addr {
+@@ -728,12 +750,28 @@ func handleServiceNetworkUpdate(ctx *serviceContext, params []string) error {
+ 		return err
+ 	}
+ 
+-	network, err := ctx.user.updateNetwork(ctx, &record, !fs.IgnoreLimit && !wasEnabled)
+-	if err != nil {
+-		return fmt.Errorf("could not update network: %v", err)
++	if fs.EncryptionKey != nil && *fs.EncryptionKey != "" {
++		if _, err := msgstore.ParseRecipient(*fs.EncryptionKey); err != nil {
++			return err
++		}
+ 	}
+ 
+-	ctx.print(fmt.Sprintf("updated network %q", network.GetName()))
++	// IRChatterbox: changing only the encryption key doesn't need a reconnect
++	network := net
++	if !reflect.DeepEqual(record, net.Network) {
++		network, err = ctx.user.updateNetwork(ctx, &record, !fs.IgnoreLimit && !wasEnabled)
++		if err != nil {
++			return fmt.Errorf("could not update network: %v", err)
++		}
++		ctx.print(fmt.Sprintf("updated network %q", network.GetName()))
++	}
++	if fs.EncryptionKey != nil {
++		msg, err := ctx.user.setNetworkEncryptionKey(ctx, network, *fs.EncryptionKey)
++		if err != nil {
++			return err
++		}
++		ctx.print(msg)
++	}
+ 	return nil
+ }
+ 
+@@ -1093,6 +1131,8 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
  	fs.Var(boolPtrFlag{&admin}, "admin", "")
  	fs.Var(boolPtrFlag{&enabled}, "enabled", "")
  	fs.Var(intPtrFlag{&maxNetworks}, "max-networks", "")
@@ -444,7 +685,7 @@ index d41500b..3ee2d9d 100644
  
  	username, params := popArg(params)
  	if err := fs.Parse(params); err != nil {
-@@ -1109,6 +1111,31 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
+@@ -1109,6 +1149,31 @@ func handleUserUpdate(ctx *serviceContext, params []string) error {
  		return fmt.Errorf("flags -password and -disable-password are mutually exclusive")
  	}
  
@@ -477,7 +718,7 @@ index d41500b..3ee2d9d 100644
  		if !ctx.admin {
  			return fmt.Errorf("you must be an admin to update other users")
 diff --git a/user.go b/user.go
-index 58bbda7..a111253 100644
+index 58bbda7..91a5fe6 100644
 --- a/user.go
 +++ b/user.go
 @@ -6,6 +6,7 @@ import (
@@ -488,17 +729,18 @@ index 58bbda7..a111253 100644
  	"fmt"
  	"math/big"
  	"net"
-@@ -588,6 +589,9 @@ type user struct {
+@@ -588,6 +589,10 @@ type user struct {
  	networks        []*network
  	downstreamConns []*downstreamConn
  	msgStore        msgstore.Store
 +
 +	// IRChatterbox: public key that stored message text is encrypted with (nil = none)
 +	encRecipient atomic.Pointer[age.X25519Recipient]
++	netKeys      atomic.Pointer[map[int64]*age.X25519Recipient] // networks with their own key (copy-on-write)
  }
  
  func newUser(srv *Server, record *database.User) *user {
-@@ -603,7 +607,7 @@ func newUser(srv *Server, record *database.User) *user {
+@@ -603,7 +608,7 @@ func newUser(srv *Server, record *database.User) *user {
  		msgStore = msgstore.NewMemoryStore()
  	}
  
@@ -507,7 +749,7 @@ index 58bbda7..a111253 100644
  		User:     *record,
  		srv:      srv,
  		logger:   logger,
-@@ -611,6 +615,8 @@ func newUser(srv *Server, record *database.User) *user {
+@@ -611,6 +616,8 @@ func newUser(srv *Server, record *database.User) *user {
  		done:     make(chan struct{}),
  		msgStore: msgStore,
  	}
@@ -518,10 +760,10 @@ index 58bbda7..a111253 100644
  func (u *user) forEachUpstream(f func(uc *upstreamConn)) {
 diff --git a/user_encrypt.go b/user_encrypt.go
 new file mode 100644
-index 0000000..392d0f3
+index 0000000..94490d1
 --- /dev/null
 +++ b/user_encrypt.go
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,183 @@
 +package soju
 +
 +// IRChatterbox addition: per-user encryption of stored message text. See msgstore/encrypt.go.
@@ -538,7 +780,26 @@ index 0000000..392d0f3
 +)
 +
 +type encryptingStore interface {
-+	SetEncryption(func() age.Recipient)
++	SetEncryption(func(networkID int64) age.Recipient)
++}
++
++// recipientFor is the key a network's messages are stored with: its own, else the user's, else none.
++func (u *user) recipientFor(networkID int64) *age.X25519Recipient {
++	if m := u.netKeys.Load(); m != nil {
++		if r, ok := (*m)[networkID]; ok {
++			return r
++		}
++	}
++	return u.encRecipient.Load()
++}
++
++// networkKeyOwn reports whether a network has its own key (rather than the user's).
++func (u *user) networkKeyOwn(networkID int64) bool {
++	if m := u.netKeys.Load(); m != nil {
++		_, ok := (*m)[networkID]
++		return ok
++	}
++	return false
 +}
 +
 +// initEncryption loads the user's public key and points the message store at it.
@@ -547,8 +808,8 @@ index 0000000..392d0f3
 +	if !ok {
 +		return
 +	}
-+	es.SetEncryption(func() age.Recipient {
-+		if r := u.encRecipient.Load(); r != nil {
++	es.SetEncryption(func(networkID int64) age.Recipient {
++		if r := u.recipientFor(networkID); r != nil {
 +			return r
 +		}
 +		return nil
@@ -558,6 +819,20 @@ index 0000000..392d0f3
 +	}
 +	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 +	defer cancel()
++	nets, err := u.srv.db.ListNetworkEncryptionKeys(ctx, u.ID)
++	if err != nil {
++		u.logger.Printf("failed to load network encryption keys: %v", err)
++	}
++	m := map[int64]*age.X25519Recipient{}
++	for id, s := range nets {
++		if r, err := msgstore.ParseRecipient(s); err == nil {
++			m[id] = r
++		} else {
++			u.logger.Printf("stored encryption key for network %d is invalid: %v", id, err)
++		}
++	}
++	u.netKeys.Store(&m)
++
 +	s, err := u.srv.db.GetEncryptionKey(ctx, u.ID)
 +	if err != nil {
 +		u.logger.Printf("failed to load encryption key: %v", err)
@@ -572,6 +847,73 @@ index 0000000..392d0f3
 +		return
 +	}
 +	u.encRecipient.Store(r)
++}
++
++func parseOptionalKey(key string) (*age.X25519Recipient, string, error) {
++	if key == "" {
++		return nil, "", nil
++	}
++	r, err := msgstore.ParseRecipient(key)
++	if err != nil {
++		return nil, "", err
++	}
++	return r, r.String(), nil
++}
++
++// encryptStored encrypts the stored history of the given networks with r, in the background.
++func (u *user) encryptStored(networkIDs []int64, r *age.X25519Recipient) {
++	go func() {
++		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
++		defer cancel()
++		total := 0
++		for _, id := range networkIDs {
++			n, err := u.srv.db.TransformNetworkMessages(ctx, id, func(msg *irc.Message) (*irc.Message, bool, error) {
++				return msgstore.EncryptMessage(msg, r)
++			})
++			total += n
++			if err != nil {
++				u.logger.Printf("encrypting stored history of network %d stopped after %d messages: %v", id, n, err)
++				return
++			}
++		}
++		u.logger.Printf("encrypted %d stored messages", total)
++	}()
++}
++
++// setNetworkEncryptionKey gives one network its own key ("" = go back to the user's key).
++// Setting one encrypts that network's stored history in the background. Runs in the user goroutine.
++func (u *user) setNetworkEncryptionKey(ctx context.Context, net *network, key string) (string, error) {
++	if _, ok := u.msgStore.(encryptingStore); !ok {
++		return "", fmt.Errorf("encryption needs \"message-store db\" in the soju config")
++	}
++	r, key, err := parseOptionalKey(key)
++	if err != nil {
++		return "", err
++	}
++	if err := u.srv.db.StoreNetworkEncryptionKey(ctx, net.ID, key); err != nil {
++		return "", err
++	}
++	m := map[int64]*age.X25519Recipient{}
++	if old := u.netKeys.Load(); old != nil {
++		for id, v := range *old {
++			m[id] = v
++		}
++	}
++	if r == nil {
++		delete(m, net.ID)
++	} else {
++		m[net.ID] = r
++	}
++	u.netKeys.Store(&m)
++	name := net.GetName()
++	if r == nil {
++		if u.encRecipient.Load() != nil {
++			return fmt.Sprintf("network %q now uses your account's encryption key for new messages; older ones stay encrypted with the removed key", name), nil
++		}
++		return fmt.Sprintf("encryption key removed from network %q: new messages are stored unencrypted, older ones stay encrypted", name), nil
++	}
++	u.encryptStored([]int64{net.ID}, r)
++	return fmt.Sprintf("encryption key set for network %q: new messages are stored encrypted, and its stored history is being encrypted now", name), nil
 +}
 +
 +// setEncryptionKey saves (or, with "", removes) the user's public key. Setting a key also
@@ -593,21 +935,16 @@ index 0000000..392d0f3
 +	}
 +	u.encRecipient.Store(r)
 +	if r == nil {
-+		return "encryption key removed: new messages are stored unencrypted, older ones stay encrypted", nil
++		return "encryption key removed: new messages are stored unencrypted (except on networks with their own key), older ones stay encrypted", nil
 +	}
-+
-+	go func() {
-+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
-+		defer cancel()
-+		n, err := u.srv.db.TransformUserMessages(ctx, u.ID, func(msg *irc.Message) (*irc.Message, bool, error) {
-+			return msgstore.EncryptMessage(msg, r)
-+		})
-+		if err != nil {
-+			u.logger.Printf("encrypting stored history stopped after %d messages: %v", n, err)
-+			return
++	// networks with their own key keep it
++	var ids []int64
++	for _, net := range u.networks {
++		if !u.networkKeyOwn(net.ID) {
++			ids = append(ids, net.ID)
 +		}
-+		u.logger.Printf("encrypted %d stored messages", n)
-+	}()
++	}
++	u.encryptStored(ids, r)
 +	return "encryption key set: new messages are stored encrypted, and stored history is being encrypted now", nil
 +}
 -- 

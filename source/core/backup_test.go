@@ -96,3 +96,32 @@ func TestBackupRoundTrip(t *testing.T) {
 		t.Fatal("accepted a newer format")
 	}
 }
+
+// A backup from the web client has no servers, no plugins and only the settings the browser
+// knows: importing it must not switch off the rest.
+func TestImportPartialBackup(t *testing.T) {
+	a := newBackupApp(t)
+	a.store.Update(func(c *Config) {
+		c.Settings.TrayIcon, c.Settings.AutoUpdateCheck = true, true
+		c.Plugins.WeatherEnabled, c.Plugins.BotPrefix = true, "[Bot] "
+	})
+	web := `{"app":"IRChatterbox","format":1,"version":"web","servers":[],
+		"settings":{"timeFormat":"12h","quitMessage":"from the web"},
+		"shortcuts":[{"key":"$hi","text":"hello"}],"nickColors":{"alice":"#ff0000"},"themes":[]}`
+	if e := a.ImportSettings(web, ""); e != "" {
+		t.Fatal(e)
+	}
+	c := a.store.Get()
+	if c.Settings.TimeFormat != "12h" || c.Settings.QuitMessage != "from the web" {
+		t.Fatalf("settings in the file weren't applied: %+v", c.Settings)
+	}
+	if !c.Settings.TrayIcon || !c.Settings.AutoUpdateCheck {
+		t.Fatal("settings missing from the file were reset")
+	}
+	if !c.Plugins.WeatherEnabled || c.Plugins.BotPrefix != "[Bot] " {
+		t.Fatalf("plugins were reset by a backup without plugins: %+v", c.Plugins)
+	}
+	if c.NickColors["alice"] != "#ff0000" || len(c.Shortcuts) != 1 {
+		t.Fatal("nick colours or shortcuts weren't imported")
+	}
+}
