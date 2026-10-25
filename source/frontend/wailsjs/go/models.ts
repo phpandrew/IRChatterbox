@@ -244,6 +244,30 @@ export namespace core {
 	        this.buffer = source["buffer"];
 	    }
 	}
+	export class SyncConfig {
+	    enabled: boolean;
+	    server?: string;
+	    email?: string;
+	    categories?: Record<string, boolean>;
+	    deviceId?: string;
+	    key?: string;
+	    token?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.server = source["server"];
+	        this.email = source["email"];
+	        this.categories = source["categories"];
+	        this.deviceId = source["deviceId"];
+	        this.key = source["key"];
+	        this.token = source["token"];
+	    }
+	}
 	export class NotifyRule {
 	    level: string;
 	    until?: number;
@@ -527,6 +551,7 @@ export namespace core {
 	    nickColors: Record<string, string>;
 	    channelNotify?: Record<string, NotifyRule>;
 	    channelJoins?: Record<string, string>;
+	    sync: SyncConfig;
 	    favourites?: Favourite[];
 	    plugins: PluginSettings;
 	    installId: string;
@@ -545,6 +570,7 @@ export namespace core {
 	        this.nickColors = source["nickColors"];
 	        this.channelNotify = this.convertValues(source["channelNotify"], NotifyRule, true);
 	        this.channelJoins = source["channelJoins"];
+	        this.sync = this.convertValues(source["sync"], SyncConfig);
 	        this.favourites = this.convertValues(source["favourites"], Favourite);
 	        this.plugins = this.convertValues(source["plugins"], PluginSettings);
 	        this.installId = source["installId"];
@@ -906,6 +932,107 @@ export namespace core {
 	
 	
 	
+	export class SyncCategory {
+	    id: string;
+	    name: string;
+	    desc: string;
+	    default: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncCategory(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.desc = source["desc"];
+	        this.default = source["default"];
+	    }
+	}
+	
+	export class SyncDevice {
+	    name: string;
+	    updated: number;
+	    this: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncDevice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.updated = source["updated"];
+	        this.this = source["this"];
+	    }
+	}
+	export class SyncResult {
+	    email?: string;
+	    hasData?: boolean;
+	    code?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.email = source["email"];
+	        this.hasData = source["hasData"];
+	        this.code = source["code"];
+	        this.error = source["error"];
+	    }
+	}
+	export class SyncStatus {
+	    enabled: boolean;
+	    signedIn: boolean;
+	    email: string;
+	    server: string;
+	    defaultServer: string;
+	    categories: Record<string, boolean>;
+	    list: SyncCategory[];
+	    lastSync: number;
+	    lastError: string;
+	    devices: SyncDevice[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.signedIn = source["signedIn"];
+	        this.email = source["email"];
+	        this.server = source["server"];
+	        this.defaultServer = source["defaultServer"];
+	        this.categories = source["categories"];
+	        this.list = this.convertValues(source["list"], SyncCategory);
+	        this.lastSync = source["lastSync"];
+	        this.lastError = source["lastError"];
+	        this.devices = this.convertValues(source["devices"], SyncDevice);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Theme {
 	    name: string;
 	    base: string;

@@ -2635,7 +2635,7 @@ function setFocus(f) {
     renderPanes();
   }
 }
-window.addEventListener("focus", () => setFocus(true));
+window.addEventListener("focus", () => { setFocus(true); Go.SyncPoll(); });
 window.addEventListener("blur", () => setFocus(false));
 document.addEventListener("visibilitychange", () => setFocus(!document.hidden && document.hasFocus()));
 
@@ -2867,6 +2867,7 @@ async function boot() {
     for (const sc of cfg?.servers || []) if (S.byId[sc.id]) S.byId[sc.id].cfg = sc;
     applySettings(); renderAll();
   });
+  on("syncApplied", () => reloadConfig()); // another device's settings arrived
   on("dcc", onDCC);
   on("chanlist", onChanList);
   on("chanlistOpen", (x) => { const srv = S.byId[x.server]; if (srv) openChannelList(srv, x.filter || ""); });

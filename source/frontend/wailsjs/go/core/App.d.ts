@@ -68,6 +68,8 @@ export function GetState():Promise<Array<core.ServerState>>;
 
 export function GetStore():Promise<string>;
 
+export function GetSyncStatus():Promise<core.SyncStatus>;
+
 export function GetThemes():Promise<Array<core.Theme>>;
 
 export function GetUIState():Promise<string>;
@@ -185,6 +187,24 @@ export function SetStartView(arg1:string,arg2:string):Promise<void>;
 export function ShowDCCFile(arg1:string):Promise<void>;
 
 export function SkipUpdateVersion(arg1:string):Promise<void>;
+
+export function SyncGetCode():Promise<string>;
+
+export function SyncJoin(arg1:string,arg2:Record<string, boolean>):Promise<core.SyncResult>;
+
+export function SyncNow():Promise<core.SyncStatus>;
+
+export function SyncPoll():Promise<void>;
+
+export function SyncSetCategories(arg1:Record<string, boolean>):Promise<void>;
+
+export function SyncSignInFinish(arg1:string):Promise<core.SyncResult>;
+
+export function SyncSignInStart(arg1:string,arg2:string):Promise<core.SyncResult>;
+
+export function SyncStart(arg1:Record<string, boolean>):Promise<core.SyncResult>;
+
+export function SyncStop():Promise<void>;
 
 export function TestMusic(arg1:core.MusicSettings):Promise<Array<string>>;
 

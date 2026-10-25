@@ -25,6 +25,12 @@ type App struct {
 	store   *Store
 	plugins *Plugins
 
+	syncMu      sync.Mutex // one sync at a time (sync.go)
+	syncTimerMu sync.Mutex
+	syncTimer   *time.Timer
+	syncPolled  time.Time         // last focus-triggered check (SyncPoll)
+	syncPending syncPendingSignIn // between "email me a code" and entering it
+
 	mu             sync.Mutex
 	conns          map[string]*Conn
 	queries        map[string]map[string]string // server -> lower nick -> nick, for open private chats (saved in queries.json)

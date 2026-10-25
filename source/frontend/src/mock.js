@@ -17,6 +17,21 @@ const users = ["~DaveLegg", "~Neobond", "@Andrew", "@Caleo", "%ammali", "%bemis|
   .map((n) => ({ nick: n.replace(/^[~@%+]/, ""), prefix: /^[~@%+]/.test(n) ? n[0] : "", away: ["Hackerpcs", "kinghat", "Ryoken"].includes(n) }));
 
 const mockIcons = {};
+const mockSync = {
+  enabled: false, signedIn: false, email: "", server: "", lastSync: 0, lastError: "", devices: [],
+  categories: { appearance: true, nickColors: true, highlights: true, notifications: true, chat: true, shortcuts: true, plugins: true, servers: false },
+  list: [
+    { id: "appearance", name: "Appearance", desc: "Theme, custom themes, font, layout, time format, language" },
+    { id: "nickColors", name: "Nick colours", desc: "Colours you've set for people" },
+    { id: "highlights", name: "Highlights and ignores", desc: "Highlight words, hidden words, ignore list, friends list" },
+    { id: "notifications", name: "Notifications and sounds", desc: "What notifies you and which built-in sound plays" },
+    { id: "chat", name: "Chat behaviour", desc: "Inline media, link previews, joins and quits, quit message, auto-away" },
+    { id: "shortcuts", name: "Shortcuts", desc: "Text shortcuts like $shrug" },
+    { id: "plugins", name: "Plugin settings", desc: "Bot prefix, temperature converter, now playing, URL commands" },
+    { id: "servers", name: "Servers and channels", desc: "Network addresses, nicks, auto-join channels, favourites and per-channel settings. Logins and passwords are never synced: enter them on each device." },
+  ],
+};
+
 export const api = {
   GetChannelIcons: () => ({ ...mockIcons }),
   SetChannelIcon: (server, buffer, url) => { if (url) mockIcons[server + "/" + buffer.toLowerCase()] = url; else delete mockIcons[server + "/" + buffer.toLowerCase()]; emit("icons", { ...mockIcons }); return ""; },
@@ -128,6 +143,21 @@ export const api = {
     if (sv) sv.joinsParts = mode;
     setTimeout(() => emit("config", structuredClone(cfg)));
   },
+  // settings sync (dev only): sign-in with any email, code 123456
+  GetSyncStatus: () => structuredClone(mockSync),
+  SyncSignInStart: (srv, email) => (email.includes("@") ? {} : { error: "Enter your email address" }),
+  SyncSignInFinish: (code) => {
+    if (code.trim() !== "123456") return { error: "That code isn't right. 4 tries left." };
+    Object.assign(mockSync, { signedIn: true, email: "andrew@example.com" });
+    return { email: mockSync.email, hasData: new URLSearchParams(location.search).has("syncdata") };
+  },
+  SyncStart: (cats) => { Object.assign(mockSync, { enabled: true, categories: cats, lastSync: Date.now(), devices: [{ name: "DESKTOP-ANDREW", updated: Date.now(), this: true }] }); return { code: "K7QM-2XPA-9VBD-TT4N-RW3E-Q6LZ-HJ5C-MUFY" }; },
+  SyncJoin: (code) => (code.replace(/[^A-Z2-7]/gi, "").length === 32 ? (Object.assign(mockSync, { enabled: true, lastSync: Date.now(), devices: [{ name: "DESKTOP-ANDREW", updated: Date.now() - 4e5 }, { name: "Pixel 9", updated: Date.now(), this: true }] }), {}) : { error: "A sync code is 32 letters and numbers, like ABCD-EFGH-…" }),
+  SyncSetCategories: (cats) => { mockSync.categories = cats; },
+  SyncNow: () => { mockSync.lastSync = Date.now(); return structuredClone(mockSync); },
+  SyncGetCode: () => "K7QM-2XPA-9VBD-TT4N-RW3E-Q6LZ-HJ5C-MUFY",
+  SyncStop: () => { Object.assign(mockSync, { enabled: false, signedIn: false, email: "", devices: [] }); },
+  SyncPoll: () => {},
   DCCAccept: (id) => { dccDemo(id); return ""; },
   DCCDecline: (id) => { const t = mockDCC[id]; if (t) { t.state = t.state === "offer" ? "declined" : "cancelled"; emit("dcc", { ...t }); } },
   DCCSend: (s, nick, path) => { const t = { id: "o" + Date.now(), server: s, nick, kind: "send", dir: "out", file: path.split(/[\\/]/).pop(), size: 2400000, state: "waiting", time: Date.now() }; mockDCC[t.id] = t; emit("dcc", { ...t }); return ""; },

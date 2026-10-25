@@ -574,6 +574,11 @@ function prettyName(host) {
 
 // ---------- settings ----------
 let tab = "general";
+// the open Settings window's Sync tab, redrawn when a background sync finishes
+let syncRedraw = null;
+onEvent("syncStatus", () => {
+  if (tab === "sync" && syncRedraw && document.getElementById("stBody") && !document.activeElement?.matches?.("#stBody input")) syncRedraw();
+});
 export function openSettings(startTab) {
   if (startTab) tab = startTab;
   const set = structuredClone(S.cfg.settings);
@@ -582,7 +587,7 @@ export function openSettings(startTab) {
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
   const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
-    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "sync", "about"].filter((t) => !(t === "sync" && web())).map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left desktop-only" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
@@ -736,6 +741,7 @@ export function openSettings(startTab) {
       <div class="hint">Behind a home router, others can only reach your offers if these ports are forwarded to this computer. Files you receive are never opened automatically.</div>`, "desktop-only");
     else if (tab === "plugins") drawPlugins();
     else if (tab === "about") drawAbout();
+    else if (tab === "sync") drawSync();
     wire();
   }
 
@@ -910,6 +916,120 @@ export function openSettings(startTab) {
     $("aLang").onchange = () => setLanguage($("aLang").value); // preview now; kept when you save
     drawVars();
   }
+
+  // ---- Sync: settings shared between devices through an irchatterbox.com account ----
+  let syncStep = { email: "", codeSent: false, newCode: "", showCode: "" };
+  async function drawSync() {
+    const st = (await Go.GetSyncStatus()) || {};
+    if (tab !== "sync") return;
+    const body = $("stBody");
+    const ago = (ms) => {
+      if (!ms) return t("never");
+      const s = Math.round((Date.now() - ms) / 1000);
+      return s < 60 ? t("just now") : s < 3600 ? t("{0} min ago", Math.round(s / 60)) : s < 86400 ? t("{0} h ago", Math.round(s / 3600)) : new Date(ms).toLocaleDateString();
+    };
+    const intro = `<p class="sync-intro">Keep themes, nick colours, highlights and plugin settings the same on all your devices. Everything is encrypted on this device before it's uploaded, with a sync code only your devices know, so the server can't read it. <b>Logins and passwords are never synced.</b></p>`;
+    const cats = (on) => `<div class="sync-cats">${(st.list || []).map((c) => `<label class="check sync-cat"><input type="checkbox" data-cat="${esc(c.id)}" ${on[c.id] ? "checked" : ""}><span><b>${esc(c.name)}</b><span class="hint">${esc(c.desc)}</span></span></label>`).join("")}</div>`;
+    const chosen = () => Object.fromEntries([...body.querySelectorAll("[data-cat]")].map((x) => [x.dataset.cat, x.checked]));
+    const err = (msg) => { const e = $("syErr"); if (e) { e.textContent = msg || ""; e.classList.toggle("hidden", !msg); } };
+    const busy = (btn, on) => { if (btn) { btn.disabled = on; btn.classList.toggle("busy", on); } };
+    const codeBox = (code, fresh) => `<div class="sync-code-box"><div class="sync-code mono no-i18n" id="syCodeText">${esc(code)}</div>
+      <div class="btn-row"><button class="btn sm" id="syCopy">Copy</button></div>
+      <p class="hint">${fresh ? "<span>This is your sync code. Keep it in your password manager: you'll enter it on each device you add.</span> " : ""}<span>If you lose every device and the code, the synced settings can't be recovered. We can't reset it, because we never see it.</span></p></div>`;
+
+    if (!st.signedIn) {
+      const custom = !!st.server;
+      body.innerHTML = card("Sync settings between devices", "", intro + `
+        <div class="fgrid">
+          ${field("Sync with", `<select id="sySrv"><option value="">irchatterbox.com account</option><option value="custom" ${custom ? "selected" : ""}>A server of my own…</option></select>`)}
+          <div class="field ${custom ? "" : "hidden"}" id="syUrlF"><label>Server address</label><input type="text" id="syUrl" class="no-i18n" value="${esc(st.server || "")}" placeholder="https://example.com/account/api.php" spellcheck="false"><div class="hint">A server running the IRChatterbox account site.</div></div>
+          ${field("Email", `<input type="text" inputmode="email" id="syEmail" spellcheck="false" value="${esc(syncStep.email)}" placeholder="you@example.com" autocomplete="email">`, "We email you a sign-in code. No password needed. Signing in also creates the account if you don't have one.", true)}
+          <div class="field full ${syncStep.codeSent ? "" : "hidden"}" id="syCodeF"><label>Code from the email</label><input type="text" id="syCode" inputmode="numeric" maxlength="7" placeholder="123456" autocomplete="one-time-code"></div>
+        </div>
+        <div class="btn-row"><button class="btn primary" id="sySend">${syncStep.codeSent ? "Sign in" : "Email me a code"}</button>${syncStep.codeSent ? `<button class="btn" id="syResend">Send another code</button>` : ""}</div>
+        <div class="sync-err hidden" id="syErr"></div>`);
+      $("sySrv").onchange = () => $("syUrlF").classList.toggle("hidden", $("sySrv").value !== "custom");
+      const server = () => ($("sySrv").value === "custom" ? $("syUrl").value.trim() : "");
+      const sendCode = async (btn) => {
+        syncStep.email = $("syEmail").value.trim();
+        busy(btn, true);
+        const r = await Go.SyncSignInStart(server(), syncStep.email);
+        busy(btn, false);
+        if (r?.error) return err(r.error);
+        syncStep.codeSent = true;
+        drawSync();
+        setTimeout(() => $("syCode")?.focus(), 50);
+      };
+      $("sySend").onclick = async (e) => {
+        if (!syncStep.codeSent) return sendCode(e.target);
+        busy(e.target, true);
+        const r = await Go.SyncSignInFinish($("syCode").value);
+        busy(e.target, false);
+        if (r?.error) return err(r.error);
+        syncStep = { email: "", codeSent: false, newCode: "", showCode: "", hasData: !!r.hasData };
+        drawSync();
+      };
+      if ($("syResend")) $("syResend").onclick = (e) => sendCode(e.target);
+      $("syCode")?.addEventListener("keydown", (e) => { if (e.key === "Enter") $("sySend").click(); });
+      $("syEmail").addEventListener("keydown", (e) => { if (e.key === "Enter") $("sySend").click(); });
+      return;
+    }
+
+    if (!st.enabled) {
+      const join = syncStep.hasData !== false;
+      body.innerHTML = card("Sync settings between devices", "", intro + `
+        <p><span>Signed in as</span> <b class="no-i18n">${esc(st.email || "")}</b>${st.server ? ` <span class="muted">· <span class="no-i18n">${esc(st.server)}</span></span>` : ""}</p>
+        <h4 class="sync-h">What to sync from this device</h4>${cats(st.categories || {})}
+        <div class="sync-choice">
+          <div class="sync-opt ${join ? "" : "dim"}"><h4>Add this device</h4><p class="hint">Already syncing on another device? Enter its sync code (Settings → Sync → Show sync code there). The other devices' settings are used here.</p>
+            <input type="text" id="syJoin" class="mono" placeholder="ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567" spellcheck="false" autocomplete="off"><div class="btn-row"><button class="btn primary" id="syJoinBtn">Join</button></div></div>
+          <div class="sync-opt ${join ? "dim" : ""}"><h4>This is my first device</h4><p class="hint">Starts syncing with this device's settings and makes the sync code for your other devices.</p>
+            <div class="btn-row"><button class="btn ${join ? "" : "primary"}" id="syStart">Start syncing</button></div></div>
+        </div>
+        <div class="sync-err hidden" id="syErr"></div>
+        <div class="btn-row"><button class="btn sm" id="sySignOut">Sign out</button></div>`);
+      $("syJoinBtn").onclick = async (e) => {
+        busy(e.target, true);
+        const r = await Go.SyncJoin($("syJoin").value, chosen());
+        busy(e.target, false);
+        if (r?.error) return err(r.error);
+        await reloadConfig();
+        toast("Sync is on. Settings from your other devices are applied.", "ok");
+        drawSync();
+      };
+      $("syJoin").addEventListener("keydown", (e) => { if (e.key === "Enter") $("syJoinBtn").click(); });
+      $("syStart").onclick = async (e) => {
+        busy(e.target, true);
+        const r = await Go.SyncStart(chosen());
+        busy(e.target, false);
+        if (r?.code) syncStep.newCode = r.code;
+        if (r?.error) { if (!r.code) return err(r.error); toast(r.error, "error"); }
+        drawSync();
+      };
+      $("sySignOut").onclick = async () => { await Go.SyncStop(); drawSync(); };
+      return;
+    }
+
+    const devs = (st.devices || []).map((d) => `<li><span class="no-i18n">${esc(d.name || "")}</span>${d.this ? ` <span class="muted">(this device)</span>` : ""} <span class="muted no-i18n">· ${esc(ago(d.updated))}</span></li>`).join("");
+    const shown = syncStep.newCode || syncStep.showCode;
+    body.innerHTML = card("Sync settings between devices", "", `
+      <div class="sync-status ${st.lastError ? "bad" : "good"}"><b>${st.lastError ? "Sync problem" : "Sync is on"}</b> · <span>last synced</span> <span class="no-i18n">${esc(ago(st.lastSync))}</span>${st.lastError ? `<div class="sync-err">${esc(st.lastError)}</div>` : ""}</div>
+      <p class="muted"><span>Signed in as</span> <b class="no-i18n">${esc(st.email || "")}</b>${st.server ? ` · <span class="no-i18n">${esc(st.server)}</span>` : ""}</p>
+      ${devs ? `<h4 class="sync-h">Devices</h4><ul class="sync-devs">${devs}</ul>` : ""}
+      ${shown ? codeBox(shown, !!syncStep.newCode) : ""}
+      <h4 class="sync-h">What to sync from this device</h4>${cats(st.categories || {})}
+      <p class="hint">Never synced: logins and passwords, server passwords and keys, folders, sound files, window size, start-up and tray settings.</p>
+      <div class="btn-row"><button class="btn" id="syNow">Sync now</button>${shown ? "" : `<button class="btn" id="syShow">Show sync code</button>`}<button class="btn danger" id="syStop">Stop syncing on this device</button></div>`);
+    body.querySelectorAll("[data-cat]").forEach((x) => (x.onchange = () => Go.SyncSetCategories(chosen())));
+    $("syNow").onclick = async (e) => { busy(e.target, true); await Go.SyncNow(); busy(e.target, false); drawSync(); };
+    if ($("syShow")) $("syShow").onclick = async () => { syncStep.showCode = await Go.SyncGetCode(); drawSync(); };
+    if ($("syCopy")) $("syCopy").onclick = (e) => { navigator.clipboard.writeText($("syCodeText").textContent); e.target.textContent = t("Copied"); };
+    $("syStop").onclick = () => {
+      if (!confirm(t("Stop syncing on this device? Its settings stay as they are, and your other devices keep syncing with each other."))) return;
+      Go.SyncStop().then(() => { syncStep = { email: "", codeSent: false, newCode: "", showCode: "" }; drawSync(); });
+    };
+  }
+  syncRedraw = drawSync;
 
   async function drawAbout() {
     const store = (await Go.GetStore().catch(() => "")) || "";

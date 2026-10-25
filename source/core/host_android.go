@@ -60,6 +60,7 @@ func (a *App) StartAndroid(h Host) {
 		a.plugins.LoadScripts()
 		go a.autoAwayLoop()
 		go a.autoUpdateLoop()
+		a.startSync()
 		go a.connectionWatch()
 	})
 }

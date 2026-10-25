@@ -134,6 +134,10 @@ export function GetStore() {
   return window['go']['core']['App']['GetStore']();
 }
 
+export function GetSyncStatus() {
+  return window['go']['core']['App']['GetSyncStatus']();
+}
+
 export function GetThemes() {
   return window['go']['core']['App']['GetThemes']();
 }
@@ -368,6 +372,42 @@ export function ShowDCCFile(arg1) {
 
 export function SkipUpdateVersion(arg1) {
   return window['go']['core']['App']['SkipUpdateVersion'](arg1);
+}
+
+export function SyncGetCode() {
+  return window['go']['core']['App']['SyncGetCode']();
+}
+
+export function SyncJoin(arg1, arg2) {
+  return window['go']['core']['App']['SyncJoin'](arg1, arg2);
+}
+
+export function SyncNow() {
+  return window['go']['core']['App']['SyncNow']();
+}
+
+export function SyncPoll() {
+  return window['go']['core']['App']['SyncPoll']();
+}
+
+export function SyncSetCategories(arg1) {
+  return window['go']['core']['App']['SyncSetCategories'](arg1);
+}
+
+export function SyncSignInFinish(arg1) {
+  return window['go']['core']['App']['SyncSignInFinish'](arg1);
+}
+
+export function SyncSignInStart(arg1, arg2) {
+  return window['go']['core']['App']['SyncSignInStart'](arg1, arg2);
+}
+
+export function SyncStart(arg1) {
+  return window['go']['core']['App']['SyncStart'](arg1);
+}
+
+export function SyncStop() {
+  return window['go']['core']['App']['SyncStop']();
 }
 
 export function TestMusic(arg1) {

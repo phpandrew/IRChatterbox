@@ -249,6 +249,9 @@ type Config struct {
 	// per-channel joins/parts/quits: "show" or "hide", keyed like ChannelNotify (joinsparts.go)
 	ChannelJoins map[string]string `json:"channelJoins,omitempty"`
 
+	// settings sync between devices (sync.go); this device's setup, never exported in backups
+	Sync SyncConfig `json:"sync"`
+
 	// channels and private chats pinned to the top of the sidebar (favourites.go)
 	Favourites []Favourite    `json:"favourites,omitempty"`
 	Plugins    PluginSettings `json:"plugins"`
@@ -258,10 +261,26 @@ type Config struct {
 }
 
 type Store struct {
-	mu   sync.Mutex
-	dir  string
-	path string
-	cfg  Config
+	mu       sync.Mutex
+	dir      string
+	path     string
+	cfg      Config
+	onChange func() // after every change (sync uses it)
+}
+
+func (s *Store) setOnChange(fn func()) {
+	s.mu.Lock()
+	s.onChange = fn
+	s.mu.Unlock()
+}
+
+func (s *Store) changed() {
+	s.mu.Lock()
+	fn := s.onChange
+	s.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
 }
 
 // dataDirOverride, when set (Android), is used instead of %APPDATA%\IRChatterbox.
@@ -384,9 +403,14 @@ func (s *Store) Get() Config {
 
 func (s *Store) Update(fn func(c *Config)) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	fn(&s.cfg)
-	return s.saveLocked()
+	err := s.saveLocked()
+	hook := s.onChange
+	s.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return err
 }
 
 func (s *Store) Server(id string) (ServerConfig, bool) {
@@ -515,11 +539,15 @@ func (s *Store) SaveTheme(t Theme) error {
 		}
 	}
 	b, _ := json.MarshalIndent(t, "", "  ")
-	return os.WriteFile(filepath.Join(s.dir, "themes", safeName(t.Name)+".json"), b, 0o600)
+	err := os.WriteFile(filepath.Join(s.dir, "themes", safeName(t.Name)+".json"), b, 0o600)
+	s.changed()
+	return err
 }
 
 func (s *Store) DeleteTheme(name string) error {
-	return os.Remove(filepath.Join(s.dir, "themes", safeName(name)+".json"))
+	err := os.Remove(filepath.Join(s.dir, "themes", safeName(name)+".json"))
+	s.changed()
+	return err
 }
 
 // ReorderServers saves the sidebar order of servers (dragged in the UI).
