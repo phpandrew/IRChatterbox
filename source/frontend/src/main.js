@@ -7,7 +7,7 @@ import { playSound } from "./sounds.js";
 import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog } from "./modals.js";
 import { detectOS, os } from "./platform.js";
 import { setLanguage, t } from "./i18n.js";
-import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android } from "./mobile.js";
+import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android, closeDrawers } from "./mobile.js";
 
 const $ = (id) => document.getElementById(id);
 const MAX_LINES = 2000;
@@ -2001,6 +2001,7 @@ $("hTopic").addEventListener("dblclick", (e) => {
 // ---------- update banner ----------
 export function showUpdateBar(info) {
   const bar = $("updateBar");
+  $("sideUpdateText").textContent = `IRChatterbox ${info.latest} available`;
   bar.innerHTML = `<span class="ub-text"><b>IRChatterbox ${esc(info.latest)}</b> is available — you have ${esc(info.current)}.</span>
     <span class="ub-progress hidden"><i></i></span>
     <button class="btn sm primary" id="ubInstall">${android ? "Update" : info.manual ? "Download update" : "Update &amp; restart"}</button>
@@ -2857,6 +2858,10 @@ async function boot() {
     bar.querySelector(".ub-progress")?.classList.add("hidden");
     if (d.state === "error") bar.querySelectorAll("button").forEach((b) => (b.disabled = false));
   });
+  // phone: the side menu covers the update bar, so it gets its own row while the bar is up
+  new MutationObserver(() => $("sideUpdateBtn").classList.toggle("hidden", $("updateBar").classList.contains("hidden")))
+    .observe($("updateBar"), { attributes: true, attributeFilter: ["class"] });
+  $("sideUpdateBtn").onclick = () => closeDrawers();
   on("updateProgress", (d) => {
     const bar = document.querySelector("#updateBar .ub-progress i");
     if (bar) bar.style.width = d.pct + "%";

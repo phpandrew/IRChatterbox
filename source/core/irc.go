@@ -1418,11 +1418,16 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 	if c.app.isIgnored(nick, m.Prefix) {
 		return
 	}
-	// our own message coming back (echo-message), or sent from another of our clients
+	// Our own nick: either this device's message coming back (echo-message), or one sent from
+	// another of our devices on the same bouncer. Bots answer only on the device that sent
+	// it, or a phone and a computer both reply to one message.
 	skipPlugins := false
-	if isMe && c.hasCap("echo-message") {
-		if p, found := c.takeEcho(m, target, text); found {
-			skipPlugins = p.viaPlugin // a bot's own reply: don't let bots answer it
+	if isMe {
+		skipPlugins = true
+		if c.hasCap("echo-message") {
+			if p, found := c.takeEcho(m, target, text); found {
+				skipPlugins = p.viaPlugin // a bot's own reply: don't let bots answer it
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"testing"
+	"time"
 )
 
 // hostileConn is a connection whose server says whatever a test feeds it.
@@ -206,6 +207,46 @@ func TestIgnoreMasks(t *testing.T) {
 	for _, c := range no {
 		if maskMatch(c[0], c[1]) {
 			t.Errorf("%q should not match %q", c[0], c[1])
+		}
+	}
+}
+
+// Two devices on one bouncer: a message typed on the phone reaches the computer as our own
+// nick. Only the device that sent it may run bots on it, or both reply.
+func TestBotsAnswerOnlyOnTheSendingDevice(t *testing.T) {
+	for _, echo := range []bool{true, false} {
+		c := hostileConn(t)
+		c.app.store.Update(func(cf *Config) {
+			cf.Plugins.WeatherEnabled, cf.Plugins.WeatherFromMe, cf.Plugins.WeatherCooldown, cf.Plugins.BotPrefix = true, true, 0, "[Bot] "
+		})
+		if echo {
+			c.caps["echo-message"] = true
+		}
+		bots := func() int {
+			time.Sleep(400 * time.Millisecond)
+			n := 0
+			for len(c.out) > 0 {
+				if strings.Contains(<-c.out, "[Bot]") {
+					n++
+				}
+			}
+			return n
+		}
+		// sent from the other device: arrives from the server with our nick
+		c.handle(ParseMessage(":me!u@h PRIVMSG #c :Feels like 1c brrr"))
+		if n := bots(); n != 0 {
+			t.Fatalf("echo=%v: replied %d time(s) to another device's message", echo, n)
+		}
+		// typed here
+		c.Say("#c", "Feels like 2c brrr", false)
+		if echo {
+			for len(c.out) > 0 {
+				<-c.out // the line went to the server…
+			}
+			c.handle(ParseMessage(":me!u@h PRIVMSG #c :Feels like 2c brrr")) // …and comes back
+		}
+		if n := bots(); n != 1 {
+			t.Fatalf("echo=%v: replied %d time(s) to this device's own message, want 1", echo, n)
 		}
 	}
 }

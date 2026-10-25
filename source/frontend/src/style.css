@@ -101,6 +101,9 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border: 1px s
 .side-bottom { border-top: 1px solid var(--border); }
 .add-server { width: 100%; text-align: left; padding: 10px 16px; color: var(--text-muted); display: flex; gap: 10px; align-items: center; }
 .add-server span { font-size: 18px; line-height: 1; }
+.side-update, .side-update:hover { color: var(--accent); }
+body.mobile .add-server.side-update { display: flex; }
+.side-update.hidden { display: none !important; }
 .add-server:hover { color: var(--text); background: var(--bg-hover); }
 .me-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #fff; background: var(--accent); flex: none; }
