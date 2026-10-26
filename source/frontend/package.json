@@ -10,7 +10,7 @@
     "build:web": "vite build --mode web --outDir dist-web --base ./"
   },
   "devDependencies": {
-    "vite": "^7.0.0"
+    "vite": "^8.3.5"
   },
   "dependencies": {
     "unicode-emoji-json": "^0.9.0"
