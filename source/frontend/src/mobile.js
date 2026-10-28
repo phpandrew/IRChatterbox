@@ -127,12 +127,13 @@ export function initMobile(fns) {
   });
 }
 
-// Drag the drawers: swipe right on the chat to pull the channel list out, left for the user
-// list, and drag an open drawer back. The drawer follows your finger; on release it opens or
+// Drag the drawers: swipe in from the left edge to pull the channel list out, from the right
+// edge for the user list, and drag an open drawer back (from anywhere). The drawer follows your finger; on release it opens or
 // closes depending on how far you dragged and how fast you flicked.
 function setupSwipes() {
   const FLICK = 0.35;     // px/ms: faster than this finishes the move in that direction
   const SLOP = 10;        // px before deciding between a drawer drag and a scroll
+  const EDGE = 40;        // px: a closed drawer only opens from a swipe that starts this close to its edge
   let start = null;       // { x, y, target } of the touch, until it's decided
   let drag = null;        // { el, side: "left"|"right", wasOpen, w, x0, pts: [[t, x]] }
 
@@ -194,8 +195,10 @@ function setupSwipes() {
       else {
         if (!el.closest("#main")) return;
         wasOpen = false;
-        if (dx > 0) side = "left";
-        else if (!$("usersBtn").classList.contains("m-hide")) side = "right";
+        // only from the edge, so swiping in the middle of the chat never pulls a drawer out
+        const x0 = t.clientX - dx;
+        if (dx > 0 && x0 <= EDGE) side = "left";
+        else if (dx < 0 && x0 >= innerWidth - EDGE && !$("usersBtn").classList.contains("m-hide")) side = "right";
         else return;
       }
       const d = $(side === "left" ? "sidebar" : "userlist");

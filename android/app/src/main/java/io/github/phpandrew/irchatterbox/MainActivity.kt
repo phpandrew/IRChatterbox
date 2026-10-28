@@ -155,6 +155,18 @@ class MainActivity : ComponentActivity() {
         web = WebView(this)
         root.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        // Gesture navigation treats a swipe in from the screen edge as Back. Reserve a band in
+        // the middle of each edge for pulling out the drawers (Android allows up to 200dp per
+        // edge); Back still works above and below it.
+        web.addOnLayoutChangeListener { v, l, t, r, b, _, _, _, _ ->
+            val dp = resources.displayMetrics.density
+            val h = (200 * dp).toInt().coerceAtMost(b - t)
+            val w = (40 * dp).toInt()
+            val top = (b - t - h) / 2
+            ViewCompat.setSystemGestureExclusionRects(
+                v, listOf(android.graphics.Rect(0, top, w, top + h), android.graphics.Rect(r - l - w, top, r - l, top + h))
+            )
+        }
 
         // keep the UI clear of the status bar, navigation bar, display cutout and keyboard
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
