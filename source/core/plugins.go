@@ -60,10 +60,7 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 	if cfg.WeatherEnabled && ((self && cfg.WeatherFromMe) || (!self && cfg.WeatherFromOthers)) && channelAllowed(cfg.WeatherChannels, replyTo) {
 		if out := convertTemps(plain); out != "" {
 			if p.ready(c.cfg.ID+"|weather|"+lower(replyTo), cfg.WeatherCooldown) {
-				go func() {
-					time.Sleep(150 * time.Millisecond) // keep it after the triggering line
-					c.Say(replyTo, cfg.BotPrefix+out, true)
-				}()
+				go p.answer(c, replyTo, self, func() []string { return []string{cfg.BotPrefix + out} })
 			}
 		}
 	}
@@ -77,18 +74,17 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 				c.info(replyTo, "info", m.Trigger+": used a moment ago, try again in a few seconds")
 			}
 		} else {
-			go func() {
+			go p.answer(c, replyTo, self, func() []string {
 				np, err := getNowPlaying(m)
 				if err != nil {
 					if self {
 						c.info(replyTo, "error", m.Trigger+": "+err.Error())
-					} else {
-						c.Say(replyTo, cfg.BotPrefix+"Nothing playing right now", true)
+						return nil
 					}
-					return
+					return []string{cfg.BotPrefix + "Nothing playing right now"}
 				}
-				c.Say(replyTo, cfg.BotPrefix+np.Format(m.Format), true)
-			}()
+				return []string{cfg.BotPrefix + np.Format(m.Format)}
+			})
 		}
 	}
 
@@ -107,16 +103,18 @@ func (p *Plugins) OnMessage(c *Conn, replyTo, nick, text string, self bool) {
 		}
 		uc := uc
 		uc.URL = strings.ReplaceAll(uc.URL, "{args}", url.QueryEscape(strings.TrimSpace(args)))
-		go func() {
+		go p.answer(c, replyTo, self, func() []string {
 			lines, err := fetchURLCommand(uc)
 			if err != nil {
 				c.info(replyTo, "error", uc.Trigger+": "+err.Error())
-				return
+				return nil
 			}
-			for _, l := range lines {
-				c.Say(replyTo, cfg.BotPrefix+l, true)
+			out := make([]string, len(lines))
+			for i, l := range lines {
+				out[i] = cfg.BotPrefix + l
 			}
-		}()
+			return out
+		})
 	}
 
 	// --- JS scripts ---

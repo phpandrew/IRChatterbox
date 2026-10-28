@@ -95,6 +95,7 @@ type Conn struct {
 	// IRCv3 extras (ircv3.go)
 	labelSeq      int
 	pending       []pendingMsg               // sent, waiting for echo-message
+	otherSaid     []otherSaid                // recent lines our other devices sent through the bouncer
 	clientTagDeny string                     // ISUPPORT CLIENTTAGDENY
 	mlBatches     map[string]*multilineBatch // incoming draft/multiline batches (multiline.go)
 	whox          bool                       // ISUPPORT WHOX
@@ -1427,6 +1428,8 @@ func (c *Conn) onMessage(m *Message, nick string, isMe bool, ts int64) {
 		if c.hasCap("echo-message") {
 			if p, found := c.takeEcho(m, target, text); found {
 				skipPlugins = p.viaPlugin // a bot's own reply: don't let bots answer it
+			} else {
+				c.noteOtherDevice(target, text) // lets this device's bots see they were beaten to it
 			}
 		}
 	}

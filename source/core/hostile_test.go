@@ -250,3 +250,47 @@ func TestBotsAnswerOnlyOnTheSendingDevice(t *testing.T) {
 		}
 	}
 }
+
+// Two devices on one bouncer both see someone else's message; only one of them may answer.
+func TestBotsAnswerOthersOnceAcrossDevices(t *testing.T) {
+	old := botWait
+	defer func() { botWait = old }()
+	for _, prefix := range []string{"[Bot] ", ""} {
+		c := hostileConn(t)
+		c.cfg.Bouncer = "soju"
+		c.caps["echo-message"] = true
+		c.app.store.Update(func(cf *Config) {
+			cf.Plugins.WeatherEnabled, cf.Plugins.WeatherFromOthers, cf.Plugins.WeatherCooldown, cf.Plugins.BotPrefix = true, true, 0, prefix
+		})
+		sent := func(wait time.Duration) int {
+			time.Sleep(wait)
+			n := 0
+			for len(c.out) > 0 {
+				if strings.Contains(<-c.out, "4.4 C") {
+					n++
+				}
+			}
+			return n
+		}
+		// the other device answers while this one waits: this one stays quiet
+		botWait = func() time.Duration { return 300 * time.Millisecond }
+		c.handle(ParseMessage(":laura!u@h PRIVMSG #c :down to like 40f tonight"))
+		time.Sleep(100 * time.Millisecond)
+		c.handle(ParseMessage(":me!u@h PRIVMSG #c :" + prefix + "40 F = 4.4 C"))
+		if n := sent(500 * time.Millisecond); n != 0 {
+			t.Fatalf("prefix %q: answered %d time(s) after another device already had", prefix, n)
+		}
+		// nobody else answers: this one does, once
+		c.handle(ParseMessage(":laura!u@h PRIVMSG #c :still 40f"))
+		if n := sent(600 * time.Millisecond); n != 1 {
+			t.Fatalf("prefix %q: answered %d time(s), want 1", prefix, n)
+		}
+		// an answer from before the trigger doesn't count
+		c.handle(ParseMessage(":me!u@h PRIVMSG #c :" + prefix + "40 F = 4.4 C"))
+		time.Sleep(50 * time.Millisecond)
+		c.handle(ParseMessage(":laura!u@h PRIVMSG #c :40f again"))
+		if n := sent(600 * time.Millisecond); n != 1 {
+			t.Fatalf("prefix %q: an old answer stopped a new one (%d sent)", prefix, n)
+		}
+	}
+}
