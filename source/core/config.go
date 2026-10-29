@@ -180,7 +180,9 @@ type Settings struct {
 	// image uploads (attach button, paste, drag and drop): "irchatterbox" | "imgur"
 	UploadHost    string `json:"uploadHost"`
 	ImgurClientID string `json:"imgurClientId"`
-	UploadURL     string `json:"uploadURL"` // the custom server's upload address
+	// catbox.moe account userhash (optional): uploads go to that account. Not synced or backed up.
+	CatboxUserHash string `json:"catboxUserHash,omitempty"`
+	UploadURL      string `json:"uploadURL"` // the custom server's upload address
 
 	// Android: keep connections live while the app is in the background (a foreground
 	// service with a status-bar notification). Off: disconnect in the background and let

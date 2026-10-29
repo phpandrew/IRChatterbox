@@ -22,6 +22,10 @@ export function CheckForUpdate() {
   return window['go']['core']['App']['CheckForUpdate']();
 }
 
+export function ClearUploadHistory() {
+  return window['go']['core']['App']['ClearUploadHistory']();
+}
+
 export function CloseBuffer(arg1, arg2) {
   return window['go']['core']['App']['CloseBuffer'](arg1, arg2);
 }
@@ -54,6 +58,10 @@ export function DeleteTheme(arg1) {
   return window['go']['core']['App']['DeleteTheme'](arg1);
 }
 
+export function DeleteUpload(arg1) {
+  return window['go']['core']['App']['DeleteUpload'](arg1);
+}
+
 export function DescribeClientCert(arg1, arg2) {
   return window['go']['core']['App']['DescribeClientCert'](arg1, arg2);
 }
@@ -72,6 +80,10 @@ export function EncryptionPublicKeys(arg1) {
 
 export function ExportSettings(arg1, arg2) {
   return window['go']['core']['App']['ExportSettings'](arg1, arg2);
+}
+
+export function ForgetUpload(arg1) {
+  return window['go']['core']['App']['ForgetUpload'](arg1);
 }
 
 export function GenerateClientCert(arg1) {
@@ -144,6 +156,10 @@ export function GetThemes() {
 
 export function GetUIState() {
   return window['go']['core']['App']['GetUIState']();
+}
+
+export function GetUploadHistory() {
+  return window['go']['core']['App']['GetUploadHistory']();
 }
 
 export function GetVersion() {

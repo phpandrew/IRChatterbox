@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 )
@@ -19,10 +20,13 @@ import (
 //   - "irchatterbox" (default): i.irchatterbox.com shrinks it to fit 1000×1000, saves it as WebP
 //     and keeps it for 7 days.
 //   - "imgur": uploaded as-is with the user's own Imgur Client ID.
+//   - "catbox": uploaded as-is to catbox.moe, kept until deleted; with the user's userhash
+//     it lands in their Catbox account (where they can delete it), without one it's anonymous.
 
 const (
 	UploadHostIRChatterbox = "irchatterbox"
 	UploadHostImgur        = "imgur"
+	UploadHostCatbox       = "catbox"
 	UploadHostCustom       = "custom" // your own server with the same API (Settings → Media)
 
 	maxUploadBytes = 10 << 20 // also the limit on i.irchatterbox.com
@@ -32,6 +36,7 @@ const (
 var (
 	irchatterboxUploadURL = "https://i.irchatterbox.com/upload"
 	imgurUploadURL        = "https://api.imgur.com/3/image"
+	catboxUploadURL       = "https://catbox.moe/user/api.php"
 	uploadClient          = &http.Client{Timeout: 90 * time.Second}
 )
 
@@ -40,6 +45,15 @@ type UploadResult struct {
 	URL     string `json:"url"`
 	Expires string `json:"expires"`
 	Host    string `json:"host"`
+
+	del uploadDelete // how to delete it later; kept in the upload history, never sent to the UI
+}
+
+// uploadDelete is what a host hands back for deleting an upload.
+type uploadDelete struct {
+	URL, Token, ID string // irchatterbox / own server: POST id+token to URL
+	ImgurHash      string // Imgur's deletehash
+	CatboxFile     string // Catbox file name, when uploaded with a userhash
 }
 
 var uploadTypes = map[string]string{
@@ -52,17 +66,28 @@ var uploadTypes = map[string]string{
 // UploadImage uploads one image (base64, as read by the UI) to the host chosen in Settings → Media.
 func (a *App) UploadImage(dataB64 string) (UploadResult, error) {
 	set := a.store.Get().Settings
-	if set.UploadHost == UploadHostCustom {
+	var res UploadResult
+	var err error
+	switch set.UploadHost {
+	case UploadHostCustom:
 		endpoint := strings.TrimSpace(set.UploadURL)
-		if p, err := url.Parse(endpoint); err != nil || p.Scheme != "https" || p.Host == "" {
+		if p, perr := url.Parse(endpoint); perr != nil || p.Scheme != "https" || p.Host == "" {
 			return UploadResult{}, errors.New("Set your upload server's https:// address in Settings → Media.")
 		}
-		return uploadImage(set.UploadHost, endpoint, dataB64)
+		res, err = uploadImage(set.UploadHost, endpoint, dataB64)
+	case UploadHostCatbox:
+		res, err = uploadImage(set.UploadHost, set.CatboxUserHash, dataB64)
+	default:
+		res, err = uploadImage(set.UploadHost, set.ImgurClientID, dataB64)
 	}
-	return uploadImage(set.UploadHost, set.ImgurClientID, dataB64)
+	if err == nil {
+		a.recordUpload(res)
+	}
+	return res, err
 }
 
-// uploadImage: for the custom host, extra is the server address; for Imgur, the Client ID.
+// uploadImage: for the custom host, extra is the server address; for Imgur, the Client ID;
+// for Catbox, the userhash (optional).
 func uploadImage(host, extra, dataB64 string) (UploadResult, error) {
 	imgurClientID := extra
 	// accept a whole data: URL as well as bare base64
@@ -87,6 +112,8 @@ func uploadImage(host, extra, dataB64 string) (UploadResult, error) {
 	switch host {
 	case UploadHostImgur:
 		return uploadToImgur(imgurClientID, data, ext)
+	case UploadHostCatbox:
+		return uploadToCatbox(extra, data, ext)
 	case "", UploadHostIRChatterbox:
 		return uploadToIRChatterbox(irchatterboxUploadURL, data, ext)
 	case UploadHostCustom:
@@ -99,6 +126,10 @@ func uploadImage(host, extra, dataB64 string) (UploadResult, error) {
 // multipartImage builds a form with the image in field "image" (plus any extra fields). The
 // file name is generic on purpose: the user's own file name never leaves the computer.
 func multipartImage(data []byte, ext string, extra map[string]string) (*bytes.Buffer, string, error) {
+	return multipartFile("image", data, ext, extra)
+}
+
+func multipartFile(field string, data []byte, ext string, extra map[string]string) (*bytes.Buffer, string, error) {
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for k, v := range extra {
@@ -106,7 +137,7 @@ func multipartImage(data []byte, ext string, extra map[string]string) (*bytes.Bu
 			return nil, "", err
 		}
 	}
-	part, err := w.CreateFormFile("image", "image."+ext)
+	part, err := w.CreateFormFile(field, "image."+ext)
 	if err != nil {
 		return nil, "", err
 	}
@@ -153,10 +184,13 @@ func uploadToIRChatterbox(endpoint string, data []byte, ext string) (UploadResul
 		return UploadResult{}, err
 	}
 	var r struct {
-		OK      bool   `json:"ok"`
-		URL     string `json:"url"`
-		Expires string `json:"expires"`
-		Error   string `json:"error"`
+		OK          bool   `json:"ok"`
+		ID          string `json:"id"`
+		URL         string `json:"url"`
+		Expires     string `json:"expires"`
+		Error       string `json:"error"`
+		DeleteToken string `json:"delete_token"`
+		DeleteURL   string `json:"delete_url"`
 	}
 	jsonErr := json.Unmarshal(b, &r)
 	switch {
@@ -170,7 +204,18 @@ func uploadToIRChatterbox(endpoint string, data []byte, ext string) (UploadResul
 	if !isHTTPSURL(r.URL) {
 		return UploadResult{}, errors.New("The image host sent back an unexpected reply.")
 	}
-	return UploadResult{URL: r.URL, Expires: r.Expires, Host: UploadHostIRChatterbox}, nil
+	res := UploadResult{URL: r.URL, Expires: r.Expires, Host: UploadHostIRChatterbox}
+	// a delete link is only trusted on the server we uploaded to
+	if r.DeleteToken != "" && r.ID != "" && len(r.DeleteToken) <= 200 && len(r.ID) <= 64 && isHTTPSURL(r.DeleteURL) && sameHost(r.DeleteURL, endpoint) {
+		res.del = uploadDelete{URL: r.DeleteURL, Token: r.DeleteToken, ID: r.ID}
+	}
+	return res, nil
+}
+
+func sameHost(a, b string) bool {
+	ua, err1 := url.Parse(a)
+	ub, err2 := url.Parse(b)
+	return err1 == nil && err2 == nil && ua.Host != "" && strings.EqualFold(ua.Host, ub.Host)
 }
 
 func uploadToImgur(clientID string, data []byte, ext string) (UploadResult, error) {
@@ -189,8 +234,9 @@ func uploadToImgur(clientID string, data []byte, ext string) (UploadResult, erro
 	var r struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Link  string          `json:"link"`
-			Error json.RawMessage `json:"error"` // a string, or {"message": "..."}
+			Link       string          `json:"link"`
+			DeleteHash string          `json:"deletehash"`
+			Error      json.RawMessage `json:"error"` // a string, or {"message": "..."}
 		} `json:"data"`
 	}
 	jsonErr := json.Unmarshal(b, &r)
@@ -200,7 +246,7 @@ func uploadToImgur(clientID string, data []byte, ext string) (UploadResult, erro
 	case resp.StatusCode == http.StatusTooManyRequests:
 		return UploadResult{}, errors.New("Imgur's upload limit was reached. Try again later.")
 	case jsonErr == nil && r.Success && isHTTPSURL(r.Data.Link):
-		return UploadResult{URL: r.Data.Link, Host: UploadHostImgur}, nil
+		return UploadResult{URL: r.Data.Link, Host: UploadHostImgur, del: uploadDelete{ImgurHash: r.Data.DeleteHash}}, nil
 	}
 	if msg := imgurError(r.Data.Error); msg != "" {
 		return UploadResult{}, errors.New("Imgur: " + msg)
@@ -225,4 +271,42 @@ func imgurError(raw json.RawMessage) string {
 func isHTTPSURL(s string) bool {
 	u, err := url.Parse(s)
 	return err == nil && u.Scheme == "https" && u.Host != "" && !strings.ContainsAny(s, " \r\n")
+}
+
+// uploadToCatbox posts to catbox.moe's API (reqtype=fileupload, fileToUpload), which answers
+// with the file's link as plain text, or an error message.
+func uploadToCatbox(userhash string, data []byte, ext string) (UploadResult, error) {
+	fields := map[string]string{"reqtype": "fileupload"}
+	if h := strings.TrimSpace(userhash); h != "" {
+		fields["userhash"] = h
+	}
+	body, ct, err := multipartFile("fileToUpload", data, ext, fields)
+	if err != nil {
+		return UploadResult{}, err
+	}
+	resp, b, err := postUpload(catboxUploadURL, body, ct, map[string]string{"Accept": "text/plain"})
+	if err != nil {
+		return UploadResult{}, err
+	}
+	reply := strings.TrimSpace(string(b))
+	if resp.StatusCode == http.StatusOK && isHTTPSURL(reply) && !strings.ContainsAny(reply, " \t\r\n<>\"") {
+		if u, err := url.Parse(reply); err == nil && (u.Host == "catbox.moe" || strings.HasSuffix(u.Host, ".catbox.moe")) {
+			res := UploadResult{URL: reply, Host: UploadHostCatbox}
+			if fields["userhash"] != "" {
+				res.del.CatboxFile = path.Base(u.Path)
+			}
+			return res, nil
+		}
+	}
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return UploadResult{}, errors.New("Catbox is getting too many uploads. Wait a minute and try again.")
+	case strings.HasPrefix(reply, "http://") || strings.HasPrefix(reply, "https://"):
+		return UploadResult{}, errors.New("Catbox sent back an unexpected reply.")
+	case strings.Contains(strings.ToLower(reply), "userhash"):
+		return UploadResult{}, errors.New("Catbox didn't accept the userhash. Check it in Settings → Media, or leave it empty to upload anonymously.")
+	case resp.StatusCode < 500 && reply != "" && len(reply) < 200 && !strings.ContainsAny(reply, "<>"):
+		return UploadResult{}, errors.New("Catbox: " + reply)
+	}
+	return UploadResult{}, fmt.Errorf("Catbox had a problem (%s). Try again in a moment.", resp.Status)
 }

@@ -27,9 +27,9 @@ func testPNG(t *testing.T) string {
 func withUploadServer(t *testing.T, h http.HandlerFunc) {
 	t.Helper()
 	srv := httptest.NewServer(h)
-	oldA, oldB := irchatterboxUploadURL, imgurUploadURL
-	irchatterboxUploadURL, imgurUploadURL = srv.URL+"/upload", srv.URL+"/3/image"
-	t.Cleanup(func() { srv.Close(); irchatterboxUploadURL, imgurUploadURL = oldA, oldB })
+	oldA, oldB, oldC := irchatterboxUploadURL, imgurUploadURL, catboxUploadURL
+	irchatterboxUploadURL, imgurUploadURL, catboxUploadURL = srv.URL+"/upload", srv.URL+"/3/image", srv.URL+"/user/api.php"
+	t.Cleanup(func() { srv.Close(); irchatterboxUploadURL, imgurUploadURL, catboxUploadURL = oldA, oldB, oldC })
 }
 
 func TestUploadIRChatterbox(t *testing.T) {
@@ -175,6 +175,62 @@ func TestUploadAcceptsAllFormats(t *testing.T) {
 		data := base64.StdEncoding.EncodeToString([]byte(head + strings.Repeat("\x00", 64)))
 		if _, err := uploadImage("", "", data); err != nil {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestUploadCatbox(t *testing.T) {
+	for _, hash := range []string{"", " abc123hash "} {
+		var reqtype, userhash string
+		var gotHash bool
+		withUploadServer(t, func(w http.ResponseWriter, r *http.Request) {
+			reqtype, userhash = r.FormValue("reqtype"), r.FormValue("userhash")
+			_, gotHash = r.MultipartForm.Value["userhash"]
+			f, hdr, err := r.FormFile("fileToUpload")
+			if err != nil {
+				t.Errorf("no fileToUpload field: %v", err)
+				return
+			}
+			f.Close()
+			if hdr.Filename != "image.png" {
+				t.Errorf("file name %q", hdr.Filename)
+			}
+			io.WriteString(w, "https://files.catbox.moe/k3x9qa.png\n")
+		})
+		res, err := uploadImage(UploadHostCatbox, hash, testPNG(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.URL != "https://files.catbox.moe/k3x9qa.png" || res.Expires != "" || res.Host != UploadHostCatbox {
+			t.Fatalf("got %+v", res)
+		}
+		if reqtype != "fileupload" || userhash != strings.TrimSpace(hash) || gotHash != (hash != "") {
+			t.Errorf("hash %q: reqtype %q userhash %q sent %v", hash, reqtype, userhash, gotHash)
+		}
+	}
+}
+
+func TestUploadCatboxErrors(t *testing.T) {
+	cases := []struct {
+		status int
+		body   string
+		want   string
+	}{
+		{412, "No request type given.", "Catbox: No request type"},
+		{200, "Invalid userhash", "didn't accept the userhash"},
+		{200, "https://evil.example.com/x.png", "unexpected reply"}, // only catbox.moe links are trusted
+		{200, "http://files.catbox.moe/x.png", "unexpected reply"},
+		{429, "slow down", "too many uploads"},
+		{503, "<html>down</html>", "Catbox had a problem"},
+	}
+	for _, c := range cases {
+		withUploadServer(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(c.status)
+			io.WriteString(w, c.body)
+		})
+		_, err := uploadImage(UploadHostCatbox, "", testPNG(t))
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%d %q: got %v, want %q", c.status, c.body, err, c.want)
 		}
 	}
 }

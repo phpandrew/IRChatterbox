@@ -406,6 +406,14 @@ func (a *App) autoAwayLoop() {
 
 // ---------- logging ----------
 
+// sessionStart is when this process started. On Android the WebView (and so the UI) is
+// recreated while the connections live on, so the UI asks for this rather than using its own
+// start time to tell lines from an earlier session apart.
+var sessionStart = time.Now().UnixMilli()
+
+// SessionStart is when the app's connections started, in Unix milliseconds.
+func (a *App) SessionStart() int64 { return sessionStart }
+
 // GetHistory returns the last N logged lines for a buffer.
 func (a *App) GetHistory(serverID, buffer string) []Event {
 	sv, ok := a.store.Server(serverID)

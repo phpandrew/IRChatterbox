@@ -12,6 +12,8 @@ export function CancelClose():Promise<void>;
 
 export function CheckForUpdate():Promise<core.UpdateInfo>;
 
+export function ClearUploadHistory():Promise<void>;
+
 export function CloseBuffer(arg1:string,arg2:string):Promise<void>;
 
 export function Connect(arg1:string):Promise<void>;
@@ -28,6 +30,8 @@ export function DeleteServer(arg1:string):Promise<void>;
 
 export function DeleteTheme(arg1:string):Promise<void>;
 
+export function DeleteUpload(arg1:string):Promise<string>;
+
 export function DescribeClientCert(arg1:string,arg2:string):Promise<core.ClientCert>;
 
 export function Disconnect(arg1:string):Promise<void>;
@@ -37,6 +41,8 @@ export function DismissCrash():Promise<void>;
 export function EncryptionPublicKeys(arg1:string):Promise<Array<string>>;
 
 export function ExportSettings(arg1:boolean,arg2:string):Promise<core.BackupResult>;
+
+export function ForgetUpload(arg1:string):Promise<void>;
 
 export function GenerateClientCert(arg1:string):Promise<core.ClientCert>;
 
@@ -73,6 +79,8 @@ export function GetSyncStatus():Promise<core.SyncStatus>;
 export function GetThemes():Promise<Array<core.Theme>>;
 
 export function GetUIState():Promise<string>;
+
+export function GetUploadHistory():Promise<Array<core.UploadItem>>;
 
 export function GetVersion():Promise<string>;
 

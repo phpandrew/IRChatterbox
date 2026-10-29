@@ -41,6 +41,12 @@ Rate limiting is up to your web server; the public host allows 10 uploads a minu
     413 {"ok":false,"error":"Images can be at most 10 MB."}
     415 {"ok":false,"error":"Only JPG, PNG, WebP and BMP images can be uploaded."}
 
+The reply also has `"delete_token"` and `"delete_url"` (this file's address). IRChatterbox keeps
+them in its upload history, so you can delete an image from the app: `POST /upload.php` with
+form fields `id` and `token` → `200 {"ok":true}`. The code is signed with a secret that
+`upload.php` makes on first use and keeps in `upload.key.php` next to it (PHP needs to be able
+to write there; or set `delete_secret` yourself, or `'off'` to turn deleting off).
+
 Check GD: `php -r 'var_dump(gd_info()["WebP Support"], gd_info()["BMP Support"]);'`
 
 ## Encrypted bouncer history

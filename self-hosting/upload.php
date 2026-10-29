@@ -4,6 +4,8 @@
 // POST https://your-server/upload.php with a multipart "image" field → JSON:
 //   200 {"ok":true,"url":"https://your-server/i/7/k3/k3x9Qa2mZp.webp","width":1000,"height":750,"bytes":38211,"expires":"2026-10-24T18:00:00Z"}
 //   4xx/5xx {"ok":false,"error":"Only JPG, PNG, WebP and BMP images can be uploaded."}
+// The upload reply also carries "delete_token" and "delete_url" (this file's own address):
+// POST id=<id>&token=<delete_token> to it deletes the image. The app does this from its upload history.
 //
 // Each image is shrunk to fit 1000×1000, turned upright, saved as WebP without its metadata,
 // and given a random name. Delete old ones from cron (as the web server's user):
@@ -32,6 +34,11 @@ $CONFIG = [
     'max_height' => 1000,
     'webp_quality' => 82,
     'id_length' => 10,
+    // Signs delete codes. Empty = make one on first use and keep it in upload.key.php next to
+    // this file (PHP must be able to write there, or set it here). 'off' turns deleting off.
+    'delete_secret' => '',
+    // This file's public address, for delete links. Empty = worked out from the request.
+    'delete_url' => '',
 ];
 if (is_file(__DIR__ . '/config.local.php')) {
     $CONFIG = array_replace($CONFIG, require __DIR__ . '/config.local.php');
@@ -56,6 +63,16 @@ header('X-Content-Type-Options: nosniff');
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Allow: POST');
     reply(405, ['ok' => false, 'error' => 'Send the image with POST.']);
+}
+
+// a delete: id + token, and no image
+if (!isset($_FILES['image']) && isset($_POST['id'], $_POST['token'])) {
+    try {
+        imagehost_delete($CONFIG, (string) $_POST['id'], (string) $_POST['token']);
+        reply(200, ['ok' => true]);
+    } catch (UploadError $e) {
+        reply($e->status, ['ok' => false, 'error' => $e->getMessage()]);
+    }
 }
 
 $file = $_FILES['image'] ?? null;
@@ -173,7 +190,83 @@ function imagehost_store(string $src, array $cfg): array
         'height' => $oh,
         'bytes' => filesize($path),
         'expires' => gmdate('Y-m-d\TH:i:s\Z', time() + $days * 86400),
-    ];
+    ] + imagehost_delete_info($cfg, $id);
+}
+
+// ---------- deleting ----------
+// Each upload gets a delete code: an HMAC of its id, so no list of uploads is kept.
+
+function imagehost_secret(array $cfg): string
+{
+    $s = (string) ($cfg['delete_secret'] ?? '');
+    if ($s === 'off') {
+        return '';
+    }
+    if (strlen($s) >= 32) {
+        return $s;
+    }
+    $file = __DIR__ . '/upload.key.php'; // a PHP file, so asking the web server for it shows nothing
+    if (is_file($file)) {
+        $s = (string) (require $file);
+        return strlen($s) >= 32 ? $s : '';
+    }
+    $s = bin2hex(random_bytes(32));
+    $tmp = $file . '.' . bin2hex(random_bytes(4));
+    if (@file_put_contents($tmp, "<?php return '" . $s . "';\n") === false || !@rename($tmp, $file)) {
+        @unlink($tmp);
+        error_log('imagehost: can\'t write ' . $file . ': set delete_secret to turn deleting on');
+        return '';
+    }
+    @chmod($file, 0600);
+    return (string) (require $file); // another request may have won the race: use what's on disk
+}
+
+function imagehost_delete_token(array $cfg, string $id): string
+{
+    $secret = imagehost_secret($cfg);
+    return $secret === '' ? '' : rtrim(strtr(base64_encode(hash_hmac('sha256', 'delete:' . $id, $secret, true)), '+/', '-_'), '=');
+}
+
+function imagehost_delete_info(array $cfg, string $id): array
+{
+    $token = imagehost_delete_token($cfg, $id);
+    if ($token === '') {
+        return [];
+    }
+    $url = (string) ($cfg['delete_url'] ?? '');
+    if ($url === '') {
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9.\-]+(:\d+)?$/', $host)) {
+            return [];
+        }
+        $url = 'https://' . $host . (string) ($_SERVER['SCRIPT_NAME'] ?? '/upload.php');
+    }
+    return ['delete_token' => $token, 'delete_url' => $url];
+}
+
+/** Delete one image if the code matches. Throws UploadError (403 wrong code, 404 already gone). */
+function imagehost_delete(array $cfg, string $id, string $token): void
+{
+    if (!preg_match('/^[A-Za-z0-9]{' . (int) $cfg['id_length'] . '}$/', $id) || $token === '') {
+        throw new UploadError('Send the image id and its delete code.');
+    }
+    $want = imagehost_delete_token($cfg, $id);
+    if ($want === '') {
+        throw new UploadError('Deleting is turned off on this server.', 403);
+    }
+    if (!hash_equals($want, $token)) {
+        throw new UploadError("That delete code doesn't match the image.", 403);
+    }
+    $found = false;
+    foreach (glob($cfg['storage_dir'] . '/*/' . substr($id, 0, 2) . '/' . $id . '.webp') ?: [] as $f) {
+        if (!@unlink($f)) {
+            throw new UploadError("The image couldn't be deleted. Try again in a moment.", 500);
+        }
+        $found = true;
+    }
+    if (!$found) {
+        throw new UploadError('That image is already gone.', 404);
+    }
 }
 
 function imagehost_decode(string $src, string $kind): GdImage

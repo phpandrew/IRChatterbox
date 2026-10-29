@@ -125,3 +125,27 @@ func TestImportPartialBackup(t *testing.T) {
 		t.Fatal("nick colours or shortcuts weren't imported")
 	}
 }
+
+// The Catbox userhash can delete the account's files: backups leave it out, and importing one
+// keeps this computer's.
+func TestBackupKeepsCatboxUserhashLocal(t *testing.T) {
+	a := newBackupApp(t)
+	a.store.Update(func(c *Config) {
+		c.Settings.UploadHost, c.Settings.CatboxUserHash = UploadHostCatbox, "secret-userhash-1"
+	})
+	for _, withPw := range []bool{false, true} {
+		r := a.ExportSettings(withPw, "a long passphrase here")
+		if r.Error != "" || strings.Contains(r.Data, "secret-userhash-1") {
+			t.Fatalf("withPasswords=%v: userhash in backup (err %q)", withPw, r.Error)
+		}
+	}
+	data := a.ExportSettings(false, "").Data
+	b := newBackupApp(t)
+	b.store.Update(func(c *Config) { c.Settings.CatboxUserHash = "other-device-hash" })
+	if msg := b.ImportSettings(data, ""); msg != "" && !strings.Contains(strings.ToLower(msg), "import") {
+		t.Logf("import: %s", msg)
+	}
+	if got := b.store.Get().Settings.CatboxUserHash; got != "other-device-hash" {
+		t.Fatalf("import replaced the userhash with %q", got)
+	}
+}

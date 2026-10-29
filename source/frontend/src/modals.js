@@ -723,15 +723,25 @@ export function openSettings(startTab) {
       ${field("Upload to", `<select id="uHost">
         <option value="irchatterbox">IRChatterbox (i.irchatterbox.com)</option>
         <option value="imgur" ${set.uploadHost === "imgur" ? "selected" : ""}>Imgur</option>
+        <option value="catbox" ${set.uploadHost === "catbox" ? "selected" : ""}>Catbox (catbox.moe)</option>
         <option value="custom" ${set.uploadHost === "custom" ? "selected" : ""}>My own server</option>
       </select>`)}
       <div id="uHostHint" class="hint"></div>
       <div id="uImgurRow" style="margin-top:10px">
         ${field("Imgur Client ID", text("uImgur", set.imgurClientId, "e.g. 1a2b3c4d5e6f7g8"), `Register an app at <a href="#" data-open="https://api.imgur.com/oauth2/addclient">api.imgur.com</a> (choose "without a callback URL") and paste its Client ID here.`)}
       </div>
+      <div id="uCatboxRow" style="margin-top:10px">
+        ${field("Catbox userhash (optional)", text("uCatbox", set.catboxUserHash, "Leave empty to upload anonymously"), `To keep uploads in your Catbox account, where you can delete them, sign in at <a href="#" data-open="https://catbox.moe/">catbox.moe</a> and paste the userhash shown on your account page. It stays on this device.`)}
+      </div>
       <div id="uCustomRow" style="margin-top:10px">
         ${field("Upload address", text("uURL", set.uploadURL, "https://img.example.com/upload"), `Any server that takes the same request as irchatterbox.com. Run your own with <a href="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting" data-url="https://github.com/phpandrew/IRChatterbox/tree/main/self-hosting">self-hosting/upload.php</a> on GitHub.`)}
-      </div>`, "not-web") +
+      </div>
+      <div class="up-hist-head">
+        <div><b>Uploaded images</b><div class="hint">Images you've uploaded from this device, with a Delete button where the host allows it. The list stays on this device.</div></div>
+        <button class="btn" id="uHistBtn">Show</button>
+      </div>
+      <div id="uHist" class="up-hist" hidden></div>
+      `, "not-web") +
       card("DCC", "Send files and chat directly with someone, without going through the server. Right-click a nick and choose Send file… or Direct chat, or use /dcc.", `
       ${field("Save received files to", `<div style="display:flex;gap:8px"><input type="text" id="dFolder" value="${esc(set.dccFolder || "")}" placeholder="Default: your Downloads folder" style="flex:1"><button class="btn" id="dBrowse">Choose…</button></div>`)}
       <div class="fgrid">
@@ -745,21 +755,82 @@ export function openSettings(startTab) {
     wire();
   }
 
+  async function drawUploadHistory() {
+    const box = $("uHist");
+    if (!box) return;
+    const list = (await Go.GetUploadHistory()) || [];
+    if (!$("uHist") || box.hidden) return;
+    const hostName = { irchatterbox: "IRChatterbox", imgur: "Imgur", catbox: "Catbox", custom: t("My own server") };
+    const when = (iso) => {
+      const ms = Date.parse(iso);
+      if (!ms) return "";
+      const s = Math.round((Date.now() - ms) / 1000);
+      return s < 60 ? t("just now") : s < 3600 ? t("{0} min ago", Math.round(s / 60)) : s < 86400 ? t("{0} h ago", Math.round(s / 3600)) : new Date(ms).toLocaleDateString();
+    };
+    const why = { expired: "Expired: already deleted by the host", anonymous: "Uploaded without a userhash: Catbox can't delete it", unsupported: "This host can't delete it from here" };
+    if (!list.length) { box.innerHTML = `<div class="hint up-hist-empty">Nothing uploaded from this device yet.</div>`; return; }
+    box.innerHTML = list.map((u, i) => {
+      const left = u.expires && !u.expired ? Math.max(0, Math.ceil((Date.parse(u.expires) - Date.now()) / 86400000)) : null;
+      return `<div class="up-item${u.expired ? " expired" : ""}" data-i="${i}">
+        ${u.expired ? `<div class="up-thumb gone"></div>` : `<img class="up-thumb" src="${esc(u.url)}" loading="lazy" referrerpolicy="no-referrer" alt="">`}
+        <div class="up-info">
+          <a href="#" class="up-link" data-act="open">${esc(u.url.replace(/^https:\/\//, ""))}</a>
+          <div class="hint">${esc(hostName[u.host] || u.host)} · ${esc(when(u.at))}${left !== null ? " · " + esc(left === 1 ? t("deleted in 1 day") : t("deleted in {0} days", left)) : ""}${u.noDelete ? ` · <span>${esc(t(why[u.noDelete] || ""))}</span>` : ""}</div>
+        </div>
+        <div class="up-acts">
+          ${u.expired ? "" : `<button class="btn sm" data-act="copy">Copy link</button>`}
+          ${u.canDelete ? `<button class="btn sm danger" data-act="del">Delete</button>` : ""}
+          <button class="icon-btn" data-act="forget" title="Remove from this list (the image isn't deleted)" aria-label="Remove from this list">×</button>
+        </div>
+      </div>`;
+    }).join("") + `<div class="up-hist-foot"><button class="btn sm" id="uHistClear">Clear list</button><span class="hint">Clearing the list doesn't delete the images.</span></div>`;
+    box.querySelectorAll(".up-thumb").forEach((img) => (img.onerror = () => img.classList.add("gone")));
+    box.querySelectorAll("[data-act]").forEach((b) => (b.onclick = async (e) => {
+      e.preventDefault();
+      const u = list[+b.closest(".up-item").dataset.i];
+      if (b.dataset.act === "open") Go.OpenURL(u.url);
+      else if (b.dataset.act === "copy") { try { await navigator.clipboard.writeText(u.url); b.textContent = t("Copied"); } catch {} }
+      else if (b.dataset.act === "forget") { await Go.ForgetUpload(u.url); drawUploadHistory(); }
+      else if (b.dataset.act === "del") {
+        if (!confirm(t("Delete this image from {0}? Links to it will stop working.", hostName[u.host] || u.host))) return;
+        b.disabled = true; b.textContent = t("Deleting…");
+        const err = await Go.DeleteUpload(u.url);
+        if (err) { toast(err, "error"); b.disabled = false; b.textContent = t("Delete"); return; }
+        toast(t("Image deleted"));
+        drawUploadHistory();
+      }
+    }));
+    $("uHistClear").onclick = async () => {
+      if (!confirm(t("Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here."))) return;
+      await Go.ClearUploadHistory();
+      drawUploadHistory();
+    };
+  }
+
   function wire() {
     if ($("uHost")) {
       const sync = () => {
         const imgur = $("uHost").value === "imgur";
         const custom = $("uHost").value === "custom";
+        const catbox = $("uHost").value === "catbox";
         $("uImgurRow").style.display = imgur ? "" : "none";
+        $("uCatboxRow").style.display = catbox ? "" : "none";
         $("uCustomRow").style.display = custom ? "" : "none";
         $("uHostHint").textContent = imgur
           ? "Uploaded as-is to Imgur under your own Client ID. Imgur keeps images until they're deleted, and its own rules and limits apply."
+          : catbox ? "Uploaded as-is to catbox.moe, a free host that keeps files for good. Anyone with the link can see it. Add your userhash below if you want to be able to delete uploads later. Catbox's own rules apply."
           : custom ? "Uploaded to your server, which decides the size, format and how long images are kept."
           : "Shrunk to fit 1000×1000 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
       };
       $("uHost").addEventListener("change", sync); sync();
-      document.querySelectorAll("#uImgurRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));
+      document.querySelectorAll("#uImgurRow [data-open], #uCatboxRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));
     }
+    if ($("uHistBtn")) $("uHistBtn").onclick = () => {
+      const box = $("uHist");
+      box.hidden = !box.hidden;
+      $("uHistBtn").textContent = t(box.hidden ? "Show" : "Hide");
+      if (!box.hidden) drawUploadHistory();
+    };
     if ($("dBrowse")) $("dBrowse").onclick = async () => { const f = await Go.PickDCCFolder(); if (f) $("dFolder").value = f; };
     if ($("gTxt")) {
       const sync = () => { $("gTxtRow").style.opacity = on("gTxt") ? 1 : 0.5; };
@@ -1238,7 +1309,7 @@ export function openSettings(startTab) {
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
     if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); set.linkPreviews = on("mLinks"); }
     if (has("dFolder")) { set.dccFolder = val("dFolder"); set.dccAddress = val("dAddr"); set.dccPorts = val("dPorts"); }
-    if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); set.uploadURL = val("uURL"); }
+    if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); set.catboxUserHash = val("uCatbox"); set.uploadURL = val("uURL"); }
     if (has("pPrefix")) {
       plug.botPrefix = $("pPrefix").value; plug.weatherEnabled = on("pW"); plug.weatherFromMe = on("pWMe"); plug.weatherFromOthers = on("pWOthers");
       plug.weatherChannels = val("pWChans").split(/[\s,]+/).filter(Boolean); plug.weatherCooldown = parseInt(val("pWCd")) || 0;

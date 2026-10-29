@@ -76,13 +76,19 @@ async function loadHistory(srv, b) {
   const redacted = new Map(lines.filter((ev) => ev.type === "redact").map((ev) => [ev.text, ev.extra?.reason || ""]));
   const reacts = lines.filter((ev) => ev.type === "react" && ev.time < b.created);
   const old = lines.filter((ev) => ev.time < b.created && ev.type !== "redact" && ev.type !== "react").map((ev) => {
-    const l = { ...evToLine(ev), history: true, hl: false };
+    // faded: really from an earlier session. Not through a bouncer (it was online the whole
+    // time), and not lines from before the UI reloaded while the app stayed connected (Android).
+    const faded = !srv.cfg?.bouncer && ev.time < (S.sessionStart || b.created);
+    const l = { ...evToLine(ev), history: true, faded, hl: false };
     if (l.extra?.msgid && redacted.has(l.extra.msgid)) { l.redacted = true; l.redactReason = redacted.get(l.extra.msgid); }
     return l;
   });
   if (!old.length) return;
   b.lines = old.concat(b.lines);
   for (const ev of reacts) applyReact(b, ev);
+  // through a bouncer: what came in after your read marker is unread, with the divider above it
+  const rm = b.readMark ?? srv.readMarks?.[b.key];
+  if (srv.cfg?.bouncer && rm) markFromRead(srv, b, rm);
   if (isActive(srv, b)) renderChat();
   if (onScreen(srv, b)) renderPanesSoon();
 }
@@ -188,7 +194,7 @@ function sendReadSoon(srv, b) {
 // a read marker arrived (from this or another device): recount what's still unread
 function applyReadMark(srv, b, t) {
   b.readMark = Math.max(b.readMark || 0, t);
-  if (isActive(srv, b) && S.focused) return;
+  if (isActive(srv, b) && S.focused) { markFromRead(srv, b, b.readMark); return; }
   let unread = 0, hl = 0;
   for (const l of b.lines) {
     if (l.t <= b.readMark || l.self || !["privmsg", "action", "notice"].includes(l.kind)) continue;
@@ -197,7 +203,19 @@ function applyReadMark(srv, b, t) {
   }
   b.unread = unread; b.hl = hl; b.activity = unread > 0;
   if (!unread) { b.marker = null; b.markPending = true; }
+  else markFromRead(srv, b, b.readMark);
   scheduleTree();
+}
+
+// put the NEW divider above the first message after the read marker (bouncer), unless the
+// divider is already further on
+function markFromRead(srv, b, t) {
+  if (S.cfg.settings.markerLine === false) return;
+  const first = b.lines.find((l) => l.t > t && !l.self && ["privmsg", "action", "notice"].includes(l.kind));
+  if (!first || (b.marker && b.marker.t <= first.t)) return;
+  b.marker = first;
+  b.markPending = false;
+  if (isActive(srv, b)) rerenderSoon();
 }
 
 // ---------- incoming events ----------
@@ -1062,7 +1080,7 @@ function lineEl(srv, b, line, prev) {
   if (line.type === "dcc") return dccLineEl(srv, b, line);
   const el = document.createElement("div");
   const isEv = line.type === "event";
-  el.className = "line " + [line.kind, isEv ? "ev" : "", isEv && !line.self && JOIN_KINDS.includes(line.kind) && !showJoins(srv, b) ? "jp-off" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.history ? "history" : "",
+  el.className = "line " + [line.kind, isEv ? "ev" : "", isEv && !line.self && JOIN_KINDS.includes(line.kind) && !showJoins(srv, b) ? "jp-off" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.faded ? "history" : "",
     stackedLayout() && continues(prev === undefined ? prevLine(b, line) : prev, line) ? "cont" : ""].join(" ");
   let who = "", msg = "";
   const ctx = ctxFor(srv);
@@ -2801,6 +2819,7 @@ async function boot() {
     showMenu(e.clientX, e.clientY, [["Change avatar…", () => pickIcon("_me", "avatar", "your avatar")]]
       .concat(myAvatar() ? [["Remove avatar", () => Go.SetChannelIcon("_me", "avatar", "")]] : []));
   };
+  S.sessionStart = (await Go.SessionStart()) || Date.now();
   S.cfg = await Go.GetConfig();
   await setLanguage(S.cfg.settings.language || "");
   setCustomThemes(await Go.GetThemes());

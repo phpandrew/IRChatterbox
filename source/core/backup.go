@@ -105,6 +105,7 @@ func (a *App) ExportSettings(withPasswords bool, passphrase string) BackupResult
 	// paths and per-install state stay behind
 	f.Settings.LogFolder = ""
 	f.Settings.SkippedVersion = ""
+	f.Settings.CatboxUserHash = "" // it can delete the account's files: keep it on this computer
 	f.Settings.SoundHighlight = portableSound(f.Settings.SoundHighlight)
 	f.Settings.SoundPM = portableSound(f.Settings.SoundPM)
 	f.Plugins.Music.File = ""
@@ -244,7 +245,7 @@ func (a *App) ImportSettings(data, passphrase string) string {
 		// keep what belongs to this computer, and where images and files go
 		s.LogFolder = old.LogFolder
 		s.SkippedVersion = old.SkippedVersion
-		s.UploadHost, s.UploadURL = old.UploadHost, old.UploadURL
+		s.UploadHost, s.UploadURL, s.CatboxUserHash = old.UploadHost, old.UploadURL, old.CatboxUserHash
 		s.DCCFolder, s.DCCAddress, s.DCCPorts = old.DCCFolder, old.DCCAddress, old.DCCPorts
 		s.StartWithWindows, s.StartMinimized = old.StartWithWindows, old.StartMinimized
 		if s.SoundHighlight == "" && strings.HasPrefix(old.SoundHighlight, "file:") {

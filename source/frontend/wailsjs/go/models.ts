@@ -331,6 +331,7 @@ export namespace core {
 	    soundVolume: number;
 	    uploadHost: string;
 	    imgurClientId: string;
+	    catboxUserHash?: string;
 	    uploadURL: string;
 	    keepAlive: boolean;
 	    linkPreviews: boolean;
@@ -396,6 +397,7 @@ export namespace core {
 	        this.soundVolume = source["soundVolume"];
 	        this.uploadHost = source["uploadHost"];
 	        this.imgurClientId = source["imgurClientId"];
+	        this.catboxUserHash = source["catboxUserHash"];
 	        this.uploadURL = source["uploadURL"];
 	        this.keepAlive = source["keepAlive"];
 	        this.linkPreviews = source["linkPreviews"];
@@ -1074,6 +1076,30 @@ export namespace core {
 	        this.size = source["size"];
 	        this.manual = source["manual"];
 	        this.error = source["error"];
+	    }
+	}
+	export class UploadItem {
+	    url: string;
+	    host: string;
+	    at: string;
+	    expires: string;
+	    expired: boolean;
+	    canDelete: boolean;
+	    noDelete?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UploadItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.host = source["host"];
+	        this.at = source["at"];
+	        this.expires = source["expires"];
+	        this.expired = source["expired"];
+	        this.canDelete = source["canDelete"];
+	        this.noDelete = source["noDelete"];
 	    }
 	}
 	export class UploadResult {

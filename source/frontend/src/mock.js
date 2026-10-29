@@ -1,5 +1,11 @@
 // Browser-only mock backend used for UI development (not included in normal use).
 const listeners = {};
+let mockUploads = [
+  { url: "https://i.irchatterbox.com/k3x9Qa2mZp.webp", host: "irchatterbox", at: new Date(Date.now() - 1800e3).toISOString(), expires: new Date(Date.now() + 6.9 * 864e5).toISOString(), expired: false, canDelete: true },
+  { url: "https://files.catbox.moe/q1w2e3.png", host: "catbox", at: new Date(Date.now() - 86400e3 * 2).toISOString(), expires: "", expired: false, canDelete: false, noDelete: "anonymous" },
+  { url: "https://i.imgur.com/abc123.png", host: "imgur", at: new Date(Date.now() - 86400e3 * 5).toISOString(), expires: "", expired: false, canDelete: true },
+  { url: "https://i.irchatterbox.com/Old0000000.webp", host: "irchatterbox", at: new Date(Date.now() - 86400e3 * 9).toISOString(), expires: new Date(Date.now() - 86400e3 * 2).toISOString(), expired: true, canDelete: false, noDelete: "expired" },
+];
 export function on(ev, fn) { (listeners[ev] ||= []).push(fn); }
 function emit(ev, data) { (listeners[ev] || []).forEach((f) => f(data)); }
 
@@ -81,6 +87,10 @@ export const api = {
   },
   Connect: () => {},
   SaveSettings: (st) => { cfg.settings = st; return ""; },
+  GetUploadHistory: async () => mockUploads.map((u) => ({ ...u })),
+  DeleteUpload: async (url) => { mockUploads = mockUploads.filter((u) => u.url !== url); return ""; },
+  ForgetUpload: async (url) => { mockUploads = mockUploads.filter((u) => u.url !== url); },
+  ClearUploadHistory: async () => { mockUploads = []; },
   UploadImage: () => new Promise((r) => setTimeout(() => r({ url: "https://i.irchatterbox.com/k3x9Qa2mZp.webp", expires: "2026-10-24T18:00:00Z", host: "irchatterbox" }), 800)),
   SaveTheme: () => null,
   SaveShortcuts: (l) => { cfg.shortcuts = l; },
