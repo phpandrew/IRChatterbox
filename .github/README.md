@@ -30,10 +30,13 @@ A modern IRC client for Windows and Android. The backend is Go; on Windows the U
 
 ## Screenshots
 <p align="center">
-  <img src="assets/screenshot.png" alt="IRChatterbox connected to Libera.Chat, showing the server MOTD and a highlighted NickServ notice" width="900">
+  <img src="assets/screenshot-dark.webp" alt="IRChatterbox in dark mode: a channel with favourites, the new-messages line, a video preview, an inline image and colour-coded nicks" width="900">
 </p>
 <p align="center">
-  <img src="assets/screenshot-settings.png" alt="The Appearance settings with automatic light/dark mode and the theme editor" width="900">
+  <img src="assets/screenshot-light.webp" alt="The same channel in light mode" width="900">
+</p>
+<p align="center">
+  <img src="assets/screenshot-settings.webp" alt="Settings, Appearance: the theme editor with every colour of a custom theme, and custom nick colours kept readable in light and dark mode" width="640">
 </p>
 
 ## Run it
