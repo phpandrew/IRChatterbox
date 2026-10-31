@@ -702,6 +702,17 @@ func (a *App) syncOnce(cfg Config, st *syncState) error {
 	dev := sc.DeviceID
 	now := time.Now().UnixMilli()
 
+	// 0. copies of the same network from before this was fixed
+	if sc.catOn("servers") {
+		if drop := a.mergeDuplicateServers(st); len(drop) > 0 {
+			for _, id := range drop {
+				a.DeleteServer(id)
+			}
+			cfg = a.store.Get()
+			a.emitUI("syncApplied", map[string]any{"items": len(drop)})
+		}
+	}
+
 	// 1. changes made on this device since last time
 	local := syncItemsOf(cfg, a.store.Themes(), st)
 	dirty := false
@@ -820,6 +831,130 @@ func (a *App) syncOnce(cfg Config, st *syncState) error {
 		return fmt.Errorf("%d device(s) on this account use a different sync code and were skipped", unreadable)
 	}
 	return nil
+}
+
+// sameNetwork: a server here is the same network as a synced one (address, port and, through
+// a bouncer, which of its networks).
+func sameNetwork(s ServerConfig, host string, port int, bouncerNetwork string) bool {
+	return strings.EqualFold(s.Host, host) && s.Port == port && strings.EqualFold(s.BouncerNetwork, bouncerNetwork)
+}
+
+// retireKey: server localID stops using sync ID key. A key this device created (key == its
+// own ID) is deleted on the other devices too; another device's key is just let go of, so it
+// isn't deleted there (that device moves over by itself).
+func (st *syncState) retireKey(key, localID string) {
+	if key == localID {
+		return // no longer produced, so the next cycle sends the deletion
+	}
+	for k, it := range st.Items {
+		if k == "servers/"+key || strings.HasPrefix(k, "servers/"+key+"/") {
+			it.H = ""
+			st.Items[k] = it
+		}
+	}
+}
+
+// mergeDuplicateServers fixes copies an earlier version made when the same network was on two
+// devices before syncing: the copy from the other device (no password, never connected) goes,
+// its favourites and channel settings move to the one you set up here, and that one takes the
+// sync ID both devices agree on. Returns the servers to delete.
+func (a *App) mergeDuplicateServers(st *syncState) []string {
+	var drop []string
+	a.store.Update(func(c *Config) {
+		used := map[int]bool{}
+		for i, s := range c.Servers {
+			if used[i] || s.Host == "" {
+				continue
+			}
+			group := []int{i}
+			for j := i + 1; j < len(c.Servers); j++ {
+				if !used[j] && sameNetwork(c.Servers[j], s.Host, s.Port, s.BouncerNetwork) {
+					group = append(group, j)
+				}
+			}
+			if len(group) < 2 {
+				continue
+			}
+			keyOf := func(j int) string {
+				if k := st.Servers[c.Servers[j].ID]; k != "" {
+					return k
+				}
+				return c.Servers[j].ID
+			}
+			// keep the one set up on this device (its sync ID is its own ID), else one with a login
+			keep, canon := group[0], keyOf(group[0])
+			score := func(j int) int {
+				sv := c.Servers[j]
+				n := 0
+				if keyOf(j) == sv.ID {
+					n += 2
+				}
+				if sv.Password != "" || sv.AuthPass != "" || sv.BouncerPass != "" {
+					n++
+				}
+				return n
+			}
+			for _, j := range group {
+				used[j] = true
+				if score(j) > score(keep) {
+					keep = j
+				}
+				if k := keyOf(j); k < canon {
+					canon = k
+				}
+			}
+			kid := c.Servers[keep].ID
+			if k := keyOf(keep); k != canon {
+				st.retireKey(k, kid)
+			}
+			st.Servers[kid] = canon
+			for _, j := range group {
+				if j == keep {
+					continue
+				}
+				did := c.Servers[j].ID
+				if k := keyOf(j); k != canon {
+					st.retireKey(k, did)
+				}
+				delete(st.Servers, did)
+				// favourites and per-channel settings move over to the one kept
+				for fi, f := range c.Favourites {
+					if f.Server == did {
+						c.Favourites[fi].Server = kid
+					}
+				}
+				for k, v := range c.ChannelNotify {
+					if id, buf, _ := strings.Cut(k, "/"); id == did {
+						if _, ok := c.ChannelNotify[notifyKey(kid, buf)]; !ok {
+							c.ChannelNotify[notifyKey(kid, buf)] = v
+						}
+						delete(c.ChannelNotify, k)
+					}
+				}
+				for k, v := range c.ChannelJoins {
+					if id, buf, _ := strings.Cut(k, "/"); id == did {
+						if _, ok := c.ChannelJoins[kid+"/"+buf]; !ok {
+							c.ChannelJoins[kid+"/"+buf] = v
+						}
+						delete(c.ChannelJoins, k)
+					}
+				}
+				drop = append(drop, did)
+			}
+			// the same favourite twice now: keep one
+			seen := map[string]bool{}
+			favs := c.Favourites[:0]
+			for _, f := range c.Favourites {
+				k := f.Server + "\x00" + lower(f.Buffer)
+				if !seen[k] {
+					seen[k] = true
+					favs = append(favs, f)
+				}
+			}
+			c.Favourites = favs
+		}
+	})
+	return drop
 }
 
 func syncDeviceName() string {
@@ -963,13 +1098,28 @@ func (a *App) applySyncItems(st *syncState, changed map[string]bool) {
 					continue
 				}
 				if id == "" {
-					// the same network added separately on this device? use that one
+					// The same network added separately on this device (both had it before sync was
+					// turned on)? Both devices pick the smaller of the two sync IDs, so they settle
+					// on one copy instead of each adding the other's.
+					skip := false
 					for _, s := range c.Servers {
-						if _, mapped := st.Servers[s.ID]; !mapped && strings.EqualFold(s.Host, ss.Host) && s.Port == ss.Port &&
-							strings.EqualFold(s.BouncerNetwork, ss.BouncerNetwork) {
-							id = s.ID
-							break
+						if !sameNetwork(s, ss.Host, ss.Port, ss.BouncerNetwork) {
+							continue
 						}
+						own := st.Servers[s.ID]
+						if own == "" {
+							own = s.ID
+						}
+						if own <= sk {
+							skip = true // ours wins; the other device moves over to it
+						} else {
+							st.retireKey(own, s.ID)
+							id = s.ID
+						}
+						break
+					}
+					if skip {
+						continue
 					}
 				}
 				if id == "" {

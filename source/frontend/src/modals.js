@@ -587,7 +587,7 @@ export function openSettings(startTab) {
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
   const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
-    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "sync", "about"].filter((t) => !(t === "sync" && web())).map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
+    <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "sync", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left desktop-only" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {

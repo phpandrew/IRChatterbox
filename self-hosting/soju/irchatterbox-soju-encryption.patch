@@ -1,10 +1,14 @@
-From ba93c18a5bfc117558969e695d211517c4497980 Mon Sep 17 00:00:00 2001
+From c57ac9b20d341017b1ea2e66aad9f0b2377fdc29 Mon Sep 17 00:00:00 2001
 From: IRChatterbox <noreply@irchatterbox.com>
-Date: Thu, 22 Oct 2026 19:00:20 -0400
-Subject: [PATCH] Encrypt stored message history with age public keys (per
- user, or per network)
+Date: Thu, 29 Oct 2026 19:05:23 -0400
+Subject: [PATCH] IRChatterbox build: encrypted message history (per user or
+ per network) and web client passes
 
 ---
+ auth/webpass.go            | 104 +++++++++++++
+ auth/webpass_test.go       |  65 ++++++++
+ cmd/soju/main.go           |   4 +
+ config/config.go           |   8 +
  database/database.go       |   8 +
  database/encryptionkey.go  | 300 +++++++++++++++++++++++++++++++++++++
  database/sqlite_mattn.go   |   2 +-
@@ -17,11 +21,242 @@ Subject: [PATCH] Encrypt stored message history with age public keys (per
  service.go                 |  79 +++++++++-
  user.go                    |   9 +-
  user_encrypt.go            | 183 ++++++++++++++++++++++
- 12 files changed, 669 insertions(+), 10 deletions(-)
+ 16 files changed, 850 insertions(+), 10 deletions(-)
+ create mode 100644 auth/webpass.go
+ create mode 100644 auth/webpass_test.go
  create mode 100644 database/encryptionkey.go
  create mode 100644 msgstore/encrypt.go
  create mode 100644 user_encrypt.go
 
+diff --git a/auth/webpass.go b/auth/webpass.go
+new file mode 100644
+index 0000000..4ab4300
+--- /dev/null
++++ b/auth/webpass.go
+@@ -0,0 +1,104 @@
++package auth
++
++// IRChatterbox: short-lived passes for the web client at web.irchatterbox.com.
++//
++// The IRChatterbox account site signs a pass for a signed-in customer with a secret it shares
++// with this bouncer (the irchatterbox-web-secret directive). The web client sends the pass as its
++// password (SASL PLAIN or PASS), so the customer never types their bouncer password into a
++// browser. Real passwords keep working exactly as before: anything that isn't a valid pass goes
++// on to the normal authenticator.
++//
++// A pass is: icb1.<base64url(username)>.<expiry, unix seconds>.<base64url(HMAC-SHA256(secret, "icb1|<username>|<expiry>"))>
++
++import (
++	"context"
++	"crypto/hmac"
++	"crypto/sha256"
++	"encoding/base64"
++	"errors"
++	"strconv"
++	"strings"
++	"time"
++
++	"codeberg.org/emersion/soju/database"
++)
++
++const (
++	WebPassPrefix = "icb1."
++	// A pass is only checked when a connection signs in, so a short life is plenty: the web
++	// client asks the account site for a fresh one every time it connects.
++	MaxWebPassLife = 24 * time.Hour
++)
++
++type WebPassAuthenticator struct {
++	Next   PlainAuthenticator
++	Secret []byte
++}
++
++var _ PlainAuthenticator = WebPassAuthenticator{}
++
++func (a WebPassAuthenticator) AuthPlain(ctx context.Context, db database.Database, username, password string) error {
++	if len(a.Secret) > 0 && strings.HasPrefix(password, WebPassPrefix) {
++		user, err := CheckWebPass(a.Secret, password, time.Now())
++		if err == nil {
++			if user != username {
++				return newInvalidCredentialsError(errors.New("web pass is for another user"))
++			}
++			if _, err := db.GetUser(ctx, username); err != nil {
++				return newInvalidCredentialsError(err)
++			}
++			return nil
++		}
++		if a.Next == nil {
++			return newInvalidCredentialsError(err)
++		}
++		// not a valid pass: it may still be someone's real password that happens to start with "icb1."
++	}
++	if a.Next == nil {
++		return newInvalidCredentialsError(errors.New("no password authentication"))
++	}
++	return a.Next.AuthPlain(ctx, db, username, password)
++}
++
++// SignWebPass makes a pass for username, valid until expires. The account site does the same in PHP.
++func SignWebPass(secret []byte, username string, expires time.Time) string {
++	exp := strconv.FormatInt(expires.Unix(), 10)
++	return WebPassPrefix + base64.RawURLEncoding.EncodeToString([]byte(username)) + "." + exp + "." +
++		base64.RawURLEncoding.EncodeToString(webPassMAC(secret, username, exp))
++}
++
++// CheckWebPass returns the username a pass was signed for, if the signature is right and it
++// hasn't expired.
++func CheckWebPass(secret []byte, pass string, now time.Time) (string, error) {
++	parts := strings.Split(strings.TrimPrefix(pass, WebPassPrefix), ".")
++	if !strings.HasPrefix(pass, WebPassPrefix) || len(parts) != 3 {
++		return "", errors.New("malformed web pass")
++	}
++	userBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
++	if err != nil || len(userBytes) == 0 {
++		return "", errors.New("malformed web pass")
++	}
++	username := string(userBytes)
++	exp, err := strconv.ParseInt(parts[1], 10, 64)
++	if err != nil {
++		return "", errors.New("malformed web pass")
++	}
++	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
++	if err != nil || !hmac.Equal(sig, webPassMAC(secret, username, parts[1])) {
++		return "", errors.New("bad web pass signature")
++	}
++	expires := time.Unix(exp, 0)
++	if !now.Before(expires) {
++		return "", errors.New("web pass expired")
++	}
++	if expires.Sub(now) > MaxWebPassLife {
++		return "", errors.New("web pass lasts too long")
++	}
++	return username, nil
++}
++
++func webPassMAC(secret []byte, username, exp string) []byte {
++	m := hmac.New(sha256.New, secret)
++	m.Write([]byte("icb1|" + username + "|" + exp))
++	return m.Sum(nil)
++}
+diff --git a/auth/webpass_test.go b/auth/webpass_test.go
+new file mode 100644
+index 0000000..b065ec3
+--- /dev/null
++++ b/auth/webpass_test.go
+@@ -0,0 +1,65 @@
++package auth
++
++import (
++	"context"
++	"errors"
++	"testing"
++	"time"
++
++	"codeberg.org/emersion/soju/database"
++)
++
++type fakePlain struct{ ok string }
++
++func (f fakePlain) AuthPlain(ctx context.Context, db database.Database, username, password string) error {
++	if password == f.ok {
++		return nil
++	}
++	return errors.New("wrong password")
++}
++
++func TestWebPass(t *testing.T) {
++	secret := []byte("0123456789abcdef0123456789abcdef")
++	now := time.Unix(1_800_000_000, 0)
++	pass := SignWebPass(secret, "andrew", now.Add(15*time.Minute))
++
++	if u, err := CheckWebPass(secret, pass, now); err != nil || u != "andrew" {
++		t.Fatalf("valid pass refused: %q %v", u, err)
++	}
++	if _, err := CheckWebPass([]byte("another secret, also 32 bytes!!!"), pass, now); err == nil {
++		t.Fatal("pass accepted with the wrong secret")
++	}
++	if _, err := CheckWebPass(secret, pass, now.Add(16*time.Minute)); err == nil {
++		t.Fatal("expired pass accepted")
++	}
++	if _, err := CheckWebPass(secret, SignWebPass(secret, "andrew", now.Add(48*time.Hour)), now); err == nil {
++		t.Fatal("pass with a too-long life accepted")
++	}
++	// changing the username breaks the signature
++	other := SignWebPass(secret, "sam", now.Add(15*time.Minute))
++	forged := pass[:len(WebPassPrefix)] + other[len(WebPassPrefix):len(WebPassPrefix)+4] + pass[len(WebPassPrefix)+len("YW5kcmV3"):]
++	if _, err := CheckWebPass(secret, forged, now); err == nil {
++		t.Fatal("tampered pass accepted")
++	}
++	for _, bad := range []string{"icb1.", "icb1.a.b", "icb1.!!.1.x", "icb1.YQ.notanumber.x", "hello"} {
++		if _, err := CheckWebPass(secret, bad, now); err == nil {
++			t.Fatalf("malformed pass %q accepted", bad)
++		}
++	}
++}
++
++func TestWebPassFallsThroughToPasswords(t *testing.T) {
++	a := WebPassAuthenticator{Next: fakePlain{ok: "icb1.real-password"}, Secret: []byte("0123456789abcdef0123456789abcdef")}
++	// a real password that happens to look like a pass still works
++	if err := a.AuthPlain(context.Background(), nil, "andrew", "icb1.real-password"); err != nil {
++		t.Fatalf("real password refused: %v", err)
++	}
++	if err := a.AuthPlain(context.Background(), nil, "andrew", "nope"); err == nil {
++		t.Fatal("wrong password accepted")
++	}
++	// someone else's pass is refused outright
++	pass := SignWebPass(a.Secret, "sam", time.Now().Add(time.Minute))
++	if err := a.AuthPlain(context.Background(), nil, "andrew", pass); err == nil {
++		t.Fatal("another user's pass accepted")
++	}
++}
+diff --git a/cmd/soju/main.go b/cmd/soju/main.go
+index 5b23a84..fb83bfa 100644
+--- a/cmd/soju/main.go
++++ b/cmd/soju/main.go
+@@ -118,6 +118,10 @@ func loadConfig() (*config.Server, *soju.Config, error) {
+ 			OAuthBearer: authenticator.OAuthBearer,
+ 		}
+ 	}
++	if raw.WebPassSecret != "" {
++		// IRChatterbox web client passes, checked before the normal password authenticator
++		authenticator.Plain = auth.WebPassAuthenticator{Next: authenticator.Plain, Secret: []byte(raw.WebPassSecret)}
++	}
+ 
+ 	if raw.TLS != nil {
+ 		cert, err := tls.LoadX509KeyPair(raw.TLS.CertPath, raw.TLS.KeyPath)
+diff --git a/config/config.go b/config/config.go
+index 9400035..db64aa8 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -108,6 +108,9 @@ type Server struct {
+ 	DB         DB
+ 	Auth       []Auth
+ 	FileUpload *FileUpload
++
++	// IRChatterbox: secret shared with the account site, for web client passes (auth/webpass.go)
++	WebPassSecret string
+ }
+ 
+ func Defaults() *Server {
+@@ -161,6 +164,7 @@ func Load(filename string) (*Server, error) {
+ 		MessageExpiry       string   `scfg:"message-expiry"`
+ 		EnableUserOnAuth    string   `scfg:"enable-user-on-auth"`
+ 		ClientCertAuth      string   `scfg:"client-cert-auth"`
++		WebPassSecret       string   `scfg:"irchatterbox-web-secret"`
+ 	}
+ 
+ 	raw.MaxUserNetworks = -1
+@@ -265,6 +269,10 @@ func Load(filename string) (*Server, error) {
+ 		}
+ 	}
+ 	srv.HTTPOrigins = raw.HTTPOrigin
++	if raw.WebPassSecret != "" && len(raw.WebPassSecret) < 32 {
++		return nil, fmt.Errorf("directive irchatterbox-web-secret: use at least 32 characters")
++	}
++	srv.WebPassSecret = raw.WebPassSecret
+ 	if raw.HTTPIngress != "" {
+ 		srv.HTTPIngress = raw.HTTPIngress
+ 	} else {
 diff --git a/database/database.go b/database/database.go
 index ec23b3c..9e41748 100644
 --- a/database/database.go

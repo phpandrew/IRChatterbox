@@ -87,6 +87,7 @@ export const api = {
   },
   Connect: () => {},
   SaveSettings: (st) => { cfg.settings = st; return ""; },
+  GetThumbnail: (url) => (window.__mockThumb ? window.__mockThumb(url) : ""), // dev hook for testing the shrunk inline images
   GetUploadHistory: async () => mockUploads.map((u) => ({ ...u })),
   DeleteUpload: async (url) => { mockUploads = mockUploads.filter((u) => u.url !== url); return ""; },
   ForgetUpload: async (url) => { mockUploads = mockUploads.filter((u) => u.url !== url); },

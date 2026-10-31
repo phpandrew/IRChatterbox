@@ -1052,7 +1052,10 @@ function renderReplyBar() {
 }
 function jumpToMsg(fromEl, id) {
   const box = fromEl.closest("#chat") || fromEl.closest(".pane-view") || document;
-  const target = box.querySelector(`.line[data-msgid="${CSS.escape(id)}"]`);
+  let target = box.querySelector(`.line[data-msgid="${CSS.escape(id)}"]`);
+  const b = box.id === "chat" ? activeBuffer() : null;
+  const line = !target && b ? b.lines.find((l) => l.extra?.msgid === id) : null;
+  if (line && renderUntil(b, line)) target = box.querySelector(`.line[data-msgid="${CSS.escape(id)}"]`);
   if (!target) { toast(t("That message is no longer loaded"), ""); return; }
   target.scrollIntoView({ block: "center", behavior: "smooth" });
   target.classList.remove("flash");
@@ -1147,13 +1150,12 @@ function addMedia(el, text) {
     wrap.className = "media";
     if (m.type === "image" && set.inlineImages) {
       const img = new Image();
-      img.loading = "lazy";
       img.referrerPolicy = "no-referrer";
-      img.src = m.src;
       img.dataset.full = m.src;
-      img.onerror = () => wrap.remove();
+      img.onerror = () => { if (img.src.startsWith("data:")) img.src = m.src; else wrap.remove(); };
       img.onload = () => { if (stick) scrollBottom(); };
       wrap.appendChild(img);
+      watchInline(img);
       const cap = document.createElement("div");
       cap.className = "cap";
       cap.textContent = m.name;
@@ -1423,6 +1425,7 @@ async function showSearchContext(h) {
     select(srv.id, b.key);
     setTimeout(() => {
       const line = b.lines.find((l) => l.t === h.time && l.text === h.text);
+      if (line) renderUntil(b, line);
       const el = line && [...$("chat").querySelectorAll(".line")].find((x) => lineOf.get(x) === line);
       if (el) { el.scrollIntoView({ block: "center" }); el.classList.add("flash"); }
       else toast(t("That message is older than what's loaded here; it's shown in the search window."), "");
@@ -1469,6 +1472,107 @@ let stick = true;
 let lastRenderedDay = "";
 function scrollBottom() { const c = $("chat"); c.scrollTop = c.scrollHeight; }
 
+// ---------- inline images: shrunk copies, loaded as they come near ----------
+// A full-size picture costs width × height × 4 bytes of memory once drawn, and WebView keeps
+// it long after it scrolls away. The Go side (GetThumbnail) shrinks each one to the size the
+// chat shows it at and caches that on disk; the popup still opens the original. Images are
+// only fetched when they come within a screen or so of view.
+const thumbCache = new Map(); // original url -> thumbnail data: URL, or "" for "use the original"
+const inlineWatchers = new Map(); // scroll container -> IntersectionObserver
+function watchInline(img) {
+  // the line isn't in the page yet: look for its scroll container once it is
+  queueMicrotask(() => {
+    const root = img.closest("#chat, .pane-view");
+    if (!root || typeof IntersectionObserver === "undefined") { loadInline(img); return; }
+    let io = inlineWatchers.get(root);
+    if (!io) {
+      io = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); loadInline(e.target); }
+      }, { root, rootMargin: "1200px 0px" });
+      inlineWatchers.set(root, io);
+    }
+    io.observe(img);
+  });
+}
+function loadInline(img) {
+  const src = img.dataset.full;
+  if (!src || img.getAttribute("src")) return;
+  const show = (u) => { if (!img.getAttribute("src")) img.src = u || src; };
+  if (thumbCache.has(src)) { show(thumbCache.get(src)); return; }
+  let p;
+  try { p = Go.GetThumbnail?.(src); } catch { p = null; }
+  if (!p || typeof p.then !== "function") { show(""); return; } // no shrinking here (web client)
+  p.then((u) => {
+    u = typeof u === "string" && u.startsWith("data:image/") ? u : "";
+    thumbCache.set(src, u);
+    if (thumbCache.size > 300) thumbCache.delete(thumbCache.keys().next().value);
+    show(u);
+  }, () => show(""));
+}
+
+// ---------- rendering only the newest lines ----------
+// A buffer keeps up to MAX_LINES in memory, but only the newest RENDER_WINDOW go in the page
+// when it's opened; older ones are added RENDER_CHUNK at a time as you scroll up.
+const RENDER_WINDOW = 300;
+const RENDER_CHUNK = 200;
+function firstRendered(chat) {
+  for (const el of chat.children) { const l = lineOf.get(el); if (l) return { el, line: l }; }
+  return null;
+}
+function dayEl(t) { const d = document.createElement("div"); d.className = "day"; d.textContent = dayLabel(t); return d; }
+// renderOlder adds up to n older lines above the top of the chat, keeping the view still.
+function renderOlder(n = RENDER_CHUNK) {
+  const chat = $("chat");
+  const srv = activeServer(), b = activeBuffer();
+  if (!srv || !b) return false;
+  const first = firstRendered(chat);
+  const end = first ? b.lines.indexOf(first.line) : b.lines.length;
+  if (end <= 0) return false;
+  const start = Math.max(0, end - n);
+  const frag = document.createDocumentFragment();
+  let day = "", prev = null;
+  for (const line of b.lines.slice(start, end)) {
+    const d = new Date(line.t).toDateString();
+    if (d !== day) { day = d; frag.appendChild(dayEl(line.t)); }
+    if (line === b.marker && S.cfg.settings.markerLine !== false) { frag.appendChild(markerLineEl()); prev = null; }
+    const el = lineEl(srv, b, line, prev);
+    if (findText) matchLine(el);
+    frag.appendChild(el);
+    prev = line;
+  }
+  const h = chat.scrollHeight, y = chat.scrollTop;
+  // the old top started with its day's divider: drop it when the day carries on from above
+  const top = chat.firstElementChild;
+  if (first && top?.classList.contains("day") && day === new Date(first.line.t).toDateString()) top.remove();
+  chat.prepend(frag);
+  chat.scrollTop = y + (chat.scrollHeight - h);
+  return true;
+}
+// renderUntil makes sure line is in the page (for jumping to it). False if it's not in the buffer.
+function renderUntil(b, line) {
+  const i = b.lines.indexOf(line);
+  if (i < 0) return false;
+  const first = firstRendered($("chat"));
+  const at = first ? b.lines.indexOf(first.line) : b.lines.length;
+  if (at > i) renderOlder(at - i + 20);
+  return true;
+}
+// trimRendered drops lines from the top while you're reading the bottom, so a busy channel
+// left open doesn't keep growing the page.
+function trimRendered(chat) {
+  if (findText || chat.childElementCount <= RENDER_WINDOW + RENDER_CHUNK + 20) return;
+  while (chat.childElementCount > RENDER_WINDOW + 20) chat.firstElementChild.remove();
+  while (chat.firstElementChild && !lineOf.get(chat.firstElementChild)) chat.firstElementChild.remove();
+  const first = firstRendered(chat);
+  if (!first) return;
+  const srv = activeServer(), b = activeBuffer();
+  if (srv && b && first.el.classList.contains("cont")) { // it lost the line its name was on
+    const el = lineEl(srv, b, first.line, null);
+    first.el.replaceWith(el);
+  }
+  chat.prepend(dayEl(first.line.t));
+}
+
 function renderChat() {
   const chat = $("chat");
   const srv = activeServer(), b = activeBuffer();
@@ -1488,7 +1592,11 @@ function renderChat() {
   const frag = document.createDocumentFragment();
   let markerEl = null;
   let prev = null;
-  b.lines.forEach((line) => {
+  let from = findText ? 0 : Math.max(0, b.lines.length - RENDER_WINDOW);
+  const mi = b.marker ? b.lines.indexOf(b.marker) : -1;
+  // start at the unread divider, unless that's a huge backlog: then it loads in as you scroll up
+  if (mi >= 0 && mi - 20 < from && b.lines.length - mi <= 1000) from = Math.max(0, mi - 20);
+  b.lines.slice(from).forEach((line) => {
     const day = new Date(line.t).toDateString();
     if (day !== lastRenderedDay) {
       lastRenderedDay = day;
@@ -1532,6 +1640,7 @@ function appendLineDom(b, line) {
   const el = lineEl(activeServer(), b, line, marker ? null : undefined);
   if (marker) chat.appendChild(markerLineEl());
   chat.appendChild(el);
+  if (atBottom || line.self) trimRendered(chat);
   while (chat.childElementCount > MAX_LINES + 50) chat.firstElementChild.remove();
   if (findText) matchLine(el);
   if (chat.childElementCount < 4) requestAnimationFrame(positionNickHandle);
@@ -1758,10 +1867,15 @@ function updateToLatest() {
   $("toLatest").classList.toggle("hidden", !away);
   $("toLatestN").textContent = newBelow ? (newBelow > 99 ? "99+" : newBelow) : "";
 }
+let olderQueued = false;
 $("chat").addEventListener("scroll", () => {
   const c = $("chat");
   stick = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
   updateToLatest();
+  if (c.scrollTop < 600 && !olderQueued) {
+    olderQueued = true;
+    requestAnimationFrame(() => { olderQueued = false; renderOlder(); });
+  }
 });
 $("toLatest").onclick = () => { $("chat").scrollTo({ top: $("chat").scrollHeight, behavior: "smooth" }); newBelow = 0; };
 
@@ -2121,12 +2235,13 @@ async function showCrashNotice() {
 
 // ---------- toast ----------
 let toastTimer;
-export function toast(msg, kind = "ok") {
+// sticky: stays up until the next toast replaces it (an upload in progress)
+export function toast(msg, kind = "ok", sticky = false) {
   const t = $("toast");
   t.textContent = msg;
   t.className = kind;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.add("hidden"), 2600);
+  if (!sticky) toastTimer = setTimeout(() => t.classList.add("hidden"), 2600);
 }
 
 // ---------- context menu ----------
@@ -2405,12 +2520,15 @@ function setUploading(delta) {
 async function uploadFiles(files) {
   const list = [...files];
   if (!list.length) return;
-  for (let f of list) {
-    if (f.type.startsWith("image/")) try { f = await shrinkForUpload(f); } catch {}
-    if (!UPLOAD_TYPES.includes(f.type)) { toast(`${f.name || "That file"}: only JPG, PNG, WebP and BMP images can be uploaded`, "error"); continue; }
-    if (f.size > UPLOAD_MAX) { toast(`${f.name || "That image"} is over 10 MB`, "error"); continue; }
+  for (let [i, f] of list.entries()) {
+    // say so straight away: shrinking a big camera photo takes a moment before the upload starts
+    const which = list.length > 1 ? ` ${i + 1} of ${list.length}` : "";
     setUploading(1);
-    toast(list.length > 1 ? `Uploading ${f.name}…` : "Uploading image…", "info");
+    toast(`Preparing image${which}…`, "info", true);
+    if (f.type.startsWith("image/")) try { f = await shrinkForUpload(f); } catch {}
+    if (!UPLOAD_TYPES.includes(f.type)) { setUploading(-1); toast(`${f.name || "That file"}: only JPG, PNG, WebP and BMP images can be uploaded`, "error"); continue; }
+    if (f.size > UPLOAD_MAX) { setUploading(-1); toast(`${f.name || "That image"} is over 10 MB`, "error"); continue; }
+    toast(`Uploading image${which}…`, "info", true);
     try {
       const res = await Go.UploadImage(await readAsBase64(f));
       if (!res?.url) throw new Error("The upload didn't return a link.");
@@ -2451,6 +2569,7 @@ for (const id of ["attachInput", "cameraInput"])
 
 // Android "Share → IRChatterbox" with photos: the app serves each one at a local URL
 on("shareImages", async ({ files }) => {
+  if (files?.length) toast(files.length > 1 ? `Preparing ${files.length} images…` : "Preparing image…", "info", true);
   const got = [];
   for (const { url, type, name } of files || []) {
     try {
@@ -2574,7 +2693,12 @@ function applyFind() {
   $("findCount").textContent = findText ? `${n} match${n === 1 ? "" : "es"}` : "";
   if (!findText) scrollBottom();
 }
-$("findInput").addEventListener("input", () => { findText = $("findInput").value.trim().toLowerCase(); applyFind(); });
+$("findInput").addEventListener("input", () => {
+  const was = findText;
+  findText = $("findInput").value.trim().toLowerCase();
+  if (findText && !was) while (renderOlder(1000)); // find looks through the whole buffer
+  applyFind();
+});
 $("findInput").addEventListener("keydown", (e) => { if (e.key === "Escape") closeFind(); });
 $("findAll").addEventListener("click", () => { const q = $("findInput").value.trim(); closeFind(); openSearch(q); });
 $("findBtn").onclick = openFind;

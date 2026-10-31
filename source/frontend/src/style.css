@@ -337,7 +337,8 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 #toast.ok::before { content: "✓"; color: var(--success); }
 #toast.error { border-color: var(--danger); }
 #toast.error::before { content: "!"; color: var(--danger); }
-#toast.info::before { content: "↑"; color: var(--accent); }
+#toast.info::before { content: "↑"; color: var(--accent); animation: toastPulse 1s ease-in-out infinite; }
+@keyframes toastPulse { 50% { transform: translateY(-2px); opacity: .55; } }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -8px); } }
 
 .empty { padding: 60px 30px; text-align: center; color: var(--text-muted); }

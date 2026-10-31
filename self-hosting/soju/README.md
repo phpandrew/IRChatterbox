@@ -1,7 +1,8 @@
 # soju with encrypted history (IRChatterbox build)
 
 This is [soju](https://codeberg.org/emersion/soju) v0.11.1 plus one patch,
-`irchatterbox-soju-encryption.patch`. It lets each bouncer user give soju an
+`irchatterbox-soju-encryption.patch`. It adds two things: encrypted history (below), and optional
+[sign-in passes](#sign-in-passes-optional) for a web client. The first lets each bouncer user give soju an
 [age](https://age-encryption.org) public key. soju then stores the text of that user's messages
 encrypted, so the database on the server can't be read without the user's private key. The private
 key stays in IRChatterbox (server settings → Bouncer → History decryption key).
@@ -46,6 +47,20 @@ On the hosted IRChatterbox bouncer, the account page does this for you.
 Changing the key leaves older history encrypted with the old key. Keep the old private key on its
 own line in IRChatterbox and both keep working. Removing the key stores new history readable;
 what's already encrypted stays encrypted.
+
+## Sign-in passes (optional)
+
+For a web client that signs people in with a website account instead of their bouncer password.
+The website signs a short-lived pass for a bouncer user with a secret it shares with soju; the web
+client sends the pass as the password (SASL PLAIN or PASS). Turn it on with:
+
+    irchatterbox-web-secret <at least 32 characters, e.g. from: openssl rand -hex 32>
+
+A pass is `icb1.<base64url(username)>.<expiry, unix seconds>.<base64url(HMAC-SHA256(secret,
+"icb1|<username>|<expiry>"))>`. soju accepts it for that user until it expires, and never for more
+than 24 hours ahead. Anything that isn't a valid pass is checked as a normal password, so existing
+clients work as before. Without the directive, nothing changes. Keep the secret private: anyone
+with it can sign in as any user.
 
 ## Build
 
