@@ -631,6 +631,9 @@ body.mobile #menu .mi.chk::before { left: 14px; width: 16px; height: 16px; margi
 body.mobile #menu .mi.chk.on::after { left: 19.5px; width: 5px; height: 9px; margin-top: -7px; }
 body.mobile #toast { top: auto; bottom: 84px; max-width: calc(100vw - 32px); }
 body.mobile #overlay { place-items: end center; }
+/* the image viewer: centred, and the page doesn't scroll or zoom under your fingers */
+#overlay.lb, body.mobile #overlay.lb { place-items: center; touch-action: none; overflow: hidden; background: rgba(0,0,0,.88); }
+#overlay.lb .lightbox { transform-origin: center; will-change: transform; user-select: none; -webkit-user-drag: none; }
 body.mobile .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
 body.mobile .modal.sm { height: auto; max-height: 92dvh; border-radius: 16px 16px 0 0; }
 body.mobile .modal.settings { width: 100vw; height: 100dvh; max-height: 100dvh; }

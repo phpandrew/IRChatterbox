@@ -1978,14 +1978,115 @@ function insertMention(nick) {
   autosize();
 }
 
+// Image viewer: centred; pinch or scroll-wheel to zoom, drag to move around a zoomed image,
+// double-tap (or double-click) to zoom in on a spot or back out. A tap closes it when it isn't
+// zoomed in.
 function lightbox(src) {
   const ov = $("overlay");
-  ov.innerHTML = `<img class="lightbox" src="${esc(src)}" referrerpolicy="no-referrer">`;
+  ov.innerHTML = `<img class="lightbox" src="${esc(src)}" referrerpolicy="no-referrer" draggable="false">`;
+  ov.classList.add("lb");
   ov.classList.remove("hidden");
-  ov.onclick = () => closeOverlay();
+  ov.onclick = null;
+  const img = ov.firstElementChild;
+  const MAX = 8;
+  let sc = 1, tx = 0, ty = 0;
+  const pts = new Map(); // pointerId → {x, y}
+  let g = null;          // the gesture in progress
+  let moved = false, lastTap = 0, closeTimer = 0;
+
+  const centre = () => { const r = img.getBoundingClientRect(); return { x: r.left + r.width / 2 - tx, y: r.top + r.height / 2 - ty }; };
+  const clamp = () => {
+    sc = Math.min(MAX, Math.max(1, sc));
+    const mx = Math.max(0, (img.offsetWidth * sc - innerWidth) / 2), my = Math.max(0, (img.offsetHeight * sc - innerHeight) / 2);
+    tx = Math.min(mx, Math.max(-mx, tx));
+    ty = Math.min(my, Math.max(-my, ty));
+    if (sc === 1) tx = ty = 0;
+  };
+  const paint = (anim) => {
+    img.style.transition = anim ? "transform .2s ease" : "none";
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${sc})`;
+    img.style.cursor = sc > 1 ? "grab" : "zoom-out";
+  };
+  // zoom to scale s keeping viewport point (px, py) where it is
+  const zoomAt = (s, px, py, anim) => {
+    const c = centre();
+    const k = s / sc;
+    tx = px - c.x - (px - c.x - tx) * k;
+    ty = py - c.y - (py - c.y - ty) * k;
+    sc = s;
+    clamp();
+    paint(anim);
+  };
+  const begin = () => {
+    const p = [...pts.values()];
+    if (p.length >= 2) {
+      const [a, b] = p;
+      g = { pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: sc, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, tx, ty, c: centre() };
+    } else if (p.length === 1) {
+      g = { pinch: false, x: p[0].x, y: p[0].y, tx, ty };
+    } else g = null;
+  };
+
+  ov.onpointerdown = (e) => {
+    ov.setPointerCapture?.(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) moved = false;
+    begin();
+  };
+  ov.onpointermove = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (Math.abs(e.clientX - prev.x) + Math.abs(e.clientY - prev.y) > 0) {
+      if (!g) return;
+      if (g.pinch) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const s = Math.min(MAX, Math.max(1, (g.s * d) / g.d));
+        // the point between the fingers stays under them, and moving both fingers pans
+        tx = mx - g.c.x - ((g.mx - g.c.x - g.tx) * s) / g.s;
+        ty = my - g.c.y - ((g.my - g.c.y - g.ty) * s) / g.s;
+        sc = s;
+        moved = true;
+      } else {
+        const dx = e.clientX - g.x, dy = e.clientY - g.y;
+        if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+        if (sc > 1) { tx = g.tx + dx; ty = g.ty + dy; }
+      }
+      clamp();
+      paint(false);
+    }
+  };
+  const up = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size) { begin(); return; } // one finger lifted from a pinch: carry on panning
+    g = null;
+    if (moved) return;
+    // a tap: two quickly = zoom in on that spot / back out; one = close (when not zoomed)
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      clearTimeout(closeTimer);
+      lastTap = 0;
+      if (sc > 1) { sc = 1; tx = ty = 0; paint(true); } else zoomAt(2.5, e.clientX, e.clientY, true);
+      return;
+    }
+    lastTap = now;
+    if (sc === 1) closeTimer = setTimeout(() => { if (!ov.classList.contains("hidden") && ov.contains(img)) closeOverlay(); }, 300);
+  };
+  ov.onpointerup = up;
+  ov.onpointercancel = up;
+  ov.onwheel = (e) => {
+    e.preventDefault();
+    zoomAt(Math.min(MAX, Math.max(1, sc * Math.exp(-e.deltaY * 0.0015))), e.clientX, e.clientY, false);
+  };
+  paint(false);
 }
 export function closeOverlay() {
   const ov = $("overlay");
+  ov.classList.remove("lb");
+  ov.onpointerdown = ov.onpointermove = ov.onpointerup = ov.onpointercancel = ov.onwheel = null;
   ov.classList.add("hidden");
   ov.innerHTML = "";
   ov.onclick = null;
