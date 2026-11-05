@@ -88,6 +88,18 @@ func TestHostileServerSequences(t *testing.T) {
 		{":bob!b@h NICK :", ":bob!b@h NICK me", ":me!u@h NICK :", ":me!u@h QUIT", ":srv KICK #c", ":srv KICK #c me"},
 		{":bob!b@h PRIVMSG me :\x01DCC SEND file 4294967295 65536 -1\x01", ":bob!b@h PRIVMSG me :\x01DCC SEND ../../../evil.exe 2130706433 0 10 5\x01",
 			":bob!b@h PRIVMSG me :\x01DCC RESUME ../evil 0 99999999999\x01", ":bob!b@h PRIVMSG me :\x01DCC ACCEPT a b c\x01"},
+		// WeeChat WSA-2026-21: empty PREFIX, drop before 001, then a nick prefix is used
+		{":srv 005 me PREFIX= :x", ":srv 005 me PREFIX=() :x", ":srv ERROR :bye", ":srv 005 me PREFIX=(ov)@+ :x", ":srv 353 me = #c :@me +bob", ":srv MODE #c +o bob", ":srv MODE #c -v+o bob me"},
+		// WeeChat WSA-2026-13: a batch where one message ends the connection, then the rest of the batch
+		{":srv BATCH +b chathistory #c", "@batch=b :bob!b@h PRIVMSG #c :1", "@batch=b :srv ERROR :Closing link", "@batch=b :bob!b@h PRIVMSG #c :2", "@batch=b :me!u@h QUIT :x", ":srv BATCH -b", "@batch=b :bob!b@h PRIVMSG #c :3"},
+		// WeeChat WSA-2026-15 / Halloy CVE-2026-32733: traversal with the other platform's separator, quotes, device names
+		{":bob!b@h PRIVMSG me :\x01DCC SEND ..\\..\\evil.exe 2130706433 0 10 7\x01", ":bob!b@h PRIVMSG me :\x01DCC SEND \"..\\..\\x y\" 2130706433 0 10 8\x01",
+			":bob!b@h PRIVMSG me :\x01DCC SEND CON 2130706433 0 10 9\x01", ":bob!b@h PRIVMSG me :\x01DCC SEND . 2130706433 0 10 10\x01", ":bob!b@h PRIVMSG me :\x01DCC SEND \u202egnp.exe 2130706433 0 10 11\x01"},
+		// irssi CVE-2018-7053 / CVE-2019-15717: SASL out of order, duplicate CAP
+		{"AUTHENTICATE +", ":srv 903 me :ok", ":srv CAP * ACK :sasl", ":srv CAP * ACK :sasl", ":srv 900 me me!u@h me :ok", "AUTHENTICATE +", ":srv 904 me :no", ":srv 908 me PLAIN :x", "AUTHENTICATE " + strings.Repeat("A", 400)},
+		// irssi CVE-2018-5206 / CVE-2017-10965 / WeeChat WSA-2025-4: topic with no sender, bad or huge time tags
+		{"TOPIC #c :no sender", ":srv 332 me #c", ":srv 333 me #c", ":srv 333 me #c bob 99999999999999999999", "@time=" + strings.Repeat("9", 300) + " :bob!b@h PRIVMSG #c :x",
+			"@time=T12:00 :bob!b@h PRIVMSG #c :x", "@time=2026-13-45T99:99:99.999999999999999Z :bob!b@h PRIVMSG #c :x", "@msgid=" + strings.Repeat("x", 9000) + " :bob!b@h PRIVMSG #c :x"},
 	}
 	for _, s := range seqs {
 		c := hostileConn(t)

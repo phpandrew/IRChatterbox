@@ -26,6 +26,10 @@ func download(url, dest string, size int64, progress func(done, total int64)) (s
 	if resp.ContentLength > 0 {
 		size = resp.ContentLength
 	}
+	if size <= 0 || size > 512<<20 {
+		return "", fmt.Errorf("unexpected download size (%d bytes)", size)
+	}
+	resp.Body = io.NopCloser(io.LimitReader(resp.Body, size+1))
 	f, err := os.Create(dest)
 	if err != nil {
 		return "", err
@@ -43,6 +47,9 @@ func download(url, dest string, size int64, progress func(done, total int64)) (s
 			}
 			h.Write(buf[:n])
 			done += int64(n)
+			if done > size {
+				return "", fmt.Errorf("the download is larger than announced")
+			}
 			if time.Since(last) > 150*time.Millisecond {
 				progress(done, size)
 				last = time.Now()

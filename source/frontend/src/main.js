@@ -981,8 +981,11 @@ function applyReact(b, ev) {
     r.nicks = r.nicks.filter((n) => n.toLowerCase() !== lw);
     if (!r.nicks.length) list.splice(list.indexOf(r), 1);
   } else {
-    if (!r) list.push((r = { e: ev.text, nicks: [] }));
-    if (!r.nicks.some((n) => n.toLowerCase() === lw)) r.nicks.push(who);
+    if (!r) {
+      if (list.length >= 40 || ev.text.length > 32) return line; // a flooder can't pile hundreds onto one line
+      list.push((r = { e: ev.text, nicks: [] }));
+    }
+    if (!r.nicks.some((n) => n.toLowerCase() === lw) && r.nicks.length < 200) r.nicks.push(who);
   }
   return line;
 }
@@ -1107,7 +1110,7 @@ function lineEl(srv, b, line, prev) {
     msg = ircToHtml(line.text, ctx);
   } else {
     const pfx = line.prefix ? `<span class="pfx">${esc(line.prefix)}</span>` : "";
-    who = line.kind === "action" ? "*" : `${pfx}${esc(line.nick)}`;
+    who = line.kind === "action" ? "*" : S.cfg.settings.nickBrackets ? `&lt;${pfx}${esc(line.nick)}&gt;` : `${pfx}${esc(line.nick)}`;
     msg = line.kind === "action" ? `<span class="nickref" style="color:${nickColor(line.nick)}">${esc(line.nick)}</span> ${ircToHtml(line.text, ctx)}` : ircToHtml(line.text, ctx);
   }
   const whoStyle = !isEv && line.type !== "info" && line.kind !== "action" ? ` style="color:${nickColor(line.nick)}"` : "";
@@ -1503,7 +1506,7 @@ function loadInline(img) {
   try { p = Go.GetThumbnail?.(src); } catch { p = null; }
   if (!p || typeof p.then !== "function") { show(""); return; } // no shrinking here (web client)
   p.then((u) => {
-    u = typeof u === "string" && u.startsWith("data:image/") ? u : "";
+    u = typeof u === "string" && /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]+=*$/.test(u) ? u : "";
     thumbCache.set(src, u);
     if (thumbCache.size > 300) thumbCache.delete(thumbCache.keys().next().value);
     show(u);
@@ -2689,23 +2692,30 @@ input.addEventListener("paste", (e) => {
   uploadFiles(files);
 });
 
-// dropping image files anywhere in the chat or message box uploads them; anything else
-// dropped from outside is ignored rather than opened in the window
+// dropping image files anywhere in the chat or message box uploads them. Anything else
+// dropped from outside (a link dragged out of the chat, a page from a browser) is swallowed,
+// because the webview's default for a dropped link is to leave the app and load it.
 const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+const isTextBox = (el) => !!el.closest?.("textarea, input, [contenteditable]");
 document.addEventListener("dragover", (e) => {
-  if (!isFileDrag(e)) return;
-  e.preventDefault();
-  const ok = !!e.target.closest?.("#chatWrap, #composer");
-  e.dataTransfer.dropEffect = ok ? "copy" : "none";
-  $("composer").classList.toggle("file-drop", ok);
+  if (isFileDrag(e)) {
+    e.preventDefault();
+    const ok = !!e.target.closest?.("#chatWrap, #composer");
+    e.dataTransfer.dropEffect = ok ? "copy" : "none";
+    $("composer").classList.toggle("file-drop", ok);
+  } else if (!isTextBox(e.target)) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "none";
+  }
 });
 document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) $("composer").classList.remove("file-drop"); });
 document.addEventListener("drop", (e) => {
-  if (!isFileDrag(e)) return;
+  if (!isFileDrag(e)) { if (!isTextBox(e.target)) e.preventDefault(); return; }
   e.preventDefault();
   $("composer").classList.remove("file-drop");
   if (e.target.closest?.("#chatWrap, #composer")) uploadFiles(e.dataTransfer.files);
 });
+
 
 function send() {
   const text = input.value;

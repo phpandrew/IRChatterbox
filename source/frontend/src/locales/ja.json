@@ -842,5 +842,6 @@
 "Deleting…": "削除中…",
 "Image deleted": "画像を削除しました",
 "Delete": "削除",
-"Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "アップロードした画像の一覧を消去しますか？画像はホストに残り、ここから削除できなくなります。"
+"Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "アップロードした画像の一覧を消去しますか？画像はホストに残り、ここから削除できなくなります。",
+"Show nicks in angle brackets, like <nick>": "ニックネームを <nick> のように山括弧で囲んで表示"
 }

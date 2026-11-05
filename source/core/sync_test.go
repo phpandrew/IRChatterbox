@@ -324,3 +324,48 @@ func TestSyncServerAddress(t *testing.T) {
 		}
 	}
 }
+
+// A device that holds the account and the code (say, a stolen phone) must not be able to push
+// settings outside the synced lists: folders, the upload server, the !music file, and so on.
+func TestSyncIgnoresFieldsOutsideTheLists(t *testing.T) {
+	fake, api := newFakeSyncServer(t)
+	a := newBackupApp(t)
+	a.store.Update(func(c *Config) {
+		c.Settings.UploadHost, c.Settings.UploadURL, c.Settings.DCCFolder, c.Settings.FontSize = "irchatterbox", "", "", 14
+		c.Plugins.Music.File, c.Plugins.Music.Enabled, c.Plugins.BotPrefix, c.Plugins.ScriptsEnabled = "", false, "[Bot] ", false
+	})
+	syncSignIn(t, a, api, "andrew@example.com")
+	start := a.SyncStart(cleanCats(nil))
+	if start.Error != "" {
+		t.Fatal(start.Error)
+	}
+	now := time.Now().UnixMilli() + 5000
+	hostile := syncPayload{Format: 1, Device: syncDevice{ID: "evil", Name: "phone"}, Written: now, Items: map[string]syncItem{
+		"chat/set/uploadHost":        {V: mustJSON("custom"), T: now, D: "evil"},
+		"chat/set/uploadURL":         {V: mustJSON("https://evil.example/up"), T: now, D: "evil"},
+		"chat/set/dccFolder":         {V: mustJSON(`C:\Users\x\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`), T: now, D: "evil"},
+		"appearance/set/fontSize":    {V: mustJSON(22), T: now, D: "evil"}, // a listed field: this one applies
+		"plugins/set/music":          {V: mustJSON(map[string]any{"enabled": true, "trigger": "!music", "source": "file", "file": "/etc/passwd", "format": "{raw}"}), T: now, D: "evil"},
+		"plugins/set/botPrefix":      {V: mustJSON("[Evil] "), T: now, D: "evil"}, // listed: applies
+		"plugins/set/scriptsEnabled": {V: mustJSON(true), T: now, D: "evil"},
+	}}
+	sealed, err := sealSync(mustJSON(hostile), start.Code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	fake.version++
+	fake.files["andrew@example.com"]["evil"] = fakeSyncFile{data: sealed, version: fake.version}
+	fake.mu.Unlock()
+	a.SyncNow()
+	c := a.store.Get()
+	if c.Settings.UploadHost != "irchatterbox" || c.Settings.UploadURL != "" || c.Settings.DCCFolder != "" {
+		t.Fatalf("unlisted settings were applied: %+v", c.Settings)
+	}
+	if c.Plugins.Music.File != "" || c.Plugins.Music.Enabled || c.Plugins.ScriptsEnabled {
+		t.Fatalf("unlisted plugin settings were applied: %+v", c.Plugins)
+	}
+	if c.Settings.FontSize != 22 || c.Plugins.BotPrefix != "[Evil] " {
+		t.Fatalf("listed settings were not applied: fontSize %v prefix %q", c.Settings.FontSize, c.Plugins.BotPrefix)
+	}
+}

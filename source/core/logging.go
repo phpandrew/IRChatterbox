@@ -182,16 +182,28 @@ func (a *App) TrimAllLogs() {
 		a.logLines = map[string]int{}
 		a.logOpened = map[string]bool{}
 	}
+	// Only this app's own files: <root>/<server folder>/<buffer>.ext, for servers in the config.
+	// The text-log folder can be anywhere the user picked, so nothing else under it is touched.
+	servers := map[string]bool{}
+	for _, sv := range a.store.Get().Servers {
+		servers[safeName(sv.ID)] = true
+	}
 	for _, root := range []string{filepath.Join(a.store.dir, "logs"), a.textLogDir()} {
-		filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !(strings.HasSuffix(p, ".jsonl") || strings.HasSuffix(p, ".txt")) {
-				return nil
+		for dir := range servers {
+			entries, err := os.ReadDir(filepath.Join(root, dir))
+			if err != nil {
+				continue
 			}
-			if n := countLines(p); n > max {
-				a.logLines[p] = trimFile(p, max)
+			for _, e := range entries {
+				p := filepath.Join(root, dir, e.Name())
+				if e.IsDir() || !(strings.HasSuffix(p, ".jsonl") || strings.HasSuffix(p, ".txt")) {
+					continue
+				}
+				if n := countLines(p); n > max {
+					a.logLines[p] = trimFile(p, max)
+				}
 			}
-			return nil
-		})
+		}
 	}
 }
 

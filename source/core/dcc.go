@@ -129,7 +129,9 @@ func cleanFileName(name string) string {
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = name[strings.LastIndexByte(name, '/')+1:]
 	name = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || strings.ContainsRune(`<>:"|?*`, r) {
+		// control characters, Windows-forbidden characters, and invisible format characters such as
+		// the right-to-left override that makes "evil\u202egnp.exe" look like "evilexe.png"
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || strings.ContainsRune(`<>:"|?*`, r) {
 			return '_'
 		}
 		return r
@@ -149,6 +151,40 @@ func cleanFileName(name string) string {
 		name = name[:180-len(ext)] + ext
 	}
 	return name
+}
+
+const maxDCCFileSize = 8 << 30 // 8 GB
+
+// riskyFile: executable or script by extension, looking past wrapper suffixes browsers and
+// updaters add ("setup.exe.part", "x.exe.new"), so those read as risky too.
+func riskyFile(name string) bool {
+	low := strings.ToLower(name)
+	for i := 0; i < 3; i++ {
+		ext := filepath.Ext(low)
+		if riskyExt[ext] {
+			return true
+		}
+		switch ext {
+		case ".new", ".part", ".tmp", ".download", ".crdownload", ".bak", ".old", ".orig":
+			low = strings.TrimSuffix(low, ext)
+			continue
+		}
+		return false
+	}
+	return false
+}
+
+// namesOurExe: the file would sit next to the app under the app's own name (IRChatterbox.exe,
+// IRChatterbox.exe.new, irchatterbox.exe.old…), which the launcher treats as a build to run.
+func namesOurExe(name string) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(exe))
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	low := strings.ToLower(name)
+	return strings.HasPrefix(low, base) || low == stem || strings.HasPrefix(low, stem+".")
 }
 
 var riskyExt = map[string]bool{
@@ -180,7 +216,15 @@ func (c *Conn) onDCC(nick, prefix, arg string) {
 		if len(args) > 5 {
 			it.token = args[5]
 		}
-		it.Risky = riskyExt[strings.ToLower(filepath.Ext(it.File))]
+		if it.Size <= 0 || it.Size > maxDCCFileSize {
+			return // an unknown or absurd size could fill the disk
+		}
+		if namesOurExe(it.File) {
+			// IRChatterbox.exe.new next to the app is picked up as an update: never save one
+			c.info(nick, "error", nick+" offered a file named like the IRChatterbox program itself. It was refused.")
+			return
+		}
+		it.Risky = riskyFile(it.File)
 	case "CHAT":
 		it.Kind = "chat"
 		it.ip = parseDCCIP(args[2])
@@ -433,7 +477,7 @@ func (a *App) dccDownload(ctx context.Context, it *dccItem, conn net.Conn) {
 	var got int64
 	var ack [4]byte
 	lastUI := time.Now()
-	for it.Size == 0 || got < it.Size {
+	for got < it.Size {
 		conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
 		n, rerr := conn.Read(buf)
 		if n > 0 {
@@ -877,6 +921,10 @@ func (a *App) dccCommand(c *Conn, buffer, args string, fromScript bool) {
 			c.info(buffer, "error", err)
 		}
 	case "get", "accept":
+		if fromScript {
+			c.info(buffer, "error", "Scripts can't accept DCC offers: accept them yourself.")
+			return
+		}
 		if id := a.dccFind(c, nick, "offer"); id != "" {
 			if err := a.DCCAccept(id); err != "" {
 				c.info(buffer, "error", err)

@@ -11,7 +11,7 @@ const web = () => document.body.classList.contains("web");
 
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
-import { esc, nickColor, iconLetters } from "./format.js";
+import { esc, nickColor, iconLetters, safeColor } from "./format.js";
 import { LANGUAGES, setLanguage, t } from "./i18n.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
@@ -159,7 +159,7 @@ export function openColorPicker(nick, current, onPick) {
   open(`<div class="modal-head">Colour for <span style="margin-left:6px;color:${nickColor(nick)}" id="cpName">${esc(nick)}</span></div>
     <div class="modal-body">
       <div class="chips" style="margin-bottom:12px">${preset.map((c) => `<button class="swatch" data-c="${c}" style="width:28px;height:28px;border-radius:7px;background:${c}"></button>`).join("")}</div>
-      <div class="tv"><input type="color" id="cpColor" value="${current || "#4cc2ff"}"><input type="text" id="cpHex" value="${esc(current || "")}" placeholder="#rrggbb"><span class="muted">Same as <code>/color ${esc(nick)} #hex</code></span></div>
+      <div class="tv"><input type="color" id="cpColor" value="${safeColor(current) || "#4cc2ff"}"><input type="text" id="cpHex" value="${esc(current || "")}" placeholder="#rrggbb"><span class="muted">Same as <code>/color ${esc(nick)} #hex</code></span></div>
     </div>
     <div class="modal-foot"><button class="btn left" id="cpReset">Reset to automatic</button><button class="btn" id="cpCancel">Cancel</button><button class="btn primary" id="cpOk">Save</button></div>`, "sm");
   const set = (c) => { $("cpColor").value = c; $("cpHex").value = c; $("cpName").style.color = c; };
@@ -638,6 +638,7 @@ export function openSettings(startTab) {
       ${check("gJoins", set.showJoinsParts !== false, "Show joins, parts and quits")}
       ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
       ${check("gCompact", set.compactMode, "Compact line spacing")}
+      ${check("gBrackets", set.nickBrackets, "Show nicks in angle brackets, like <nick>")}
       ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +
       card("History & logging", "Manage how much chat history is kept and whether to save it to files.", `
       ${check("gLog", set.logging, "Keep chat history between restarts")}
@@ -904,7 +905,7 @@ export function openSettings(startTab) {
       <div class="hint" style="margin-top:10px">Themes are saved as JSON in the themes folder — share them by copying the file.</div>`) + card("Nick colours", "Custom colours you've set. They apply to every variant of a nick (Andrew, Andrew|away…).", `
       ${check("aContrast", set.nickContrast !== false, "Keep custom colours readable in light and dark mode")}
       <div class="hint indent" style="margin-bottom:12px">If a colour is too close to the background — like black in dark mode — its lightness is flipped (black → white, navy → light blue). Your chosen colour is kept and used whenever it's readable.</div>
-      <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${c}"></span><span style="color:${nickColor(n)}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`);
+      <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${safeColor(c) || "transparent"}"></span><span style="color:${nickColor(n)}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`);
     const drawVars = () => {
       const t = getTheme($("tBase").value) || BUILTIN.Dark;
       if (!$("tName").value || $("tName").dataset.auto) {
@@ -913,8 +914,9 @@ export function openSettings(startTab) {
       }
       $("tVars").innerHTML = `<div class="tv"><span>Base</span><select id="tB"><option value="dark">Dark</option><option value="light" ${t.base === "light" ? "selected" : ""}>Light</option></select></div><div></div>` +
         THEME_VARS.map(([k, label]) => {
-          const v = t.vars[k] || (k === "unread" ? t.vars.text : "") || "#000000";
-          return `<div class="tv"><input type="color" data-k="${k}" value="${v.slice(0, 7)}"><input type="text" data-kt="${k}" value="${esc(v)}"><span>${label}</span></div>`;
+          const vars = t.vars && typeof t.vars === "object" ? t.vars : {};
+          const v = String(vars[k] || (k === "unread" ? vars.text : "") || "#000000");
+          return `<div class="tv"><input type="color" data-k="${k}" value="${safeColor(v.slice(0, 7)) || "#000000"}"><input type="text" data-kt="${k}" value="${esc(v)}"><span>${label}</span></div>`;
         }).join("");
       preview();
     };
@@ -1281,7 +1283,7 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");

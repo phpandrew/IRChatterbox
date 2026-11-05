@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ var syncCategories = []SyncCategory{
 // Settings fields synced per category. Anything not listed (folders, startup, tray,
 // updates, upload host, DCC, keep-alive…) belongs to one device and stays put.
 var syncSettingFields = map[string][]string{
-	"appearance":    {"theme", "lightTheme", "darkTheme", "fontSize", "fontFamily", "compactMode", "chatLayout", "timeFormat", "showSeconds", "markerLine", "nickContrast", "showUserList", "language"},
+	"appearance":    {"theme", "lightTheme", "darkTheme", "fontSize", "fontFamily", "compactMode", "nickBrackets", "chatLayout", "timeFormat", "showSeconds", "markerLine", "nickContrast", "showUserList", "language"},
 	"notifications": {"notifications", "notifyPMs", "notifyFriends", "flashOnPing", "soundHighlight", "soundPM", "soundVolume"},
 	"chat": {"inlineImages", "inlineYouTube", "inlineVideos", "linkPreviews", "showJoinsParts", "mentionPopup", "spellCheck", "sendTyping",
 		"pasteWarnLines", "confirmModeration", "kickReason", "quitMessage", "autoAway", "autoAwayMinutes", "autoAwayMessage", "confirmOnClose", "historyLines"},
@@ -994,7 +995,9 @@ func (a *App) applySyncItems(st *syncState, changed map[string]bool) {
 			cat := parts[0]
 			switch {
 			case len(parts) == 3 && parts[1] == "set" && cat != "plugins":
-				if it.Del || bytes.HasPrefix(it.V, []byte(`"file:`)) {
+				// only the fields this category is declared to carry: anything else (folders,
+				// upload server, proxy…) stays this device's own, whatever another device sends
+				if it.Del || bytes.HasPrefix(it.V, []byte(`"file:`)) || !slices.Contains(syncSettingFields[cat], parts[2]) {
 					continue
 				}
 				set[parts[2]] = it.V
@@ -1049,7 +1052,7 @@ func (a *App) applySyncItems(st *syncState, changed map[string]bool) {
 				}
 				c.Shortcuts = keep
 			case cat == "plugins" && len(parts) == 3 && parts[1] == "set":
-				if !it.Del {
+				if !it.Del && slices.Contains(syncPluginFields, parts[2]) {
 					plug[parts[2]] = it.V
 					plugChanged = true
 				}

@@ -38,10 +38,10 @@ const (
 	thumbMaxW      = 720
 	thumbMaxH      = 480
 	thumbMaxBytes  = 15 << 20   // biggest download we'll shrink
-	thumbMaxPixels = 40_000_000 // decompression-bomb guard
+	thumbMaxPixels = 16_000_000 // decompression-bomb guard: 64 MB of pixels at most per image
 	thumbCacheMax  = 200 << 20  // disk cache: trimmed back to 150 MB past this
 	thumbCacheKeep = 150 << 20
-	thumbParallel  = 4
+	thumbParallel  = 2 // at most two images decoding at once (each can need up to 64 MB)
 )
 
 var (
