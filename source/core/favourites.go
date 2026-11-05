@@ -33,7 +33,7 @@ func (a *App) SetFavourite(server, buffer string, on bool) {
 // SetFavouriteOrder saves the favourites in a new order (after dragging). Entries not in the
 // current list are ignored.
 func (a *App) SetFavouriteOrder(order []Favourite) {
-	a.store.Update(func(c *Config) {
+	a.store.UpdateQuiet(func(c *Config) { // the order isn't synced, only which channels are favourites
 		var out []Favourite
 		used := map[int]bool{}
 		for _, o := range order {

@@ -177,7 +177,7 @@ func (a *App) saveWindow() {
 	if a.store.Get().Window == ws {
 		return
 	}
-	a.store.Update(func(c *Config) { c.Window = ws })
+	a.store.UpdateQuiet(func(c *Config) { c.Window = ws }) // not synced
 }
 
 // ToggleFullscreen switches full-screen mode (F11).

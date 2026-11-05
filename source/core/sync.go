@@ -855,13 +855,32 @@ func (st *syncState) retireKey(key, localID string) {
 	}
 }
 
+// hasDuplicateServers: two entries for the same network (what mergeDuplicateServers fixes).
+func hasDuplicateServers(servers []ServerConfig) bool {
+	for i, s := range servers {
+		if s.Host == "" {
+			continue
+		}
+		for _, o := range servers[i+1:] {
+			if sameNetwork(o, s.Host, s.Port, s.BouncerNetwork) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // mergeDuplicateServers fixes copies an earlier version made when the same network was on two
 // devices before syncing: the copy from the other device (no password, never connected) goes,
 // its favourites and channel settings move to the one you set up here, and that one takes the
 // sync ID both devices agree on. Returns the servers to delete.
 func (a *App) mergeDuplicateServers(st *syncState) []string {
+	// nothing to merge is the usual case: don't save (or touch) the config for it
+	if !hasDuplicateServers(a.store.Get().Servers) {
+		return nil
+	}
 	var drop []string
-	a.store.Update(func(c *Config) {
+	a.store.UpdateQuiet(func(c *Config) {
 		used := map[int]bool{}
 		for i, s := range c.Servers {
 			if used[i] || s.Host == "" {
@@ -977,7 +996,8 @@ func (a *App) applySyncItems(st *syncState, changed map[string]bool) {
 	var dropThemes, dropServers []string
 	updatedServers := map[string]ServerConfig{}
 
-	a.store.Update(func(c *Config) {
+	// quiet: this round writes this device's file itself; a hook here would start another round
+	a.store.UpdateQuiet(func(c *Config) {
 		set := fieldsOf(c.Settings)
 		plug := fieldsOf(c.Plugins)
 		setChanged, plugChanged := false, false

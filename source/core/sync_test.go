@@ -369,3 +369,31 @@ func TestSyncIgnoresFieldsOutsideTheLists(t *testing.T) {
 		t.Fatalf("listed settings were not applied: fontSize %v prefix %q", c.Settings.FontSize, c.Plugins.BotPrefix)
 	}
 }
+
+// A sync round must not schedule another one by itself: with "Servers and channels" on, the
+// duplicate check used to save the config every round, which started the next round 3 s later,
+// forever (hundreds of requests an hour until the server answered 429). Saves of things that
+// aren't synced (window position, the channel shown at launch) mustn't start one either.
+func TestSyncDoesNotRetriggerItself(t *testing.T) {
+	_, api := newFakeSyncServer(t)
+	a := newBackupApp(t)
+	a.SaveServer(ServerConfig{Name: "Bouncer", Host: "chat.example", Port: 6697, TLS: true, Nick: "andrew", Bouncer: "soju", BouncerNetwork: "libera"})
+	syncSignIn(t, a, api, "andrew@example.com")
+	if r := a.SyncStart(map[string]bool{"servers": true, "appearance": true}); r.Error != "" {
+		t.Fatal(r.Error)
+	}
+	triggers := 0
+	a.store.setOnChange(func() { triggers++ })
+	mustCycle(t, a, a, a)
+	if triggers != 0 {
+		t.Fatalf("sync rounds with nothing to do triggered %d more", triggers)
+	}
+	a.SetStartView("x", "#chan")
+	if triggers != 0 {
+		t.Fatal("choosing the start channel triggered a sync")
+	}
+	a.SetNickColor("bob", "#ff8800")
+	if triggers != 1 {
+		t.Fatalf("a synced change triggered %d syncs, want 1", triggers)
+	}
+}

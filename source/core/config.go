@@ -417,6 +417,15 @@ func (s *Store) Update(fn func(c *Config)) error {
 	return err
 }
 
+// UpdateQuiet is Update without the change hook, for changes sync doesn't carry (window
+// position, the start channel) and for sync's own writes, which mustn't start another sync.
+func (s *Store) UpdateQuiet(fn func(c *Config)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fn(&s.cfg)
+	return s.saveLocked()
+}
+
 func (s *Store) Server(id string) (ServerConfig, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

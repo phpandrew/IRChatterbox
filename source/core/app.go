@@ -80,7 +80,7 @@ func (a *App) SetAutoJoin(server, channel string, on bool) {
 
 // SetStartView sets (or clears, with empty values) the channel shown at launch.
 func (a *App) SetStartView(server, buffer string) {
-	a.store.Update(func(c *Config) { c.StartView = StartBuffer{Server: server, Buffer: buffer} })
+	a.store.UpdateQuiet(func(c *Config) { c.StartView = StartBuffer{Server: server, Buffer: buffer} }) // not synced
 }
 
 // AutoConnect connects all servers marked auto-connect. Called by the UI once its
