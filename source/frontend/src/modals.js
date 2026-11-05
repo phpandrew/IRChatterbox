@@ -638,7 +638,8 @@ export function openSettings(startTab) {
       ${check("gJoins", set.showJoinsParts !== false, "Show joins, parts and quits")}
       ${check("gMarker", set.markerLine !== false, "Mark unread messages with a divider line")}
       ${check("gCompact", set.compactMode, "Compact line spacing")}
-      ${check("gBrackets", set.nickBrackets, "Show nicks in angle brackets, like <nick>")}
+      ${check("gBrackets", set.nickBrackets, "Show nicks in angle brackets, like &lt;nick&gt;")}
+      ${check("gModes", !set.hideNickModes, "Show status symbols before nicks (@ op, % half-op, + voice)")}
       ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +
       card("History & logging", "Manage how much chat history is kept and whether to save it to files.", `
       ${check("gLog", set.logging, "Keep chat history between restarts")}
@@ -1283,7 +1284,7 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.hideNickModes = !on("gModes"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");

@@ -83,7 +83,7 @@ var syncCategories = []SyncCategory{
 // Settings fields synced per category. Anything not listed (folders, startup, tray,
 // updates, upload host, DCC, keep-alive…) belongs to one device and stays put.
 var syncSettingFields = map[string][]string{
-	"appearance":    {"theme", "lightTheme", "darkTheme", "fontSize", "fontFamily", "compactMode", "nickBrackets", "chatLayout", "timeFormat", "showSeconds", "markerLine", "nickContrast", "showUserList", "language"},
+	"appearance":    {"theme", "lightTheme", "darkTheme", "fontSize", "fontFamily", "compactMode", "nickBrackets", "hideNickModes", "chatLayout", "timeFormat", "showSeconds", "markerLine", "nickContrast", "showUserList", "language"},
 	"notifications": {"notifications", "notifyPMs", "notifyFriends", "flashOnPing", "soundHighlight", "soundPM", "soundVolume"},
 	"chat": {"inlineImages", "inlineYouTube", "inlineVideos", "linkPreviews", "showJoinsParts", "mentionPopup", "spellCheck", "sendTyping",
 		"pasteWarnLines", "confirmModeration", "kickReason", "quitMessage", "autoAway", "autoAwayMinutes", "autoAwayMessage", "confirmOnClose", "historyLines"},

@@ -1109,7 +1109,7 @@ function lineEl(srv, b, line, prev) {
     who = line.kind === "error" ? "!" : line.kind === "motd" ? "MOTD" : "*";
     msg = ircToHtml(line.text, ctx);
   } else {
-    const pfx = line.prefix ? `<span class="pfx">${esc(line.prefix)}</span>` : "";
+    const pfx = line.prefix && !S.cfg.settings.hideNickModes ? `<span class="pfx">${esc(line.prefix)}</span>` : "";
     who = line.kind === "action" ? "*" : S.cfg.settings.nickBrackets ? `&lt;${pfx}${esc(line.nick)}&gt;` : `${pfx}${esc(line.nick)}`;
     msg = line.kind === "action" ? `<span class="nickref" style="color:${nickColor(line.nick)}">${esc(line.nick)}</span> ${ircToHtml(line.text, ctx)}` : ircToHtml(line.text, ctx);
   }

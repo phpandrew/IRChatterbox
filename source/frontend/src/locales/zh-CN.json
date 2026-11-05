@@ -843,5 +843,6 @@
 "Image deleted": "图片已删除",
 "Delete": "删除",
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "要清空已上传图片列表吗？图片仍保留在图床上，之后将无法在这里删除。",
-"Show nicks in angle brackets, like <nick>": "用尖括号显示昵称，如 <昵称>"
+"Show nicks in angle brackets, like <nick>": "用尖括号显示昵称，如 <昵称>",
+"Show status symbols before nicks (@ op, % half-op, + voice)": "在昵称前显示身份符号（@ 管理员，% 半管理员，+ 发言权）"
 }

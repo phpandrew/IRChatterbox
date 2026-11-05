@@ -843,5 +843,6 @@
 "Image deleted": "Immagine eliminata",
 "Delete": "Elimina",
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "Svuotare l'elenco delle immagini caricate? Le immagini restano sui servizi e non potrai più eliminarle da qui.",
-"Show nicks in angle brackets, like <nick>": "Mostra i nick tra parentesi angolari, come <nick>"
+"Show nicks in angle brackets, like <nick>": "Mostra i nick tra parentesi angolari, come <nick>",
+"Show status symbols before nicks (@ op, % half-op, + voice)": "Mostra i simboli di stato prima dei nick (@ op, % half-op, + voice)"
 }
