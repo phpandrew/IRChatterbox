@@ -845,5 +845,6 @@
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "Wyczyścić listę przesłanych obrazów? Obrazy zostaną w serwisach i nie będzie można ich stąd usunąć.",
 "Show nicks in angle brackets, like <nick>": "Pokazuj nicki w nawiasach ostrych, jak <nick>",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "Pokazuj symbole statusu przed nickami (@ op, % half-op, + voice)",
-"Colour other people's nicks when they're named in a message": "Koloruj nicki innych osób, gdy ktoś wymieni je w wiadomości"
+"Colour other people's nicks when they're named in a message": "Koloruj nicki innych osób, gdy ktoś wymieni je w wiadomości",
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Każdy członek kanału wymieniony w wiadomości jest pokazany w kolorze swojego nicka i można go kliknąć jak nick."
 }

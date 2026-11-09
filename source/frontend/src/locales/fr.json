@@ -845,5 +845,6 @@
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "Vider la liste des images envoyées ? Les images restent chez leur hébergeur, et vous ne pourrez plus les supprimer d'ici.",
 "Show nicks in angle brackets, like <nick>": "Afficher les pseudos entre chevrons, comme <pseudo>",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "Afficher les symboles de statut devant les pseudos (@ op, % demi-op, + voix)",
-"Colour other people's nicks when they're named in a message": "Colorer les pseudos des autres quand ils sont cités dans un message"
+"Colour other people's nicks when they're named in a message": "Colorer les pseudos des autres quand ils sont cités dans un message",
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Tout membre du salon cité dans un message apparaît dans sa couleur de pseudo et se clique comme un pseudo."
 }

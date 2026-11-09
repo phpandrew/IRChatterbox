@@ -640,7 +640,6 @@ export function openSettings(startTab) {
       ${check("gCompact", set.compactMode, "Compact line spacing")}
       ${check("gBrackets", set.nickBrackets, "Show nicks in angle brackets, like &lt;nick&gt;")}
       ${check("gModes", !set.hideNickModes, "Show status symbols before nicks (@ op, % half-op, + voice)")}
-      ${check("gColorMentions", set.colorMentions, "Colour other people's nicks when they're named in a message")}
       ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +
       card("History & logging", "Manage how much chat history is kept and whether to save it to files.", `
       ${check("gLog", set.logging, "Keep chat history between restarts")}
@@ -907,6 +906,8 @@ export function openSettings(startTab) {
       <div class="hint" style="margin-top:10px">Themes are saved as JSON in the themes folder — share them by copying the file.</div>`) + card("Nick colours", "Custom colours you've set. They apply to every variant of a nick (Andrew, Andrew|away…).", `
       ${check("aContrast", set.nickContrast !== false, "Keep custom colours readable in light and dark mode")}
       <div class="hint indent" style="margin-bottom:12px">If a colour is too close to the background — like black in dark mode — its lightness is flipped (black → white, navy → light blue). Your chosen colour is kept and used whenever it's readable.</div>
+      ${check("aColorMentions", set.colorMentions, "Colour other people's nicks when they're named in a message")}
+      <div class="hint indent" style="margin-bottom:12px">Any channel member named in a message shows in their nick colour and can be clicked like a nick.</div>
       <div class="chips" id="ncList">${Object.entries(S.cfg.nickColors || {}).map(([n, c]) => `<span class="chip"><span class="swatch" style="background:${safeColor(c) || "transparent"}"></span><span style="color:${nickColor(n)}">${esc(n)}</span><button data-nc="${esc(n)}">✕</button></span>`).join("") || `<span class="muted">No custom nick colours yet. Use <code>/color nick #hex</code> or right-click a nick.</span>`}</div>`);
     const drawVars = () => {
       const t = getTheme($("tBase").value) || BUILTIN.Dark;
@@ -1285,7 +1286,7 @@ export function openSettings(startTab) {
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.hideNickModes = !on("gModes"); set.colorMentions = on("gColorMentions"); set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.hideNickModes = !on("gModes"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");
@@ -1303,7 +1304,7 @@ export function openSettings(startTab) {
     }
     if (has("aLang")) set.language = $("aLang").value;
     if (has("aLayout")) set.chatLayout = $("aLayout").value;
-    if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; set.nickContrast = on("aContrast"); }
+    if (has("aMode")) { set.theme = $("aMode").value; set.lightTheme = $("aLight").value; set.darkTheme = $("aDark").value; set.nickContrast = on("aContrast"); set.colorMentions = on("aColorMentions"); }
     if (has("hWords")) {
       set.highlightWords = lines("hWords"); set.notifications = on("hNotify"); set.notifyPMs = on("hPm"); set.ignore = lines("hIgnore"); set.filterWords = lines("hFilter");
       set.soundHighlight = readSound("sndHl"); set.soundPM = readSound("sndPm"); set.soundVolume = +$("sndVol").value;

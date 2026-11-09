@@ -845,5 +845,6 @@
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "アップロードした画像の一覧を消去しますか？画像はホストに残り、ここから削除できなくなります。",
 "Show nicks in angle brackets, like <nick>": "ニックネームを <nick> のように山括弧で囲んで表示",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "ニックネームの前にステータス記号を表示（@ オペレーター、% ハーフオペ、+ ボイス）",
-"Colour other people's nicks when they're named in a message": "メッセージ内で他の人のニックネームが挙がったとき、その人の色で表示"
+"Colour other people's nicks when they're named in a message": "メッセージ内で他の人のニックネームが挙がったとき、その人の色で表示",
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "メッセージ内で名前が挙がったチャンネルの参加者はその人のニック色で表示され、ニックと同じようにクリックできます。"
 }
