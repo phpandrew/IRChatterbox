@@ -14,6 +14,7 @@ var (
 	procFindWindowW        = user32.NewProc("FindWindowW")
 	procGetWindowPlacement = user32.NewProc("GetWindowPlacement")
 	procSetWindowPlacement = user32.NewProc("SetWindowPlacement")
+	procShowWindow         = user32.NewProc("ShowWindow")
 )
 
 type winPoint struct{ X, Y int32 }
@@ -55,6 +56,24 @@ func captureWindow() (WindowState, bool) {
 		X: int(r.Left), Y: int(r.Top), Width: int(r.Right - r.Left), Height: int(r.Bottom - r.Top),
 		Maximized: wp.ShowCmd == swShowMaximized, Saved: true,
 	}, true
+}
+
+// afterUnfullscreen fixes the window after leaving full screen. Windows works out a maximised
+// window's size while the borderless full-screen style is still on, so a window that was
+// maximised before F11 comes back covering the taskbar; maximising it again with the normal
+// frame puts it back in the work area.
+func afterUnfullscreen() {
+	h := mainHWND()
+	if h == 0 {
+		return
+	}
+	var wp windowPlacement
+	wp.Length = uint32(unsafe.Sizeof(wp))
+	if r, _, _ := procGetWindowPlacement.Call(h, uintptr(unsafe.Pointer(&wp))); r == 0 || wp.ShowCmd != swShowMaximized {
+		return
+	}
+	procShowWindow.Call(h, swShowNormal)
+	procShowWindow.Call(h, swShowMaximized)
 }
 
 // restoreWindow puts the window back where it was. Windows moves it onto a visible

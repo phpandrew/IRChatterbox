@@ -1,5 +1,5 @@
 import { Go, on, initApi, setTitle } from "./api.js";
-import { esc, ircToHtml, nickColor, iconLetters, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, stripCodes, isLocalHost } from "./format.js";
+import { esc, ircToHtml, nickColor, iconLetters, baseNick, setNickOverrides, setNickContrast, findUrls, mediaFor, mentionRegex, nickListRegex, stripCodes, isLocalHost } from "./format.js";
 import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange, systemIsDark } from "./themes.js";
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
@@ -949,9 +949,20 @@ function dayLabel(t) {
   return same(d, now) ? `Today · ${date}` : same(d, y) ? `Yesterday · ${date}` : d.toLocaleDateString(undefined, { weekday: "long" }) + " · " + date;
 }
 
-function ctxFor(srv) {
+function ctxFor(srv, b) {
   const words = [srv.nick, ...(S.cfg.settings.highlightWords || [])];
-  return { mentionRe: mentionRegex(words) };
+  return { mentionRe: mentionRegex(words), nickRe: b ? channelNickRe(srv, b) : null };
+}
+// channelNickRe: the regex for "colour nicks named in messages", rebuilt only when the user list changes.
+const nickReCache = new WeakMap();
+function channelNickRe(srv, b) {
+  if (!S.cfg.settings.colorMentions || b.type !== "channel" || !b.users?.length) return null;
+  const key = b.users.length + ":" + (srv.nick || "") + ":" + b.users.map((u) => u.nick).join("\n");
+  const c = nickReCache.get(b);
+  if (c && c.key === key) return c.re;
+  const re = nickListRegex(b.users.map((u) => u.nick), srv.nick);
+  nickReCache.set(b, { key, re });
+  return re;
 }
 
 const EV_SYMBOL = { join: "→", part: "←", quit: "←", kick: "✕", nick: "•", mode: "•", topic: "•" };
@@ -1089,7 +1100,7 @@ function lineEl(srv, b, line, prev) {
   el.className = "line " + [line.kind, isEv ? "ev" : "", isEv && !line.self && JOIN_KINDS.includes(line.kind) && !showJoins(srv, b) ? "jp-off" : "", line.type === "info" ? "info" : "", line.self ? "self" : "", line.hl ? "hl" : "", line.faded ? "history" : "",
     stackedLayout() && continues(prev === undefined ? prevLine(b, line) : prev, line) ? "cont" : ""].join(" ");
   let who = "", msg = "";
-  const ctx = ctxFor(srv);
+  const ctx = ctxFor(srv, b);
   const nickSpan = (n) => `<span class="nickref" style="color:${nickColor(n)}">${esc(n)}</span>`;
   if (isEv) {
     who = EV_SYMBOL[line.kind] || "•";

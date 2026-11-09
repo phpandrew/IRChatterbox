@@ -146,6 +146,7 @@ type Settings struct {
 	CompactMode      bool     `json:"compactMode"`
 	NickBrackets     bool     `json:"nickBrackets,omitempty"`  // show nicks as <nick>, like HexChat and mIRC
 	HideNickModes    bool     `json:"hideNickModes,omitempty"` // leave out the @ % + status symbols before nicks in chat
+	ColorMentions    bool     `json:"colorMentions,omitempty"` // other people's nicks named in a message take their nick colour
 	ChatLayout       string   `json:"chatLayout"`              // "" automatic (stacked on phones) | columns | stacked
 	QuitMessage      string   `json:"quitMessage"`
 	StartWithWindows bool     `json:"startWithWindows"`

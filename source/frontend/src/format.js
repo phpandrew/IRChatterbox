@@ -49,19 +49,32 @@ function renderPlain(text, ctx) {
   return out;
 }
 
+// decorate: your own nick and highlight words get the mention chip; with ctx.nickRe set, other
+// people's nicks named in the text get their nick colour (and are clickable like a nick).
 function decorate(text, ctx) {
   if (!text) return "";
-  if (!ctx.mentionRe) return esc(text);
+  if (!ctx.mentionRe && !ctx.nickRe) return esc(text);
+  const found = [];
+  if (ctx.mentionRe) for (const m of text.matchAll(ctx.mentionRe)) found.push({ start: m.index + m[1].length, word: m[2], own: true });
+  if (ctx.nickRe) for (const m of text.matchAll(ctx.nickRe)) found.push({ start: m.index + m[1].length, word: m[2], own: false });
+  found.sort((a, b) => a.start - b.start || (a.own ? -1 : 1));
   let out = "";
   let last = 0;
-  for (const m of text.matchAll(ctx.mentionRe)) {
-    const word = m[2];
-    const start = m.index + m[1].length;
-    out += esc(text.slice(last, start));
-    out += `<span class="mention">${esc(word)}</span>`;
-    last = start + word.length;
+  for (const f of found) {
+    if (f.start < last) continue; // overlaps one already taken (your own nick wins)
+    out += esc(text.slice(last, f.start));
+    out += f.own ? `<span class="mention">${esc(f.word)}</span>` : `<span class="nickref nick-mention" style="color:${nickColor(f.word)}">${esc(f.word)}</span>`;
+    last = f.start + f.word.length;
   }
   return out + esc(text.slice(last));
+}
+
+// nickListRegex matches any of the channel's nicks as a whole word, longest first so "Alan-"
+// isn't taken as "Alan". Capped, so a huge channel doesn't build a giant pattern.
+export function nickListRegex(nicks, skip) {
+  const list = nicks.filter((n) => n && n !== skip).slice(0, 2000).sort((a, b) => b.length - a.length).map(escapeRe);
+  if (!list.length) return null;
+  return new RegExp(`(^|[^\\p{L}\\p{N}_])(${list.join("|")})(?=$|[^\\p{L}\\p{N}_])`, "giu");
 }
 
 export function mentionRegex(words) {

@@ -844,5 +844,6 @@
 "Delete": "Eliminar",
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "¿Vaciar la lista de imágenes subidas? Las imágenes siguen en sus servicios y ya no podrás borrarlas desde aquí.",
 "Show nicks in angle brackets, like <nick>": "Mostrar los nicks entre ángulos, como <nick>",
-"Show status symbols before nicks (@ op, % half-op, + voice)": "Mostrar los símbolos de estado delante de los nicks (@ op, % semi-op, + voz)"
+"Show status symbols before nicks (@ op, % half-op, + voice)": "Mostrar los símbolos de estado delante de los nicks (@ op, % semi-op, + voz)",
+"Colour other people's nicks when they're named in a message": "Colorear los nicks de otras personas cuando se nombran en un mensaje"
 }

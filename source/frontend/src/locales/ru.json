@@ -844,5 +844,6 @@
 "Delete": "Удалить",
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "Очистить список загруженных изображений? Изображения останутся на хостингах, и удалить их отсюда уже не получится.",
 "Show nicks in angle brackets, like <nick>": "Показывать ники в угловых скобках, как <ник>",
-"Show status symbols before nicks (@ op, % half-op, + voice)": "Показывать символы статуса перед никами (@ оператор, % полуоператор, + голос)"
+"Show status symbols before nicks (@ op, % half-op, + voice)": "Показывать символы статуса перед никами (@ оператор, % полуоператор, + голос)",
+"Colour other people's nicks when they're named in a message": "Подсвечивать цветом ники других людей, когда их упоминают в сообщении"
 }

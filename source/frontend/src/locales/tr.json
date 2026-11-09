@@ -844,5 +844,6 @@
 "Delete": "Sil",
 "Clear the list of uploaded images? The images stay on their hosts, and you won't be able to delete them from here.": "Yüklenen görseller listesi temizlensin mi? Görseller barındırıldıkları yerde kalır ve artık buradan silemezsiniz.",
 "Show nicks in angle brackets, like <nick>": "Takma adları <takmaad> gibi açılı ayraçlar içinde göster",
-"Show status symbols before nicks (@ op, % half-op, + voice)": "Takma adların önünde durum simgelerini göster (@ op, % yarı op, + voice)"
+"Show status symbols before nicks (@ op, % half-op, + voice)": "Takma adların önünde durum simgelerini göster (@ op, % yarı op, + voice)",
+"Colour other people's nicks when they're named in a message": "Bir iletide adı geçen diğer kişilerin takma adlarını renklendir"
 }

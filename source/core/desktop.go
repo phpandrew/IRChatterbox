@@ -184,6 +184,7 @@ func (a *App) saveWindow() {
 func (a *App) ToggleFullscreen() {
 	if wruntime.WindowIsFullscreen(a.ctx) {
 		wruntime.WindowUnfullscreen(a.ctx)
+		afterUnfullscreen()
 	} else {
 		a.saveWindow()
 		wruntime.WindowFullscreen(a.ctx)
