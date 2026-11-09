@@ -22,7 +22,13 @@ object CoreHost : Host {
     // A few calls wait on the network and get their own threads.
     private val ordered = Executors.newSingleThreadExecutor()
     private val slow = Executors.newCachedThreadPool()
-    private val slowMethods = setOf("TestURLCommand", "CheckForUpdate", "InstallUpdate", "ReloadPlugins", "TestMusic", "UploadImage")
+    // Anything that waits on the network (or a slow disk search) runs alongside, so a link
+    // preview or a picture that takes ten seconds doesn't hold up sending a message.
+    private val slowMethods = setOf(
+        "TestURLCommand", "CheckForUpdate", "InstallUpdate", "ReloadPlugins", "TestMusic", "UploadImage", "UploadPaste",
+        "GetLinkPreview", "GetThumbnail", "SendReport", "DeleteUpload", "SearchHistory", "HistoryAround",
+        "SyncNow", "SyncPoll", "SyncJoin", "SyncStart", "SyncStop", "SyncSignInStart", "SyncSignInFinish",
+    )
 
     @Volatile var foreground = false
         private set

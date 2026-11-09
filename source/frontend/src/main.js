@@ -1447,13 +1447,34 @@ function getPreview(url) {
   }
   return p;
 }
+// Previews are fetched only when they come near the screen, newest first, so opening a busy
+// channel loads the ones you're looking at (at the bottom) before older ones further up.
+const previewWatchers = new Map(); // scroll container -> IntersectionObserver
+function whenNear(el, fn) {
+  queueMicrotask(() => {
+    const root = el.closest("#chat, .pane-view");
+    if (!root || typeof IntersectionObserver === "undefined") { fn(); return; }
+    let io = previewWatchers.get(root);
+    if (!io) {
+      io = new IntersectionObserver((entries) => {
+        const near = entries.filter((e) => e.isIntersecting).reverse(); // bottom (newest) first
+        for (const e of near) { io.unobserve(e.target); e.target.__near?.(); delete e.target.__near; }
+      }, { root, rootMargin: "800px 0px" });
+      previewWatchers.set(root, io);
+    }
+    el.__near = fn;
+    io.observe(el);
+  });
+}
 function addLinkPreviews(el, urls) {
   for (const url of urls) {
     const gap1 = document.createElement("span"), gap2 = document.createElement("span");
     const wrap = document.createElement("div");
     wrap.className = "media lp-wrap";
     el.append(gap1, gap2, wrap);
-    getPreview(url).then((p) => {
+    // already fetched: show it straight away; otherwise wait until it's nearly on screen
+    const go = (fn) => (previews.has(url) ? fn() : whenNear(wrap, fn));
+    go(() => getPreview(url).then((p) => {
       if (!p || p.error || !p.title) { gap1.remove(); gap2.remove(); wrap.remove(); return; }
       // the page's picture is loaded by the chat view, so it gets the same local-network check as inline images
       try { if (!/^https?:$/.test(new URL(p.image).protocol) || isLocalHost(new URL(p.image).hostname)) p.image = ""; } catch { p.image = ""; }
@@ -1467,7 +1488,7 @@ function addLinkPreviews(el, urls) {
         img.onload = () => { if (keep && stick) scrollBottom(); };
       }
       if (keep && stick) scrollBottom();
-    });
+    }));
   }
 }
 
@@ -1490,7 +1511,8 @@ function watchInline(img) {
     let io = inlineWatchers.get(root);
     if (!io) {
       io = new IntersectionObserver((entries) => {
-        for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); loadInline(e.target); }
+        // bottom (newest) first: that's where you're looking when a channel opens
+        for (const e of entries.filter((x) => x.isIntersecting).reverse()) { io.unobserve(e.target); loadInline(e.target); }
       }, { root, rootMargin: "1200px 0px" });
       inlineWatchers.set(root, io);
     }
