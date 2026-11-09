@@ -2110,6 +2110,7 @@ function lightbox(src) {
 }
 export function closeOverlay() {
   const ov = $("overlay");
+  window.__modalBack = null;
   ov.classList.remove("lb");
   ov.onpointerdown = ov.onpointermove = ov.onpointerup = ov.onpointercancel = ov.onwheel = null;
   ov.classList.add("hidden");

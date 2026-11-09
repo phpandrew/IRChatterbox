@@ -111,7 +111,11 @@ export function initMobile(fns) {
     const picker = $("emojiPicker");
     // (a position:fixed element has no offsetParent, so check the class the picker toggles)
     if (picker && !picker.classList.contains("hidden")) { picker.classList.add("hidden"); return true; }
-    if (!$("overlay").classList.contains("hidden")) { ctx.closeOverlay(); return true; }
+    if (!$("overlay").classList.contains("hidden")) {
+      if (window.__modalBack?.()) return true; // e.g. a Settings page back to the list of sections
+      ctx.closeOverlay();
+      return true;
+    }
     if (drawerOpen()) { closeDrawers(); return true; }
     if (!$("findBar").classList.contains("hidden")) { ctx.closeFind(); return true; }
     if ($("hTopic").classList.contains("open")) { $("hTopic").classList.remove("open"); return true; }

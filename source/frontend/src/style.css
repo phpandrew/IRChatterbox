@@ -652,6 +652,17 @@ body.mobile .modal-foot { padding: 10px 12px; flex-wrap: wrap; }
 body.mobile .modal-foot .btn { padding-top: 10px; padding-bottom: 10px; }
 body.mobile .tabs { padding: 0 8px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
 body.mobile .tab { white-space: nowrap; padding: 10px 12px; }
+/* Settings on a phone: a list of sections instead of a row of tabs */
+body.mobile .modal.settings .tabs { display: none; }
+.set-list { display: flex; flex-direction: column; gap: 8px; }
+.set-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; color: var(--text); }
+.set-item:active { background: var(--bg-hover); }
+.set-item .si-text { flex: 1; min-width: 0; }
+.set-item b { display: block; font-size: 15.5px; font-weight: 600; }
+.set-item small { display: block; margin-top: 2px; font-size: 12.5px; color: var(--text-muted); line-height: 1.35; }
+.set-item .si-chev { font-size: 24px; line-height: 1; color: var(--text-faint); }
+.modal-head .grow.with-back { display: flex; align-items: center; gap: 4px; }
+.set-back { width: 36px; height: 36px; margin-left: -8px; font-size: 28px; line-height: 1; padding-bottom: 3px; }
 body.mobile .fgrid { grid-template-columns: 1fr; }
 body.mobile .set-card { padding: 14px 14px; }
 body.mobile .set-card .indent { padding-left: 26px; }

@@ -4,7 +4,7 @@ import wordmarkDark from "./assets/wordmark-dark.png";
 import githubIcon from "./assets/github.png";
 import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
 import { showUpdateBar } from "./main.js";
-import { android } from "./mobile.js";
+import { android, isMobile } from "./mobile.js";
 import { os } from "./platform.js";
 // the browser version at irchatterbox.com/chat (web/backend.js marks the page)
 const web = () => document.body.classList.contains("web");
@@ -1321,5 +1321,43 @@ export function openSettings(startTab) {
         file: val("muFile"), format: $("muFmt").value, npFormat: $("muNp").value, cooldown: parseInt(val("muCd")) || 0 };
     }
   }
-  draw();
+  // Phones: a list of sections, each opening as its own page; Back (or ‹) returns to the list
+  const SECTIONS = [
+    ["general", "General", "Chat display, history, background, away, sending"],
+    ["appearance", "Appearance", "Language, theme, layout, nick colours"],
+    ["highlights", "Notifications", "Highlight words, sounds, friends, blocked people"],
+    ["shortcuts", "Shortcuts", "Text shortcuts like $shrug"],
+    ["media", "Media", "Images, videos, link previews, uploads"],
+    ["plugins", "Plugins", "Bot replies, URL commands, scripts"],
+    ["sync", "Sync", "Share settings between your devices"],
+    ["about", "About", "Version, updates, backup"],
+  ];
+  const head = m.querySelector(".modal-head .grow");
+  let listing = false;
+  function showList() {
+    collect();
+    listing = true;
+    m.classList.add("m-list");
+    head.classList.remove("with-back");
+    head.innerHTML = `Settings<div class="modal-sub">Customize your IRC experience.</div>`;
+    body.innerHTML = `<div class="set-list">${SECTIONS.map(([id, label, desc]) =>
+      `<button class="set-item" data-sec="${id}"><span class="si-text"><b>${label}</b><small>${desc}</small></span><span class="si-chev">›</span></button>`).join("")}</div>`;
+    body.scrollTop = 0;
+  }
+  function openSection(id) {
+    listing = false;
+    tab = id;
+    m.classList.remove("m-list");
+    head.classList.add("with-back");
+    head.innerHTML = `<button class="icon-btn set-back" id="stBack" title="All settings">‹</button><span>${(SECTIONS.find((x) => x[0] === id) || [, "Settings"])[1]}</span>`;
+    $("stBack").onclick = showList;
+    m.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x.dataset.t === id));
+    draw();
+    body.scrollTop = 0;
+  }
+  body.addEventListener("click", (e) => { const b = e.target.closest("[data-sec]"); if (b) openSection(b.dataset.sec); });
+  window.__modalBack = () => { if (isMobile() && !listing) { showList(); return true; } return false; };
+  if (!isMobile()) draw();
+  else if (startTab) openSection(tab);
+  else showList();
 }
