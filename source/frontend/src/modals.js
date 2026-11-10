@@ -822,7 +822,7 @@ export function openSettings(startTab) {
           ? "Uploaded as-is to Imgur under your own Client ID. Imgur keeps images until they're deleted, and its own rules and limits apply."
           : catbox ? "Uploaded as-is to catbox.moe, a free host that keeps files for good. Anyone with the link can see it. Add your userhash below if you want to be able to delete uploads later. Catbox's own rules apply."
           : custom ? "Uploaded to your server, which decides the size, format and how long images are kept."
-          : "Shrunk to fit 1000×1000 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
+          : "Shrunk to fit 1500×1500 and saved as WebP. Links work for 7 days, then the image is deleted. Anyone with the link can see it.";
       };
       $("uHost").addEventListener("change", sync); sync();
       document.querySelectorAll("#uImgurRow [data-open], #uCatboxRow [data-open]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); Go.OpenURL(a.dataset.open); }));

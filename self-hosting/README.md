@@ -5,7 +5,7 @@ PHP server and point the app at it to keep uploads on your own machine.
 
 What it does with each upload:
 - Accepts JPG, PNG, WebP and BMP up to 10 MB and 40 megapixels.
-- Shrinks to fit 1000×1000 (aspect ratio kept), turns phone photos upright and strips all metadata.
+- Shrinks to fit 1500×1500 (aspect ratio kept), turns phone photos upright and strips all metadata.
 - Saves as WebP under a random name and returns its link.
 - Keeps it for 7 days. `php upload.php cleanup` deletes anything older.
 

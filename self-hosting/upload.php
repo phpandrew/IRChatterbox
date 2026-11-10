@@ -7,7 +7,7 @@
 // The upload reply also carries "delete_token" and "delete_url" (this file's own address):
 // POST id=<id>&token=<delete_token> to it deletes the image. The app does this from its upload history.
 //
-// Each image is shrunk to fit 1000×1000, turned upright, saved as WebP without its metadata,
+// Each image is shrunk to fit 1500×1500, turned upright, saved as WebP without its metadata,
 // and given a random name. Delete old ones from cron (as the web server's user):
 //   7 * * * * php /path/to/upload.php cleanup
 //
@@ -30,8 +30,8 @@ $CONFIG = [
     'max_pixels' => 40_000_000, // GD needs ~5 bytes a pixel, hence memory_limit below
     'memory_limit' => '320M',
     // Output size and quality.
-    'max_width' => 1000,
-    'max_height' => 1000,
+    'max_width' => 1500,
+    'max_height' => 1500,
     'webp_quality' => 82,
     'id_length' => 10,
     // Signs delete codes. Empty = make one on first use and keep it in upload.key.php next to
