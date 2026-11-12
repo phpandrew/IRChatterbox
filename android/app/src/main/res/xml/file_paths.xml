@@ -2,4 +2,5 @@
 <!-- Where the camera app may write the photo it takes for us (see SharedImages.kt) -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="logs" path="logs/" />
 </paths>

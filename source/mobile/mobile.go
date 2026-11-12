@@ -12,7 +12,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"runtime"
 	"sync"
+	"time"
 
 	"irchatterbox/core"
 )
@@ -48,6 +51,7 @@ func Start(dataDir, version string, host Host) {
 		core.SetDataDir(dataDir)
 		core.SetVersion(version, "")
 		app = core.NewApp()
+		app.InitLogs()
 	})
 	app.StartAndroid(adapter{})
 }
@@ -67,6 +71,36 @@ func SetBackground(bg bool) {
 func KeepAlive() bool {
 	return app != nil && app.GetConfig().Settings.KeepAlive
 }
+
+// LogDir is the folder with app.log and crash reports ("Share app log").
+func LogDir() string {
+	if app == nil {
+		return ""
+	}
+	return app.DiagnosticsDir()
+}
+
+// ReportStuck is called by the shell when a call from the UI has been running far too long:
+// it notes that in app.log with what every part of the app is doing at that moment, so a
+// hang can be tracked down. At most once a minute.
+func ReportStuck(method string, seconds int) {
+	stuckMu.Lock()
+	if time.Since(stuckLast) < time.Minute {
+		stuckMu.Unlock()
+		log.Printf("still waiting: %s has been running for %ds", method, seconds)
+		return
+	}
+	stuckLast = time.Now()
+	stuckMu.Unlock()
+	buf := make([]byte, 512<<10)
+	buf = buf[:runtime.Stack(buf, true)]
+	log.Printf("STUCK: %s has been running for %ds. What everything is doing:\n%s", method, seconds, buf)
+}
+
+var (
+	stuckMu   sync.Mutex
+	stuckLast time.Time
+)
 
 // Shutdown disconnects every server (Quit from the app or its notification).
 func Shutdown() {

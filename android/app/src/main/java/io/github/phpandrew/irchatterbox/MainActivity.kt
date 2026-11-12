@@ -34,6 +34,7 @@ import androidx.core.view.updatePadding
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import io.github.phpandrew.irchatterbox.core.mobile.Mobile
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLConnection
@@ -111,6 +112,39 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Log.w(CoreHost.TAG, "couldn't open backup", e)
                 main.post { backupResult("opened", error = "Couldn't read the file.") }
+            }
+        }.start()
+    }
+
+    /** Settings → About → Share app log: app.log (and the latest crash report) to any app. */
+    fun shareLogs() {
+        Thread {
+            try {
+                val src = java.io.File(Mobile.logDir())
+                val out = java.io.File(cacheDir, "logs").apply { deleteRecursively(); mkdirs() }
+                val files = mutableListOf<java.io.File>()
+                for (name in listOf("app.log.1", "app.log")) {
+                    val f = java.io.File(src, name)
+                    if (f.isFile) files += f.copyTo(java.io.File(out, name.replace(".log.1", "-previous.log")), true)
+                }
+                src.listFiles { f -> f.name.startsWith("crash-2") }?.maxByOrNull { it.name }?.let {
+                    files += it.copyTo(java.io.File(out, it.name), true)
+                }
+                if (files.isEmpty()) {
+                    main.post { backupResult("logs", error = "There's no log yet.") }
+                    return@Thread
+                }
+                val uris = ArrayList(files.map { androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", it) })
+                val send = Intent(if (uris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "text/plain"
+                    if (uris.size == 1) putExtra(Intent.EXTRA_STREAM, uris[0]) else putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    putExtra(Intent.EXTRA_SUBJECT, "IRChatterbox ${BuildConfig.VERSION_NAME} log")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                main.post { startActivity(Intent.createChooser(send, "Share app log")); backupResult("logs") }
+            } catch (e: Exception) {
+                Log.w(CoreHost.TAG, "couldn't share logs", e)
+                main.post { backupResult("logs", error = "Couldn't share the log.") }
             }
         }.start()
     }

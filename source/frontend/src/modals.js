@@ -1146,14 +1146,20 @@ export function openSettings(startTab) {
         <div class="hint" style="margin-top:8px">Saves your servers, shortcuts, settings, nick colours, plugins and custom themes to one file. Passwords are left out unless you choose to include them, and then they're encrypted with a passphrase. Save any changes in Settings first.</div>`)}
       ${card("Troubleshooting", "Something went wrong? The logs help track it down.", `
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn sm" id="abLogs">Open logs</button>
+          ${android ? `<button class="btn sm" id="abShareLog">Share app log</button>` : `<button class="btn sm" id="abLogs">Open logs</button>`}
           <button class="btn sm" id="abReport">Report a problem</button>
         </div>
-        <div class="hint" style="margin-top:8px">“Report a problem” opens a new GitHub issue with your version and OS filled in. Attach <code>app.log</code> or a <code>crash-….log</code> from the logs folder if it helps — check it first, it can contain server and channel names.</div>`, "desktop-only")}
+        <div class="hint" style="margin-top:8px">${android
+          ? "“Share app log” sends <code>app.log</code> to any app (email, Drive, a chat). It can contain server and channel names, so check it before sharing it publicly."
+          : "“Report a problem” opens a new GitHub issue with your version and OS filled in. Attach <code>app.log</code> or a <code>crash-….log</code> from the logs folder if it helps — check it first, it can contain server and channel names."}</div>`, "not-web")}
       <p class="about-foot">Built with Go and Wails · Emoji data from unicode-emoji-json (MIT)</p>`;
     body.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => Go.OpenURL(b.dataset.open)));
     $("abVer").textContent = (await Go.GetVersion()) || "dev";
-    $("abLogs").onclick = () => Go.OpenDiagnostics();
+    if ($("abLogs")) $("abLogs").onclick = () => Go.OpenDiagnostics();
+    if ($("abShareLog")) $("abShareLog").onclick = async () => {
+      const d = await androidBackup(() => window.icbAndroid.shareLogs());
+      if (d.error) toast(d.error, "error");
+    };
     $("abExport").onclick = openBackupExport;
     $("abImport").onclick = openBackupImport;
     $("abReport").onclick = () => Go.ReportProblem();

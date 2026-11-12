@@ -191,6 +191,7 @@ func (a *App) PickFolder(title string) string { return "" }
 func (a *App) PickFile(title string) string   { return "" }
 func (a *App) PickSoundFile() string          { return "" }
 func (a *App) OpenDataFolder()                {}
+func (a *App) OpenDiagnostics()               {} // Android: "Share app log" (MainActivity)
 func (a *App) OpenLogFolder()                 {}
 func (a *App) ApplyLocalUpdate() string       { return "" }
 

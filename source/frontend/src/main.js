@@ -2791,10 +2791,23 @@ function finishSend(srv, b, original, text) {
   const r = S.reply;
   if (r && r.server === srv.id && r.key === b.key && b.type !== "server") {
     cancelReply();
-    Go.SendReply(srv.id, b.name, r.msgid, text);
+    watchSend(Go.SendReply(srv.id, b.name, r.msgid, text));
     return;
   }
-  Go.SendInput(srv.id, b.type === "server" ? "" : b.name, text);
+  watchSend(Go.SendInput(srv.id, b.type === "server" ? "" : b.name, text));
+}
+
+// A send that hasn't gone through after a while: say so, instead of it silently vanishing.
+function watchSend(p) {
+  if (!p || typeof p.then !== "function") return;
+  let done = false, warned = false;
+  const timer = setTimeout(() => {
+    if (done) return;
+    warned = true;
+    toast(android ? "Still sending… the app seems stuck. Settings → About → Share app log helps track it down." : "Still sending…", "error", true);
+  }, 8000);
+  p.then(() => { done = true; clearTimeout(timer); if (warned) toast("Sent", "ok"); },
+    (e) => { done = true; clearTimeout(timer); toast(String(e?.message ?? e ?? "Couldn't send"), "error"); });
 }
 
 function clientCommand(srv, b, text) {

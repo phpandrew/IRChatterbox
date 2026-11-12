@@ -18,10 +18,17 @@ object CoreHost : Host {
     private lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
 
-    // Calls run in order on one thread, so messages are sent in the order they were typed.
-    // A few calls wait on the network and get their own threads.
+    // Calls run in order on one thread. Sending has a lane of its own (still in order, so
+    // messages go out in the order they were typed), so nothing else stuck in the queue can
+    // stop you from sending. A few calls wait on the network and get their own threads.
     private val ordered = Executors.newSingleThreadExecutor()
+    private val sends = Executors.newSingleThreadExecutor()
     private val slow = Executors.newCachedThreadPool()
+    private val sendMethods = setOf("SendInput", "SendReply", "React", "Redact")
+    // A call still running after this long is noted in app.log with what the app is doing,
+    // so a hang can be tracked down (Settings → About → Share app log).
+    private val watchdog = Executors.newSingleThreadScheduledExecutor()
+    private const val STUCK_AFTER_S = 15L
     // Anything that waits on the network (or a slow disk search) runs alongside, so a link
     // preview or a picture that takes ten seconds doesn't hold up sending a message.
     private val slowMethods = setOf(
@@ -40,13 +47,23 @@ object CoreHost : Host {
 
     /** Runs an App method from the UI; [done] gets the JSON reply on the main thread. */
     fun call(method: String, argsJson: String, done: (String) -> Unit) {
-        val pool = if (method in slowMethods) slow else ordered
+        val pool = when (method) {
+            in slowMethods -> slow
+            in sendMethods -> sends
+            else -> ordered
+        }
         pool.execute {
+            val check = if (pool === slow) null else watchdog.scheduleWithFixedDelay({
+                Log.w(TAG, "$method still running")
+                slow.execute { runCatching { Mobile.reportStuck(method, STUCK_AFTER_S) } }
+            }, STUCK_AFTER_S, 60, java.util.concurrent.TimeUnit.SECONDS)
             val reply = try {
                 Mobile.call(method, argsJson)
             } catch (t: Throwable) {
                 Log.e(TAG, "call $method", t)
                 """{"error":${org.json.JSONObject.quote(t.message ?: "failed")}}"""
+            } finally {
+                check?.cancel(false)
             }
             main.post { done(reply) }
             when (method) {

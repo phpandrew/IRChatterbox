@@ -89,5 +89,6 @@
     // settings backup: the answer arrives as an "androidBackup" event
     saveBackup(name, data) { send({ t: "saveBackup", name: String(name), data: String(data) }); },
     openBackup() { send({ t: "openBackup" }); },
+    shareLogs() { send({ t: "shareLogs" }); },
   };
 })();

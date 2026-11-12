@@ -357,6 +357,12 @@ func (a *App) PickSoundFile() string {
 
 func (a *App) OpenDataFolder() { openFolder(a.store.dir) }
 
+// OpenDiagnostics shows the folder with app.log and crash reports.
+func (a *App) OpenDiagnostics() {
+	os.MkdirAll(a.diagDir(), 0o700)
+	openFolder(a.diagDir())
+}
+
 // openFolder shows a folder in Explorer, Finder or the Linux file manager.
 func openFolder(dir string) {
 	// only ever a folder: "explorer <file>" would run a program given its path

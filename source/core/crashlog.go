@@ -1,5 +1,3 @@
-//go:build !android
-
 package core
 
 // Logs for troubleshooting: app.log (recent errors and events, trimmed to ~1 MB) and crash
@@ -31,7 +29,10 @@ type Diagnostics struct {
 
 func (a *App) diagDir() string { return filepath.Join(a.store.dir, "diagnostics") }
 
-// initLogs sets up app.log and crash capture. Called once at startup by the desktop host.
+// InitLogs sets up app.log and crash capture (the Android shell calls it at startup).
+func (a *App) InitLogs() { a.initLogs() }
+
+// initLogs sets up app.log and crash capture. Called once at startup by the host.
 func (a *App) initLogs() {
 	dir := a.diagDir()
 	os.MkdirAll(dir, 0o700)
@@ -87,11 +88,8 @@ func (a *App) GetDiagnostics() Diagnostics {
 // DismissCrash stops the notice from showing again this session.
 func (a *App) DismissCrash() { a.lastCrash = "" }
 
-// OpenDiagnostics shows the folder with app.log and crash reports.
-func (a *App) OpenDiagnostics() {
-	os.MkdirAll(a.diagDir(), 0o700)
-	openFolder(a.diagDir())
-}
+// DiagnosticsDir is where app.log and crash reports are (Android shares them from there).
+func (a *App) DiagnosticsDir() string { return a.diagDir() }
 
 // ReportProblem opens a new GitHub issue with the version, OS and (if there was one) the
 // start of the crash report filled in. Nothing is sent until the user submits it.

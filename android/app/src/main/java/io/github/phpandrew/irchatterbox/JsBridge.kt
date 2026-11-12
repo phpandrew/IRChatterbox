@@ -36,6 +36,7 @@ class JsBridge(private val activity: MainActivity) : WebViewCompat.WebMessageLis
             "vibrate" -> vibrate(msg.optInt("ms", 10))
             "saveBackup" -> activity.saveBackupFile(msg.optString("name", "irchatterbox-settings.json"), msg.optString("data"))
             "openBackup" -> activity.openBackupFile()
+            "shareLogs" -> activity.shareLogs()
         }
     }
 
