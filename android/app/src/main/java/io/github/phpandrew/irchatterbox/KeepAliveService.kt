@@ -55,14 +55,15 @@ class KeepAliveService : Service() {
 
         fun start(ctx: Context, n: Int) {
             if (running) {
-                // already in the foreground: only the text changes. Updating the notification
-                // is allowed from the background, unlike starting the service again.
-                if (n != lastCount) {
-                    lastCount = n
-                    try {
-                        NotificationManagerCompat.from(ctx).notify(NOTIFICATION_ID, notification(ctx, n))
-                    } catch (_: SecurityException) {
-                    }
+                // Already in the foreground: post the notification again (allowed from the
+                // background, unlike starting the service again). Same ID, so it updates in
+                // place, and it brings it back if it was swiped away: Android 14 and later let
+                // you dismiss it while the service keeps running. This runs whenever the app
+                // opens or the number of connections changes.
+                lastCount = n
+                try {
+                    NotificationManagerCompat.from(ctx).notify(NOTIFICATION_ID, notification(ctx, n))
+                } catch (_: SecurityException) {
                 }
                 return
             }
