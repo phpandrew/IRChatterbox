@@ -846,5 +846,8 @@
 "Show nicks in angle brackets, like <nick>": "用尖括号显示昵称，如 <昵称>",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "在昵称前显示身份符号（@ 管理员，% 半管理员，+ 发言权）",
 "Colour other people's nicks when they're named in a message": "消息中提到其他人的昵称时，用其昵称颜色显示",
-"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "消息中提到的频道成员会以其昵称颜色显示，并且可以像昵称一样点击。"
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "消息中提到的频道成员会以其昵称颜色显示，并且可以像昵称一样点击。",
+"Search settings": "搜索设置",
+"No settings match": "没有匹配的设置：",
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "在消息开头用 Tab 补全昵称时，在昵称后加冒号（Andrew: 你好）"
 }

@@ -586,14 +586,14 @@ export function openSettings(startTab) {
   const shortcuts = structuredClone(S.cfg.shortcuts || []);
   plug.urlCommands ||= [];
   plug.music ||= { enabled: true, trigger: "!music", source: "auto", cooldown: 10, format: "Now playing: {np}", npFormat: "is listening to {np}" };
-  const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><button class="icon-btn" id="stX">✕</button></div>
+  const m = open(`<div class="modal-head"><div class="grow">Settings<div class="modal-sub">Customize your IRC experience.</div></div><input type="search" id="stSearch" class="st-search" placeholder="${esc(t("Search settings"))}" aria-label="${esc(t("Search settings"))}" autocomplete="off" spellcheck="false"><button class="icon-btn" id="stX">✕</button></div>
     <div class="tabs">${["general", "appearance", "highlights", "shortcuts", "media", "plugins", "sync", "about"].map((t) => `<button class="tab ${t === tab ? "on" : ""}" data-t="${t}">${t === "highlights" ? "Notifications" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>
     <div class="modal-body" id="stBody"></div>
     <div class="modal-foot"><button class="btn left desktop-only" id="stFolder">Open data folder</button><button class="btn" id="stCancel">Cancel</button><button class="btn primary" id="stSave">Save changes</button></div>`, "settings");
   m.querySelector(".tabs").onclick = (e) => {
     const t = e.target.closest("[data-t]");
     if (!t) return;
-    collect();
+    if (searching) leaveSearch(); else collect();
     tab = t.dataset.t;
     m.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
     draw();
@@ -601,7 +601,7 @@ export function openSettings(startTab) {
   $("stX").onclick = $("stCancel").onclick = () => { applySettings(); setLanguage(S.cfg.settings.language || ""); closeOverlay(); };
   $("stFolder").onclick = () => Go.OpenDataFolder();
   $("stSave").onclick = async () => {
-    collect();
+    if (!searching) collect();
     const err = await Go.SaveSettings(set);
     await Go.SavePlugins(plug);
     await Go.SaveShortcuts(shortcuts.filter((x) => x.trigger.trim() && x.text));
@@ -640,7 +640,8 @@ export function openSettings(startTab) {
       ${check("gCompact", set.compactMode, "Compact line spacing")}
       ${check("gBrackets", set.nickBrackets, "Show nicks in angle brackets, like &lt;nick&gt;")}
       ${check("gModes", !set.hideNickModes, "Show status symbols before nicks (@ op, % half-op, + voice)")}
-      ${check("gUsers", S.ui.users !== false, "Show the user list")}`) +
+      ${check("gUsers", S.ui.users !== false, "Show the user list")}
+      ${check("gTabColon", !set.tabNoColon, "Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)")}`) +
       card("History & logging", "Manage how much chat history is kept and whether to save it to files.", `
       ${check("gLog", set.logging, "Keep chat history between restarts")}
       <div class="fgrid" style="margin-top:10px">
@@ -752,8 +753,8 @@ export function openSettings(startTab) {
       </div>
       <div class="hint">Behind a home router, others can only reach your offers if these ports are forwarded to this computer. Files you receive are never opened automatically.</div>`, "desktop-only");
     else if (tab === "plugins") drawPlugins();
-    else if (tab === "about") drawAbout();
-    else if (tab === "sync") drawSync();
+    else if (tab === "about") return drawAbout();
+    else if (tab === "sync") return drawSync();
     wire();
   }
 
@@ -1288,11 +1289,99 @@ export function openSettings(startTab) {
     $("pReload").onclick = async () => ($("pReloadOut").textContent = await Go.ReloadPlugins());
   }
 
+  // ---------- search across every tab ----------
+  // The first search renders each tab once (hidden) and notes every card title, option label,
+  // field name and hint, in the language shown. Results list where each one lives; picking one
+  // opens its tab and flashes it.
+  let searching = false, searchIndex = null, indexing = null;
+  const TAB_NAMES = { general: "General", appearance: "Appearance", highlights: "Notifications", shortcuts: "Shortcuts", media: "Media", plugins: "Plugins", sync: "Sync", about: "About" };
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  function buildIndex() {
+    if (indexing) return indexing;
+    indexing = (async () => {
+      const keep = tab, entries = [];
+      body.style.visibility = "hidden";
+      for (const tb of Object.keys(TAB_NAMES).filter((x) => x !== "about")) {
+        tab = tb;
+        await draw();
+        await nextFrame(); // translations are applied to new text after it's inserted
+        body.querySelectorAll(".set-card").forEach((cardEl, ci) => {
+          const title = cardEl.querySelector(".set-head h3")?.textContent.trim() || "";
+          const desc = cardEl.querySelector(".set-head p")?.textContent.trim() || "";
+          entries.push({ tab: tb, card: ci, title, label: title, extra: desc, kind: "card" });
+          cardEl.querySelectorAll("label.check, .field > label, .field-label, button.btn").forEach((el, ei) => {
+            if (el.closest(".hidden") || el.matches(".btn.sm")) return;
+            const label = el.textContent.replace(/\s+/g, " ").trim();
+            if (!label || label.length < 3) return;
+            const hint = (el.closest(".field")?.querySelector(".hint") || (el.nextElementSibling?.classList.contains("hint") ? el.nextElementSibling : null))?.textContent.trim() || "";
+            entries.push({ tab: tb, card: ci, title, label, extra: hint, kind: el.matches("button") ? "button" : "item", nth: ei });
+          });
+        });
+      }
+      tab = keep;
+      searchIndex = entries;
+      body.style.visibility = "";
+      return entries;
+    })();
+    return indexing;
+  }
+  function leaveSearch() {
+    searching = false;
+    $("stSearch").value = "";
+    m.classList.remove("searching");
+  }
+  async function runSearch(q) {
+    q = q.trim().toLowerCase();
+    if (!q) { if (searching) { leaveSearch(); draw(); } return; }
+    if (!searching) { collect(); searching = true; m.classList.add("searching"); }
+    const idx = await buildIndex();
+    if ($("stSearch").value.trim().toLowerCase() !== q) return; // typed on meanwhile
+    const words = q.split(/\s+/);
+    const hits = idx.filter((e) => { const hay = (e.label + " " + e.title + " " + e.extra + " " + t(TAB_NAMES[e.tab])).toLowerCase(); return words.every((w) => hay.includes(w)); });
+    const seen = new Set();
+    const list = hits.filter((e) => { const k = e.tab + e.card + e.label; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 60);
+    const mark = (s) => { let h = esc(s); for (const w of words) h = h.replace(new RegExp("(" + esc(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi"), "<mark>$1</mark>"); return h; };
+    body.innerHTML = list.length
+      ? `<div class="st-results">${list.map((e, i) => `<button class="st-hit" data-i="${i}"><span class="st-where">${esc(t(TAB_NAMES[e.tab]))} › ${esc(e.title)}</span><span class="st-label">${mark(e.label)}</span>${e.extra && e.kind !== "card" ? `<span class="st-extra">${mark(e.extra.length > 140 ? e.extra.slice(0, 140) + "…" : e.extra)}</span>` : ""}</button>`).join("")}</div>`
+      : `<div class="st-none">${esc(t("No settings match"))} “${esc(q)}”.</div>`;
+    m.querySelectorAll(".tab").forEach((x) => x.classList.remove("on"));
+    body.querySelectorAll(".st-hit").forEach((b) => (b.onclick = async () => {
+      const e = list[+b.dataset.i];
+      leaveSearch();
+      tab = e.tab;
+      m.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x.dataset.t === tab));
+      await draw();
+      await nextFrame();
+      const cardEl = body.querySelectorAll(".set-card")[e.card];
+      let target = cardEl;
+      if (cardEl && e.kind !== "card") target = [...cardEl.querySelectorAll("label.check, .field > label, .field-label, button.btn")].find((x) => x.textContent.replace(/\s+/g, " ").trim() === e.label)?.closest(".check, .field") || cardEl;
+      if (!target) return;
+      if (!target.offsetParent && cardEl) target = cardEl; // hidden right now (depends on another choice)
+      target.scrollIntoView({ block: "center" });
+      target.classList.add("st-flash");
+      setTimeout(() => target.classList.remove("st-flash"), 1600);
+      target.querySelector("input, select, textarea")?.focus({ preventScroll: true });
+    }));
+  }
+  let searchTimer;
+  $("stSearch").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => runSearch($("stSearch").value), 120); });
+  $("stSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("stSearch").value) { e.stopPropagation(); e.preventDefault(); $("stSearch").value = ""; runSearch(""); }
+    else if (e.key === "Enter") body.querySelector(".st-hit")?.click();
+    else if (e.key === "ArrowDown") { e.preventDefault(); body.querySelector(".st-hit")?.focus(); }
+  });
+  body.addEventListener("keydown", (e) => {
+    if (!searching || !e.target.matches(".st-hit")) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); e.target.nextElementSibling?.focus(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); (e.target.previousElementSibling || $("stSearch")).focus(); }
+  });
+
   function collect() {
+    if (searching) return; // the page shows search results, not this tab's fields
     const has = (id) => !!$(id);
     if (has("gTime")) {
       set.timeFormat = $("gTime").value; set.showSeconds = on("gSec"); set.fontSize = parseInt(val("gFs")) || 14;
-      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.hideNickModes = !on("gModes"); set.markerLine = on("gMarker");
+      set.fontFamily = val("gFont"); set.showJoinsParts = on("gJoins"); set.compactMode = on("gCompact"); set.nickBrackets = on("gBrackets"); set.hideNickModes = !on("gModes"); set.tabNoColon = !on("gTabColon"); set.markerLine = on("gMarker");
       set.logging = on("gLog"); set.historyLines = parseInt(val("gHist")) || 0;
       set.textLogs = on("gTxt"); set.logFolder = val("gFolder"); set.logMaxLines = Math.max(0, parseInt(val("gMax")) || 0); set.quitMessage = val("gQuit");
       set.startWithWindows = on("gAuto"); set.startMinimized = on("gMin"); set.confirmOnClose = on("gConfirm");

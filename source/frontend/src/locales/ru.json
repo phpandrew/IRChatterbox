@@ -846,5 +846,8 @@
 "Show nicks in angle brackets, like <nick>": "Показывать ники в угловых скобках, как <ник>",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "Показывать символы статуса перед никами (@ оператор, % полуоператор, + голос)",
 "Colour other people's nicks when they're named in a message": "Подсвечивать цветом ники других людей, когда их упоминают в сообщении",
-"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Любой участник канала, упомянутый в сообщении, показывается цветом своего ника, и по нему можно щёлкнуть как по нику."
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Любой участник канала, упомянутый в сообщении, показывается цветом своего ника, и по нему можно щёлкнуть как по нику.",
+"Search settings": "Поиск по настройкам",
+"No settings match": "Нет настроек, подходящих под",
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Ставить двоеточие после ника, дополненного по Tab в начале сообщения (Andrew: привет)"
 }

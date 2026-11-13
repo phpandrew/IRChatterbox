@@ -2547,7 +2547,7 @@ function tabComplete() {
     tabState.i = (tabState.i + 1) % tabState.matches.length;
   }
   const n = tabState.matches[tabState.i];
-  const suffix = tabState.atStart && !n.startsWith("#") ? ": " : " ";
+  const suffix = tabState.atStart && !n.startsWith("#") && !S.cfg.settings.tabNoColon ? ": " : " ";
   input.value = input.value.slice(0, tabState.start) + n + suffix + tabState.after;
   const caret = tabState.start + n.length + suffix.length;
   input.setSelectionRange(caret, caret);

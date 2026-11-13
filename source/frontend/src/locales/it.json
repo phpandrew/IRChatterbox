@@ -846,5 +846,8 @@
 "Show nicks in angle brackets, like <nick>": "Mostra i nick tra parentesi angolari, come <nick>",
 "Show status symbols before nicks (@ op, % half-op, + voice)": "Mostra i simboli di stato prima dei nick (@ op, % half-op, + voice)",
 "Colour other people's nicks when they're named in a message": "Colora i nick degli altri quando vengono nominati in un messaggio",
-"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Chiunque sia nel canale e venga nominato in un messaggio appare nel colore del suo nick e si può cliccare come un nick."
+"Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Chiunque sia nel canale e venga nominato in un messaggio appare nel colore del suo nick e si può cliccare come un nick.",
+"Search settings": "Cerca nelle impostazioni",
+"No settings match": "Nessuna impostazione corrisponde a",
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Aggiungi i due punti dopo un nick completato con Tab all'inizio del messaggio (Andrew: ciao)"
 }

@@ -990,3 +990,18 @@ img.up-thumb.gone { object-position: -9999px; }
 .up-hist-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 .up-hist-empty { padding: 6px 0; }
 @media (max-width: 560px) { .up-item { flex-wrap: wrap; } .up-acts { width: 100%; justify-content: flex-end; } }
+
+/* Settings search */
+.modal-head .st-search { width: 220px; margin-right: 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-input); color: var(--text); font: inherit; font-size: 13px; font-weight: 400; }
+.modal-head .st-search:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.st-results { display: flex; flex-direction: column; gap: 4px; }
+.st-hit { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elev); color: var(--text); cursor: pointer; font: inherit; }
+.st-hit:hover, .st-hit:focus { border-color: var(--accent); outline: none; }
+.st-where { font-size: 11.5px; color: var(--text-faint); text-transform: none; }
+.st-label { font-size: 14px; }
+.st-extra { font-size: 12.5px; color: var(--text-muted); }
+.st-hit mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.st-none { padding: 30px 10px; text-align: center; color: var(--text-muted); }
+.st-flash { animation: stFlash 1.6s ease-out; border-radius: 8px; }
+@keyframes stFlash { 0%, 40% { background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); } 100% { background: transparent; box-shadow: none; } }
+body.mobile .modal-head .st-search { width: 140px; }
