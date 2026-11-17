@@ -5,7 +5,10 @@ encodings, logging, plugins) and the same UI, laid out for a phone.
 
 ## Install
 
-Download `IRChatterbox.apk` from the [Releases](../../releases) page on your phone and open it.
+The easiest way is the open beta on Google Play: [join as a tester](https://play.google.com/apps/testing/io.github.phpandrew.irchatterbox), then install
+IRChatterbox from the Play Store. Google Play keeps it up to date for you.
+
+Or, without Google Play: download `IRChatterbox.apk` from the [Releases](../../releases) page on your phone and open it.
 Android asks once to allow installs from your browser. After that, the app tells you
 when there's a new version. **Download update** opens the new APK, and installing it keeps your
 servers and settings.

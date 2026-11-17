@@ -102,7 +102,7 @@ Get it from the [Releases](../../releases) page. Once it's installed, the app te
 | Windows 10/11 | `IRChatterbox.exe` |
 | macOS 11+ (Apple silicon and Intel) | `IRChatterbox-macos.zip` |
 | Linux (x86-64) | `IRChatterbox-…-linux-amd64.tar.gz` |
-| Android | `IRChatterbox.apk` |
+| Android | [Google Play beta](https://play.google.com/apps/testing/io.github.phpandrew.irchatterbox) or `IRChatterbox.apk` |
 
 ### Releases
 Every push to `main` that passes the build and security checks is released automatically as the next patch version (`v0.3.1`, `v0.3.2`, …). To start a new minor or major version, change `source/VERSION` (for example to `0.4.0`) and push. Pull requests and other branches are built too; the exe is on the Actions run page for 30 days. See [docs/BUILDING.md](../docs/BUILDING.md#versions) for details.
