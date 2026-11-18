@@ -3,7 +3,7 @@ name: Security
 # Scans IRChatterbox for security problems:
 #  - govulncheck : known vulnerabilities in Go modules (and the Go standard library) that the
 #                  app's code actually reaches
-#  - npm audit   : known vulnerabilities in the frontend's npm packages
+#  - npm audit   : known vulnerabilities in the frontend's shipped npm packages (build tools listed, not failing)
 #  - CodeQL      : bugs in our own code (injection, XSS, path traversal, …)
 #
 # Each scanner keeps one GitHub issue up to date (label "security"): opened when it finds
@@ -59,11 +59,19 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: 22 }
       - name: Scan
+        # Pass/fail is decided by the packages that ship in the app (dependencies). Build tools
+        # (devDependencies: Vite and what it pulls in) never reach users, so their findings are
+        # listed in the report but don't fail the run; Dependabot bumps them when a fix exists.
         run: |
           set +e
-          npm audit --package-lock-only > ../../npm-audit.txt 2>&1
+          npm audit --package-lock-only --omit=dev > ../../npm-audit.txt 2>&1
           code=$?
+          npm audit --package-lock-only > ../../npm-audit-all.txt 2>&1
+          all=$?
           set -e
+          if [ $all -ne 0 ] && [ $code -eq 0 ]; then
+            { echo; echo "Build tools only (not shipped, not failing the run):"; cat ../../npm-audit-all.txt; } >> ../../npm-audit.txt
+          fi
           cat ../../npm-audit.txt
           if [ $code -eq 0 ]; then echo clean; elif grep -q "vulnerabilit" ../../npm-audit.txt; then echo found; else echo error; fi > ../../npm-audit.status
       - uses: actions/upload-artifact@v7
