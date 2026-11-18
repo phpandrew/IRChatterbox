@@ -1,4 +1,4 @@
-// Phone layout: used by the Android app, and by any window narrower than PHONE_WIDTH.
+// Phone layout: used by the Android and iOS apps, and by any window narrower than PHONE_WIDTH.
 // The sidebar and user list become slide-in drawers, the back button closes whatever is
 // open, and the status/navigation bars follow the theme.
 import { on } from "./api.js";
@@ -7,7 +7,10 @@ const $ = (id) => document.getElementById(id);
 const PHONE_WIDTH = 760;
 const narrow = matchMedia(`(max-width: ${PHONE_WIDTH}px)`);
 
+// The iOS shell provides the same window.icbAndroid helpers (ios/IRChatterbox/bridge.js), so
+// "android" means "inside a phone app"; ios is set too there, for the few iOS differences.
 export const android = !!window.icbAndroid;
+export const ios = !!window.icbIOS;
 export const isMobile = () => document.body.classList.contains("mobile");
 
 let ctx = null; // functions from main.js
@@ -16,6 +19,7 @@ function setMode() {
   const m = android || narrow.matches;
   document.body.classList.toggle("mobile", m);
   document.body.classList.toggle("android", android);
+  document.body.classList.toggle("ios", ios);
   if (!m) closeDrawers();
 }
 

@@ -4,7 +4,7 @@ import wordmarkDark from "./assets/wordmark-dark.png";
 import githubIcon from "./assets/github.png";
 import { BUILTIN_SOUNDS, previewSound } from "./sounds.js";
 import { showUpdateBar } from "./main.js";
-import { android, isMobile } from "./mobile.js";
+import { android, ios, isMobile } from "./mobile.js";
 import { os } from "./platform.js";
 // the browser version at irchatterbox.com/chat (web/backend.js marks the page)
 const web = () => document.body.classList.contains("web");
@@ -666,11 +666,12 @@ export function openSettings(startTab) {
       <div class="win-only">${check("gTray", set.trayIcon !== false, "Show an icon in the system tray")}
       <div class="indent">${check("gCloseTray", set.closeToTray, "Closing the window hides it to the tray (quit from the tray menu)")}</div></div>`, "desktop-only") +
       card("Background", "What happens when you leave the app.", `
-      ${check("gKeep", set.keepAlive !== false, "Keep connection live in background")}
+      <div class="not-ios">${check("gKeep", set.keepAlive !== false, "Keep connection live in background")}
       <div class="hint indent">Stays connected while the app is closed, with a small “Connected” notification. Off: disconnects in the background, and your bouncer replays what you missed when you come back.</div>
       <div class="set-sep"></div>
       <div class="status-row"><span class="grow" id="gBatt"></span><button class="btn sm" id="gBattBtn">Allow</button></div>
-      <div class="hint" id="gBattHint">Android may cut the connection to save battery. Letting IRChatterbox run unrestricted keeps it reliable.</div>
+      <div class="hint" id="gBattHint">Android may cut the connection to save battery. Letting IRChatterbox run unrestricted keeps it reliable.</div></div>
+      <div class="hint ios-only" style="margin-bottom:10px">iOS pauses apps in the background, so IRChatterbox disconnects about 20 seconds after you leave it and reconnects when you come back. Connect through a bouncer and it replays what you missed.</div>
       <div class="status-row"><span class="grow" id="gNotif"></span><button class="btn sm" id="gNotifBtn">Settings</button></div>`, "android-only") +
       card("Away", android ? "Mark yourself away on every network when you put the app away." : "Mark yourself away on every network when you step away from your PC.", `
       ${check("gAway", set.autoAway, "Set me away automatically when I'm idle")}
@@ -1127,6 +1128,8 @@ export function openSettings(startTab) {
       </section>
       ${store === "play" ? card("Updates", "Updates are delivered by Google Play.", `
         <button class="btn sm" data-open="https://play.google.com/store/apps/details?id=io.github.phpandrew.irchatterbox">Open in Google Play</button>`) :
+      store === "appstore" ? card("Updates", "Updates are delivered by TestFlight or the App Store.", `
+        <div class="hint">Turn on automatic updates for IRChatterbox in the TestFlight or App Store app to get new versions as soon as they're out.</div>`) :
       card("Updates", "New versions are published on GitHub Releases.", `
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn sm" id="abCheck">Check for updates</button>

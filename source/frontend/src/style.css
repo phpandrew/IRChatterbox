@@ -563,6 +563,9 @@ input[type=range] { accent-color: var(--accent); }
 body.mobile .m-only { display: grid; }
 body.mobile .m-hide, body.android .desktop-only { display: none !important; }
 body:not(.android) .android-only { display: none !important; }
+/* iOS app (ios/): the phone layout plus a few differences */
+body.ios .not-ios, body:not(.ios) .ios-only { display: none !important; }
+body.ios a, body.ios img { -webkit-touch-callout: none; } /* long-press opens the app's own menus */
 body.mobile .resizer, body.mobile #nickHandle, body.mobile #statusbar, body.mobile .composer-hint,
 body.mobile .h-meta, body.mobile .jump kbd, body.mobile .buf .x { display: none !important; }
 body.mobile [draggable] { -webkit-user-drag: none; }

@@ -62,6 +62,10 @@ type jsMenu struct {
 // pluginEvents is the list of events scripts can listen for (documented in docs/PLUGINS.md).
 var pluginEvents = []string{"message", "action", "notice", "join", "part", "quit", "kick", "nick", "topic", "mode", "invite", "connect", "disconnect", "raw", "load"}
 
+// scriptsUnavailable is set on platforms where script plugins can't run (iOS, scripts_ios.go):
+// LoadScripts then loads nothing and says why.
+var scriptsUnavailable string
+
 func (p *Plugins) pluginDir() string { return filepath.Join(p.app.store.dir, "plugins") }
 
 func (p *Plugins) LoadScripts() string {
@@ -72,6 +76,10 @@ func (p *Plugins) LoadScripts() string {
 	p.mu.Unlock()
 	for _, s := range old {
 		s.stop()
+	}
+	if scriptsUnavailable != "" {
+		p.mirc.unload()
+		return scriptsUnavailable
 	}
 	if !p.app.store.Get().Plugins.ScriptsEnabled {
 		p.mirc.unload()

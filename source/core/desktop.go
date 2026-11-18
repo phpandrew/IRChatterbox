@@ -1,7 +1,7 @@
-//go:build !android
+//go:build !android && !ios
 
 // Desktop host: the Wails window, its lifecycle, native dialogs and the bridge to the UI.
-// The Android host lives in host_android.go.
+// The phone host (Android and iOS) lives in host_mobile.go.
 
 package core
 

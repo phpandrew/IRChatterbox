@@ -144,9 +144,10 @@ All paths are under `source/`.
 |---|---|
 | `VERSION` | The version number (see Versions above) |
 | `main.go` | Desktop entry point: embeds the UI and `VERSION`, starts `core.RunDesktop` |
-| `core/` | Everything shared by Windows and Android (package `core`) |
-| `core/desktop.go` | Window options, lifecycle, dialogs, startup flags (`--minimized`, `--wait-pid`) — not built for Android |
-| `core/host_android.go` | The Android host: events, notifications, background/keep-alive — Android only |
+| `core/` | Everything shared by Windows, Android and iOS (package `core`) |
+| `core/desktop.go` | Window options, lifecycle, dialogs, startup flags (`--minimized`, `--wait-pid`) — not built for Android or iOS |
+| `core/host_mobile.go` | The phone host shared by Android and iOS: events, notifications, background |
+| `core/host_android.go`, `core/host_ios.go` | What differs between them: updates and keep-alive |
 | `core/app.go` | Methods the UI calls, notifications, attention (tray/taskbar), auto-away |
 | `core/irc.go`, `core/ircmsg.go` | IRC connection: TLS, CAP/SASL, parsing, channel and user state, events |
 | `core/bouncer.go` | soju/ZNC: history replay, read markers |
@@ -160,15 +161,15 @@ All paths are under `source/`.
 | `core/platform_windows.go` | Tray icon, taskbar flash, idle time, toasts |
 | `core/window_windows.go`, `core/autostart_windows.go` | Restoring window position and size, starting with Windows |
 | `core/config.go` | `config.json`, themes |
-| `mobile/` | gomobile binding for the Android app (see `docs/ANDROID.md`) |
+| `mobile/` | gomobile binding for the Android and iOS apps (see `docs/ANDROID.md`, `docs/IOS.md`) |
 | `frontend/src/main.js` | UI: sidebar, chat, user list, input, drag to reorder |
 | `frontend/src/modals.js` | Settings, server editor, dialogs |
 | `frontend/src/format.js` | mIRC formatting and colours, links, inline media, nick colours |
 | `frontend/src/themes.js` | Built-in themes and theme handling |
 | `frontend/src/emoji.js`, `sounds.js` | Emoji picker, notification sounds |
-| `frontend/src/mobile.js` | Phone layout: drawers, back button, swipe gestures (Android and narrow windows) |
+| `frontend/src/mobile.js` | Phone layout: drawers, back button, swipe gestures (Android, iOS and narrow windows) |
 
-The Android shell lives in `android/` at the repo root; see [ANDROID.md](ANDROID.md).
+The Android shell lives in `android/` at the repo root; see [ANDROID.md](ANDROID.md). The iOS shell is in `ios/`; see [IOS.md](IOS.md).
 
 ## Where user data lives
 

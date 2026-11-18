@@ -1,0 +1,39 @@
+# XcodeGen spec for the iOS app. The Xcode project itself isn't committed: CI (and you, on a
+# Mac) generate it with `xcodegen generate` in this folder. See docs/IOS.md.
+name: IRChatterbox
+options:
+  bundleIdPrefix: io.github.phpandrew
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.0.0"        # CI sets the real one (numeric part of the release version)
+    CURRENT_PROJECT_VERSION: "1"      # CI sets the build number (the workflow run number)
+    ICB_FULL_VERSION: "dev"           # the full version shown in the app, e.g. 0.8.3-dev.4+abc123
+    DEVELOPMENT_TEAM: ""              # CI passes APPLE_TEAM_ID
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+targets:
+  IRChatterbox:
+    type: application
+    platform: iOS
+    scheme: {}                     # a shared scheme, so xcodebuild can archive it
+    sources:
+      - path: IRChatterbox
+      - path: build/web            # the shared frontend, copied in by build-core.sh
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: Frameworks/IrcCore.xcframework
+        embed: false               # a static framework: linked into the app, nothing to embed
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.phpandrew.irchatterbox
+        PRODUCT_NAME: IRChatterbox
+        INFOPLIST_FILE: IRChatterbox/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        ENABLE_BITCODE: NO
+        OTHER_LDFLAGS: ["-lresolv"]

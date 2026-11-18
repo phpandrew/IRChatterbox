@@ -1,9 +1,9 @@
-//go:build android
+//go:build android || ios
 
-// Package mobile is the Android entry point, built into an .aar with gomobile bind
-// (see android/build-core.sh).
+// Package mobile is the phone entry point, built with gomobile bind into an .aar for Android
+// (android/build-core.sh) and an .xcframework for iOS (ios/build-core.sh).
 //
-// The Android shell hosts the same frontend in a WebView. Calls the UI makes on
+// The phone shell hosts the same frontend in a WebView. Calls the UI makes on
 // window.go.core.App arrive here as Call(method, argsJSON), the same way Wails dispatches
 // them on Windows, and events go back out through Host.Emit.
 package mobile
@@ -20,7 +20,7 @@ import (
 	"irchatterbox/core"
 )
 
-// Host is implemented in Kotlin (CoreHost.kt).
+// Host is implemented in Kotlin (CoreHost.kt) and Swift (CoreHost.swift).
 type Host interface {
 	// Emit delivers a backend event (window.runtime.EventsOn) as JSON.
 	Emit(event, dataJSON string)
@@ -31,6 +31,7 @@ type Host interface {
 	// Connected reports how many servers are connected (keep-alive service on/off).
 	Connected(n int)
 	// InstallAPK hands a downloaded update to Android's installer. "" = the installer has it.
+	// Never called on iOS.
 	InstallAPK(path string) string
 }
 
@@ -56,7 +57,7 @@ func Start(dataDir, version string, host Host) {
 	app.StartAndroid(adapter{})
 }
 
-// SetStore marks the build as installed from an app store ("play"): the store handles
+// SetStore marks the build as installed from an app store ("play", "appstore"): the store handles
 // updates. Call it before Start.
 func SetStore(name string) { core.SetStore(name) }
 
