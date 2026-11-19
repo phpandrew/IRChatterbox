@@ -11,6 +11,14 @@
   if (!H || window.go) return;
   const send = (msg) => H.postMessage(JSON.stringify(msg));
 
+  // Page errors go to the Xcode console (the shell prints "log" messages), so a failure during
+  // startup shows up without opening Safari's Web Inspector.
+  const log = (text) => send({ t: "log", text: String(text) });
+  addEventListener("error", (e) => log(`JS error: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`));
+  addEventListener("unhandledrejection", (e) => log("unhandled promise: " + (e.reason?.stack || e.reason)));
+  const consoleError = console.error.bind(console);
+  console.error = (...a) => { log("console.error: " + a.map((x) => x?.stack || String(x)).join(" ")); consoleError(...a); };
+
   let seq = 0;
   const pending = new Map();
   const listeners = Object.create(null);
@@ -23,7 +31,12 @@
       return (...args) =>
         new Promise((resolve, reject) => {
           const id = ++seq;
-          pending.set(id, { resolve, reject });
+          // a call the core never answers stalls whatever awaits it; say so in the Xcode console
+          const slow = setTimeout(() => log(`core call ${name} still unanswered after 5s`), 5000);
+          pending.set(id, {
+            resolve: (v) => { clearTimeout(slow); resolve(v); },
+            reject: (e) => { clearTimeout(slow); log(`core call ${name} failed: ${e.message}`); reject(e); },
+          });
           send({ t: "call", id, m: name, a: JSON.stringify(args) });
         });
     },

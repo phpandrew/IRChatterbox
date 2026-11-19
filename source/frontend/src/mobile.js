@@ -108,6 +108,8 @@ export function initMobile(fns) {
   });
 
   setupSwipes();
+  if (ios) setupLongPress();
+  setupPlainInputs();
 
   // Android back button: close the top-most thing, or let the app go to the background
   window.__icbBack = () => {
@@ -133,6 +135,78 @@ export function initMobile(fns) {
     input.dispatchEvent(new Event("input"));
     input.focus();
   });
+}
+
+// iOS's WebView never turns a long-press into a contextmenu event (Android's does), so the
+// app's own menus — servers, channels, nicks, messages — would be unreachable. Hold a finger
+// still for HOLD ms and this sends one; if a menu took it, the lift doesn't also tap the row.
+function setupLongPress() {
+  const HOLD = 500, SLOP = 10;
+  let timer = null, sx = 0, sy = 0, held = false;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+
+  document.addEventListener("touchstart", (e) => {
+    cancel();
+    held = false;
+    if (e.touches.length !== 1 || e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const t = e.touches[0], target = e.target;
+    sx = t.clientX; sy = t.clientY;
+    timer = setTimeout(() => {
+      timer = null;
+      const ev = new MouseEvent("contextmenu", {
+        bubbles: true, cancelable: true, button: 2,
+        clientX: sx, clientY: sy, screenX: t.screenX, screenY: t.screenY,
+      });
+      target.dispatchEvent(ev);
+      if (ev.defaultPrevented) {
+        held = true;
+        window.getSelection()?.removeAllRanges();
+      }
+    }, HOLD);
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!timer) return;
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - sx) > SLOP || Math.abs(t.clientY - sy) > SLOP) cancel();
+  }, { passive: true });
+
+  // iOS still sends mousedown/mouseup/click for the lifting finger, and a mousedown outside the
+  // menu closes it; swallow those for a moment so the menu the hold opened stays up.
+  const swallow = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
+  const MOUSE = ["mousedown", "mouseup", "click"];
+  document.addEventListener("touchend", (e) => {
+    cancel();
+    if (!held) return;
+    held = false;
+    e.preventDefault();
+    MOUSE.forEach((t) => window.addEventListener(t, swallow, true));
+    setTimeout(() => MOUSE.forEach((t) => window.removeEventListener(t, swallow, true)), 400);
+  }, { passive: false });
+  document.addEventListener("touchcancel", () => { cancel(); held = false; }, { passive: true });
+  document.addEventListener("scroll", cancel, { passive: true, capture: true });
+}
+
+// Phone keyboards capitalize and autocorrect by default, which mangles network names, nicks,
+// hosts and channels. Turn that off for every field except the message box, including fields
+// that dialogs add later.
+function setupPlainInputs() {
+  const SEL = "input:not([type]), input[type=text], input[type=search], input[type=email], input[type=url], input[type=password], textarea";
+  const plain = (el) => {
+    if (el.id === "input" || el.hasAttribute("autocapitalize")) return;
+    el.setAttribute("autocapitalize", "off");
+    el.setAttribute("autocorrect", "off");
+  };
+  const scan = (root) => {
+    if (root.matches?.(SEL)) plain(root);
+    root.querySelectorAll?.(SEL).forEach(plain);
+  };
+  scan(document.body);
+  new MutationObserver((muts) => {
+    for (const m of muts)
+      for (const n of m.addedNodes)
+        if (n.nodeType === 1 && !n.closest("#chat")) scan(n);
+  }).observe(document.body, { childList: true, subtree: true });
 }
 
 // Drag the drawers: swipe in from the left edge to pull the channel list out, from the right

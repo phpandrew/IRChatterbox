@@ -101,6 +101,7 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let id = msg["id"] as? Int, let m = msg["m"] as? String else { return }
             Core.shared.call(id: id, method: m, args: msg["a"] as? String ?? "[]")
         case "ready":
+            NSLog("[page] startup finished")
             Core.shared.uiReady()
         case "openUrl":
             Core.shared.openURL(msg["url"] as? String)
@@ -118,6 +119,8 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
             openBackup()
         case "shareLogs":
             shareLogs()
+        case "log":
+            NSLog("[page] %@", msg["text"] as? String ?? "")
         default:
             break
         }
