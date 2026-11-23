@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "メッセージ内で名前が挙がったチャンネルの参加者はその人のニック色で表示され、ニックと同じようにクリックできます。",
 "Search settings": "設定を検索",
 "No settings match": "一致する設定がありません：",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "メッセージの先頭で Tab 補完したニックの後にコロンを付ける（Andrew: こんにちは）"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "メッセージの先頭で Tab 補完したニックの後にコロンを付ける（Andrew: こんにちは）",
+"IRChatterbox has been updated to {0}.": "IRChatterbox が {0} に更新されました。",
+"See what's new in this version.": "このバージョンの新機能をご覧ください。",
+"Release notes": "リリースノート",
+"Hide forever": "今後表示しない",
+"Release notes are off. Turn them back on in Settings → About.": "リリースノートはオフになりました。「設定 → 情報」で再びオンにできます。",
+"See what changed after IRChatterbox updates.": "IRChatterbox の更新後に変更点を確認します。",
+"Show what's new after an update": "更新後に新機能を表示する",
+"View release notes": "リリースノートを表示",
+"Hide release notes": "リリースノートを隠す",
+"Loading…": "読み込み中…",
+"Couldn't load the release notes": "リリースノートを読み込めませんでした",
+"This release has no notes.": "このリリースにはノートがありません。"
 }

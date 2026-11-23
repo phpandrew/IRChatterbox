@@ -4,7 +4,7 @@ import { applyTheme, resolveTheme, setCustomThemes, onSystemThemeChange, systemI
 import logoUrl from "./assets/logo.png";
 import { toggleEmojiPicker } from "./emoji.js";
 import { playSound } from "./sounds.js";
-import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog } from "./modals.js";
+import { openServerEditor, openSettings, openPrompt, openColorPicker, openQuitConfirm, openPasteConfirm, openReportDialog, openReleaseNotes } from "./modals.js";
 import { detectOS, os } from "./platform.js";
 import { setLanguage, t } from "./i18n.js";
 import { initMobile, isMobile, afterSelect, afterHeader, afterTree, afterTheme, android, closeDrawers } from "./mobile.js";
@@ -2279,7 +2279,8 @@ export function showUpdateBar(info) {
     <button class="btn sm" id="ubSkip">Skip this version</button>
     <button class="icon-btn" id="ubClose" title="Later">✕</button>`;
   bar.classList.remove("hidden");
-  $("ubNotes").onclick = () => Go.OpenURL(info.url);
+  // the notes come with the update check, so they open here; the release page if there are none
+  $("ubNotes").onclick = () => info.notes?.trim() ? openReleaseNotes({ version: info.latest, body: info.notes, url: info.url }) : Go.OpenURL(info.url);
   $("ubSkip").onclick = () => { Go.SkipUpdateVersion(info.latest); bar.classList.add("hidden"); };
   $("ubClose").onclick = () => bar.classList.add("hidden");
   delete bar.dataset.state;
@@ -2352,6 +2353,32 @@ function onTypingInput() {
   if (!v.trim() || v.startsWith("/")) { sendTypingState("done"); return; }
   sendTypingState("active");
   typingIdle = setTimeout(() => sendTypingState("paused"), 5000);
+}
+
+// ---------- release notes after an update ----------
+// Once per version: "IRChatterbox has been updated" with the notes from its GitHub release.
+// Hide puts it away for this version; Hide forever turns it off (Settings → About turns it back on).
+async function maybeShowReleaseNotes() {
+  if (document.body.classList.contains("web") || S.cfg?.settings?.hideReleaseNotes) return;
+  const ver = await Go.GetVersion();
+  if (!ver || !/^\d+(\.\d+){0,3}$/.test(ver) || S.cfg.settings.releaseNotesSeen === ver) return; // dev builds have no notes
+  const rn = await Go.GetReleaseNotes(ver);
+  if (!rn || rn.error || rn.version !== ver || !rn.body?.trim()) return;
+  const bar = $("notesBar");
+  bar.innerHTML = `<span class="ub-text"><b>IRChatterbox has been updated to ${esc(ver)}.</b> See what's new in this version.</span>
+    <button class="btn sm primary" id="rnbOpen">Release notes</button>
+    <button class="btn sm" id="rnbHide">Hide</button>
+    <button class="btn sm" id="rnbForever">Hide forever</button>`;
+  bar.classList.remove("hidden");
+  const dismiss = (forever) => {
+    Go.DismissReleaseNotes(ver, forever);
+    S.cfg.settings.releaseNotesSeen = ver; // Settings saves the whole object, so keep it current
+    if (forever) S.cfg.settings.hideReleaseNotes = true;
+    bar.classList.add("hidden");
+  };
+  $("rnbOpen").onclick = () => { dismiss(false); openReleaseNotes(rn); };
+  $("rnbHide").onclick = () => dismiss(false);
+  $("rnbForever").onclick = () => { dismiss(true); toast("Release notes are off. Turn them back on in Settings → About."); };
 }
 
 // ---------- "closed unexpectedly" notice ----------
@@ -3199,6 +3226,7 @@ async function boot() {
 
   Go.SetFocus(document.hasFocus());
   showCrashNotice();
+  setTimeout(() => maybeShowReleaseNotes().catch(() => {}), 2500);
   await Go.AutoConnect();
 
   // First run only: open the server editor when there's nothing to connect to yet.

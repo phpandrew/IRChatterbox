@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Tout membre du salon cité dans un message apparaît dans sa couleur de pseudo et se clique comme un pseudo.",
 "Search settings": "Rechercher dans les paramètres",
 "No settings match": "Aucun paramètre ne correspond à",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Ajouter deux-points après un pseudo complété avec Tab en début de message (Andrew: salut)"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Ajouter deux-points après un pseudo complété avec Tab en début de message (Andrew: salut)",
+"IRChatterbox has been updated to {0}.": "IRChatterbox a été mis à jour vers la version {0}.",
+"See what's new in this version.": "Découvrez les nouveautés de cette version.",
+"Release notes": "Notes de version",
+"Hide forever": "Masquer définitivement",
+"Release notes are off. Turn them back on in Settings → About.": "Les notes de version sont désactivées. Réactivez-les dans Paramètres → À propos.",
+"See what changed after IRChatterbox updates.": "Voir ce qui a changé après une mise à jour d'IRChatterbox.",
+"Show what's new after an update": "Afficher les nouveautés après une mise à jour",
+"View release notes": "Voir les notes de version",
+"Hide release notes": "Masquer les notes de version",
+"Loading…": "Chargement…",
+"Couldn't load the release notes": "Impossible de charger les notes de version",
+"This release has no notes.": "Cette version n'a pas de notes."
 }

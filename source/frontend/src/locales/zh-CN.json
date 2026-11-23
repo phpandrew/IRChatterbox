@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "消息中提到的频道成员会以其昵称颜色显示，并且可以像昵称一样点击。",
 "Search settings": "搜索设置",
 "No settings match": "没有匹配的设置：",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "在消息开头用 Tab 补全昵称时，在昵称后加冒号（Andrew: 你好）"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "在消息开头用 Tab 补全昵称时，在昵称后加冒号（Andrew: 你好）",
+"IRChatterbox has been updated to {0}.": "IRChatterbox 已更新到 {0}。",
+"See what's new in this version.": "查看此版本的新功能。",
+"Release notes": "发行说明",
+"Hide forever": "永久隐藏",
+"Release notes are off. Turn them back on in Settings → About.": "已关闭发行说明。可在“设置 → 关于”中重新开启。",
+"See what changed after IRChatterbox updates.": "查看 IRChatterbox 更新后的变化。",
+"Show what's new after an update": "更新后显示新功能",
+"View release notes": "查看发行说明",
+"Hide release notes": "隐藏发行说明",
+"Loading…": "正在加载…",
+"Couldn't load the release notes": "无法加载发行说明",
+"This release has no notes.": "此版本没有说明。"
 }

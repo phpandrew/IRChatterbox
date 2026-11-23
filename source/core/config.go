@@ -162,6 +162,10 @@ type Settings struct {
 	// updates
 	AutoUpdateCheck bool   `json:"autoUpdateCheck"`
 	SkippedVersion  string `json:"skippedVersion"`
+	// release notes after an update: the version whose notes were last shown or put away, and
+	// "Hide forever" (Settings → About turns them back on)
+	ReleaseNotesSeen string `json:"releaseNotesSeen,omitempty"`
+	HideReleaseNotes bool   `json:"hideReleaseNotes,omitempty"`
 
 	// tray & attention
 	TrayIcon    bool `json:"trayIcon"`

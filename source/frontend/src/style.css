@@ -423,14 +423,16 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .buf.drop-after, .srv.drop-after { box-shadow: 0 2px 0 var(--accent); }
 
 /* ---------- update banner ---------- */
-#updateBar, #noticeBar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-bottom: 1px solid var(--border); font-size: 13px; }
-#updateBar .ub-text, #noticeBar .ub-text { flex: 1; }
+#updateBar, #noticeBar, #notesBar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); border-bottom: 1px solid var(--border); font-size: 13px; }
+#updateBar .ub-text, #noticeBar .ub-text, #notesBar .ub-text { flex: 1; }
 #updateBar .ub-progress { width: 160px; height: 6px; border-radius: 3px; background: var(--bg-input); overflow: hidden; }
 #updateBar .ub-progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
 #updateBar button:disabled { opacity: .5; cursor: default; }
 /* phone: message on its own line, buttons below it, ✕ in the top corner */
 body.mobile #updateBar { flex-wrap: wrap; position: relative; padding: 10px 44px 10px 12px; gap: 8px; }
 body.mobile #updateBar .ub-text { flex-basis: 100%; }
+body.mobile #notesBar { flex-wrap: wrap; padding: 10px 12px; }
+body.mobile #notesBar .ub-text { flex-basis: 100%; }
 body.mobile #updateBar .ub-progress { flex-basis: 100%; width: auto; }
 body.mobile #updateBar #ubClose { position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; }
 
@@ -1008,3 +1010,22 @@ img.up-thumb.gone { object-position: -9999px; }
 .st-flash { animation: stFlash 1.6s ease-out; border-radius: 8px; }
 @keyframes stFlash { 0%, 40% { background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); } 100% { background: transparent; box-shadow: none; } }
 body.mobile .modal-head .st-search { width: 140px; }
+
+/* release notes (GitHub markdown) */
+.modal.rn { width: min(640px, 94vw); }
+.rn-title { font-size: 13px; color: var(--text-muted); margin: 2px 0 8px; }
+.rn-body { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.rn-body h3, .rn-body h4, .rn-body h5, .rn-body h6 { margin: 14px 0 6px; font-size: 14px; }
+.rn-body h3 { font-size: 15px; }
+.rn-body > :first-child { margin-top: 0; }
+.rn-body p { margin: 6px 0; }
+.rn-body ul, .rn-body ol { margin: 6px 0; padding-left: 22px; }
+.rn-body li { margin: 3px 0; }
+.rn-body code { background: var(--bg-input); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+.rn-body pre { background: var(--bg-input); padding: 8px 10px; border-radius: 6px; overflow-x: auto; }
+.rn-body pre code { background: none; padding: 0; }
+.rn-body blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--border); color: var(--text-muted); }
+.rn-body hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+.rn-body a, .rn-gh { color: var(--accent); }
+.rn-inline { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); max-height: 360px; overflow-y: auto; user-select: text; }
+.rn-gh { display: inline-block; margin-top: 8px; font-size: 13px; }

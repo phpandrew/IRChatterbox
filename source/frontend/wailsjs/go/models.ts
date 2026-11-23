@@ -307,6 +307,10 @@ export namespace core {
 	    logMaxLines: number;
 	    showUserList: boolean;
 	    compactMode: boolean;
+	    nickBrackets?: boolean;
+	    hideNickModes?: boolean;
+	    colorMentions?: boolean;
+	    tabNoColon?: boolean;
 	    chatLayout: string;
 	    quitMessage: string;
 	    startWithWindows: boolean;
@@ -319,6 +323,8 @@ export namespace core {
 	    filterWords: string[];
 	    autoUpdateCheck: boolean;
 	    skippedVersion: string;
+	    releaseNotesSeen?: string;
+	    hideReleaseNotes?: boolean;
 	    trayIcon: boolean;
 	    flashOnPing: boolean;
 	    closeToTray: boolean;
@@ -373,6 +379,10 @@ export namespace core {
 	        this.logMaxLines = source["logMaxLines"];
 	        this.showUserList = source["showUserList"];
 	        this.compactMode = source["compactMode"];
+	        this.nickBrackets = source["nickBrackets"];
+	        this.hideNickModes = source["hideNickModes"];
+	        this.colorMentions = source["colorMentions"];
+	        this.tabNoColon = source["tabNoColon"];
 	        this.chatLayout = source["chatLayout"];
 	        this.quitMessage = source["quitMessage"];
 	        this.startWithWindows = source["startWithWindows"];
@@ -385,6 +395,8 @@ export namespace core {
 	        this.filterWords = source["filterWords"];
 	        this.autoUpdateCheck = source["autoUpdateCheck"];
 	        this.skippedVersion = source["skippedVersion"];
+	        this.releaseNotesSeen = source["releaseNotesSeen"];
+	        this.hideReleaseNotes = source["hideReleaseNotes"];
 	        this.trayIcon = source["trayIcon"];
 	        this.flashOnPing = source["flashOnPing"];
 	        this.closeToTray = source["closeToTray"];
@@ -800,6 +812,30 @@ export namespace core {
 	    }
 	}
 	
+	export class ReleaseNotes {
+	    version: string;
+	    name: string;
+	    body: string;
+	    url: string;
+	    published: string;
+	    current: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReleaseNotes(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.name = source["name"];
+	        this.body = source["body"];
+	        this.url = source["url"];
+	        this.published = source["published"];
+	        this.current = source["current"];
+	        this.error = source["error"];
+	    }
+	}
 	export class ReportInput {
 	    server: string;
 	    buffer: string;

@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Любой участник канала, упомянутый в сообщении, показывается цветом своего ника, и по нему можно щёлкнуть как по нику.",
 "Search settings": "Поиск по настройкам",
 "No settings match": "Нет настроек, подходящих под",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Ставить двоеточие после ника, дополненного по Tab в начале сообщения (Andrew: привет)"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Ставить двоеточие после ника, дополненного по Tab в начале сообщения (Andrew: привет)",
+"IRChatterbox has been updated to {0}.": "IRChatterbox обновлён до версии {0}.",
+"See what's new in this version.": "Узнайте, что нового в этой версии.",
+"Release notes": "Примечания к выпуску",
+"Hide forever": "Больше не показывать",
+"Release notes are off. Turn them back on in Settings → About.": "Примечания к выпуску отключены. Включить их снова можно в «Настройки → О программе».",
+"See what changed after IRChatterbox updates.": "Что изменилось после обновления IRChatterbox.",
+"Show what's new after an update": "Показывать, что нового, после обновления",
+"View release notes": "Показать примечания к выпуску",
+"Hide release notes": "Скрыть примечания к выпуску",
+"Loading…": "Загрузка…",
+"Couldn't load the release notes": "Не удалось загрузить примечания к выпуску",
+"This release has no notes.": "У этого выпуска нет примечаний."
 }

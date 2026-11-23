@@ -12,6 +12,7 @@ const web = () => document.body.classList.contains("web");
 const REPO = "https://github.com/phpandrew/IRChatterbox";
 import { S, closeOverlay, applySettings, reloadConfig, toast } from "./main.js";
 import { esc, nickColor, iconLetters, safeColor } from "./format.js";
+import { notesToHtml } from "./notesmd.js";
 import { LANGUAGES, setLanguage, t } from "./i18n.js";
 import { THEME_VARS, BUILTIN, allThemes, applyTheme, getTheme, resolveTheme, setCustomThemes, themeOptions, onSystemThemeChange } from "./themes.js";
 
@@ -139,6 +140,26 @@ async function openBackupImport() {
   $("biOk").onclick = go;
   $("biPass")?.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
   ($("biPass") || $("biOk")).focus();
+}
+
+// ---------- release notes ----------
+// rn: { version, name, body, url }. onClose runs after the dialog is closed (back to Settings).
+const rnTitle = (rn) => rn.name && rn.name.replace(/^v/, "") !== rn.version ? rn.name : `IRChatterbox ${rn.version}`;
+const releaseNotesHtml = (rn) => `<div class="rn-title no-i18n">${esc(rnTitle(rn))}${rn.published ? ` · ${esc(new Date(rn.published).toLocaleDateString())}` : ""}</div>
+  <div class="rn-body no-i18n">${rn.body?.trim() ? notesToHtml(rn.body) : ""}</div>${rn.body?.trim() ? "" : `<p class="muted">This release has no notes.</p>`}`;
+export function openReleaseNotes(rn, onClose) {
+  open(`<div class="modal-head">What's new</div>
+    <div class="modal-body">${releaseNotesHtml(rn)}</div>
+    <div class="modal-foot">${rn.url ? `<button class="btn left" id="rnGh">View on GitHub</button>` : ""}<button class="btn primary" id="rnOk">Close</button></div>`, "rn");
+  const done = () => { closeOverlay(); onClose?.(); };
+  $("rnOk").onclick = done;
+  if ($("rnGh")) $("rnGh").onclick = () => Go.OpenURL(rn.url);
+  $("overlay").onclick = (e) => {
+    const a = e.target.closest(".rn-body a[data-url]");
+    if (a) { e.preventDefault(); Go.OpenURL(a.dataset.url); return; }
+    if (e.target === $("overlay")) done();
+  };
+  $("rnOk").focus();
 }
 
 // ---------- simple prompt ----------
@@ -1136,6 +1157,10 @@ export function openSettings(startTab) {
           <span id="abStatus" class="muted" style="font-size:12.5px"></span>
         </div>
         <div style="margin-top:10px">${check("abAuto", set.autoUpdateCheck !== false, "Check for updates automatically")}</div>`, "not-web")}
+      ${card("Release notes", "See what changed after IRChatterbox updates.", `
+        ${check("abNotes", !set.hideReleaseNotes, "Show what's new after an update")}
+        <div style="margin-top:10px"><button class="btn sm" id="abNotesView">View release notes</button></div>
+        <div id="abNotesBox" class="rn-inline hidden"></div>`, "not-web")}
       ${web() ? card("Back up settings", "Keep a copy of your settings, or bring them over from IRChatterbox on your computer or phone.", `
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn sm" id="abExport">Export settings…</button>
@@ -1167,6 +1192,19 @@ export function openSettings(startTab) {
     $("abExport").onclick = openBackupExport;
     $("abImport").onclick = openBackupImport;
     $("abReport").onclick = () => Go.ReportProblem();
+    if ($("abNotesView")) $("abNotesView").onclick = async () => {
+      // shown inside the card, so Settings (and any unsaved changes) stay open
+      const b = $("abNotesView"), box = $("abNotesBox");
+      if (!box.classList.contains("hidden")) { box.classList.add("hidden"); b.textContent = "View release notes"; return; }
+      b.disabled = true; b.textContent = "Loading…";
+      const rn = await Go.GetReleaseNotes("");
+      b.disabled = false;
+      if (!rn || rn.error) { b.textContent = "View release notes"; toast(rn?.error || "Couldn't load the release notes", "error"); return; }
+      b.textContent = "Hide release notes";
+      box.innerHTML = releaseNotesHtml(rn) + (rn.url ? `<a href="${esc(rn.url)}" data-url="${esc(rn.url)}" class="rn-gh">View on GitHub</a>` : "");
+      box.classList.remove("hidden");
+      box.onclick = (e) => { const a = e.target.closest("a[data-url]"); if (a) { e.preventDefault(); Go.OpenURL(a.dataset.url); } };
+    };
     if ($("abCheck")) $("abCheck").onclick = async () => {
       const st = $("abStatus");
       st.className = "muted"; st.textContent = "Checking…";
@@ -1410,6 +1448,7 @@ export function openSettings(startTab) {
       set.notifyList = lines("hFriends"); set.notifyFriends = on("hFriendsNotify");
     }
     if (has("abAuto")) set.autoUpdateCheck = on("abAuto");
+    if (has("abNotes")) set.hideReleaseNotes = !on("abNotes");
     if (has("mImg")) { set.inlineImages = on("mImg"); set.inlineYouTube = on("mYt"); set.inlineVideos = on("mVid"); set.linkPreviews = on("mLinks"); }
     if (has("dFolder")) { set.dccFolder = val("dFolder"); set.dccAddress = val("dAddr"); set.dccPorts = val("dPorts"); }
     if (has("uHost")) { set.uploadHost = $("uHost").value; set.imgurClientId = val("uImgur"); set.catboxUserHash = val("uCatbox"); set.uploadURL = val("uURL"); }

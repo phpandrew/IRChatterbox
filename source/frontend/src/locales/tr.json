@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Bir iletide adı geçen kanal üyeleri kendi takma ad renginde görünür ve takma ad gibi tıklanabilir.",
 "Search settings": "Ayarlarda ara",
 "No settings match": "Eşleşen ayar yok:",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "İletinin başında Tab ile tamamlanan takma addan sonra iki nokta koy (Andrew: selam)"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "İletinin başında Tab ile tamamlanan takma addan sonra iki nokta koy (Andrew: selam)",
+"IRChatterbox has been updated to {0}.": "IRChatterbox {0} sürümüne güncellendi.",
+"See what's new in this version.": "Bu sürümdeki yenilikleri görün.",
+"Release notes": "Sürüm notları",
+"Hide forever": "Bir daha gösterme",
+"Release notes are off. Turn them back on in Settings → About.": "Sürüm notları kapatıldı. Ayarlar → Hakkında bölümünden yeniden açabilirsiniz.",
+"See what changed after IRChatterbox updates.": "IRChatterbox güncellendikten sonra nelerin değiştiğini görün.",
+"Show what's new after an update": "Güncellemeden sonra yenilikleri göster",
+"View release notes": "Sürüm notlarını görüntüle",
+"Hide release notes": "Sürüm notlarını gizle",
+"Loading…": "Yükleniyor…",
+"Couldn't load the release notes": "Sürüm notları yüklenemedi",
+"This release has no notes.": "Bu sürümün notu yok."
 }

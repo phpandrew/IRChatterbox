@@ -41,6 +41,7 @@ type ghRelease struct {
 	HTMLURL    string `json:"html_url"`
 	Draft      bool   `json:"draft"`
 	Prerelease bool   `json:"prerelease"`
+	Published  string `json:"published_at"`
 	Assets     []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`

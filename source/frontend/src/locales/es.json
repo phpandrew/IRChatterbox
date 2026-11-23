@@ -849,5 +849,17 @@
 "Any channel member named in a message shows in their nick colour and can be clicked like a nick.": "Cualquier miembro del canal nombrado en un mensaje aparece con el color de su nick y se puede pulsar como un nick.",
 "Search settings": "Buscar en los ajustes",
 "No settings match": "Ningún ajuste coincide con",
-"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Añadir dos puntos tras un nick completado con Tab al principio de un mensaje (Andrew: hola)"
+"Add a colon after a nick completed with Tab at the start of a message (Andrew: hi)": "Añadir dos puntos tras un nick completado con Tab al principio de un mensaje (Andrew: hola)",
+"IRChatterbox has been updated to {0}.": "IRChatterbox se ha actualizado a la versión {0}.",
+"See what's new in this version.": "Descubre las novedades de esta versión.",
+"Release notes": "Notas de la versión",
+"Hide forever": "Ocultar para siempre",
+"Release notes are off. Turn them back on in Settings → About.": "Las notas de la versión están desactivadas. Vuelve a activarlas en Ajustes → Acerca de.",
+"See what changed after IRChatterbox updates.": "Mira qué ha cambiado después de actualizar IRChatterbox.",
+"Show what's new after an update": "Mostrar las novedades después de una actualización",
+"View release notes": "Ver las notas de la versión",
+"Hide release notes": "Ocultar las notas de la versión",
+"Loading…": "Cargando…",
+"Couldn't load the release notes": "No se pudieron cargar las notas de la versión",
+"This release has no notes.": "Esta versión no tiene notas."
 }

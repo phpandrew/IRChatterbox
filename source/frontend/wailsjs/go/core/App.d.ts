@@ -34,9 +34,13 @@ export function DeleteUpload(arg1:string):Promise<string>;
 
 export function DescribeClientCert(arg1:string,arg2:string):Promise<core.ClientCert>;
 
+export function DiagnosticsDir():Promise<string>;
+
 export function Disconnect(arg1:string):Promise<void>;
 
 export function DismissCrash():Promise<void>;
+
+export function DismissReleaseNotes(arg1:string,arg2:boolean):Promise<void>;
 
 export function EncryptionPublicKeys(arg1:string):Promise<Array<string>>;
 
@@ -68,6 +72,8 @@ export function GetLinkPreview(arg1:string):Promise<core.LinkPreview>;
 
 export function GetPlatform():Promise<string>;
 
+export function GetReleaseNotes(arg1:string):Promise<core.ReleaseNotes>;
+
 export function GetSoundData(arg1:string):Promise<string>;
 
 export function GetState():Promise<Array<core.ServerState>>;
@@ -77,6 +83,8 @@ export function GetStore():Promise<string>;
 export function GetSyncStatus():Promise<core.SyncStatus>;
 
 export function GetThemes():Promise<Array<core.Theme>>;
+
+export function GetThumbnail(arg1:string):Promise<string>;
 
 export function GetUIState():Promise<string>;
 
@@ -89,6 +97,8 @@ export function HistoryAround(arg1:string,arg2:string,arg3:number,arg4:number):P
 export function ImportClientCert():Promise<core.ClientCert>;
 
 export function ImportSettings(arg1:string,arg2:string):Promise<string>;
+
+export function InitLogs():Promise<void>;
 
 export function InspectSettings(arg1:string):Promise<core.BackupInfo>;
 
@@ -167,6 +177,8 @@ export function SendReply(arg1:string,arg2:string,arg3:string,arg4:string):Promi
 export function SendReport(arg1:core.ReportInput):Promise<string>;
 
 export function SendTyping(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function SessionStart():Promise<number>;
 
 export function SetActive(arg1:string,arg2:string):Promise<void>;
 

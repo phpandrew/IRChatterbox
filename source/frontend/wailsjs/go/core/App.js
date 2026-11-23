@@ -66,12 +66,20 @@ export function DescribeClientCert(arg1, arg2) {
   return window['go']['core']['App']['DescribeClientCert'](arg1, arg2);
 }
 
+export function DiagnosticsDir() {
+  return window['go']['core']['App']['DiagnosticsDir']();
+}
+
 export function Disconnect(arg1) {
   return window['go']['core']['App']['Disconnect'](arg1);
 }
 
 export function DismissCrash() {
   return window['go']['core']['App']['DismissCrash']();
+}
+
+export function DismissReleaseNotes(arg1, arg2) {
+  return window['go']['core']['App']['DismissReleaseNotes'](arg1, arg2);
 }
 
 export function EncryptionPublicKeys(arg1) {
@@ -134,6 +142,10 @@ export function GetPlatform() {
   return window['go']['core']['App']['GetPlatform']();
 }
 
+export function GetReleaseNotes(arg1) {
+  return window['go']['core']['App']['GetReleaseNotes'](arg1);
+}
+
 export function GetSoundData(arg1) {
   return window['go']['core']['App']['GetSoundData'](arg1);
 }
@@ -152,6 +164,10 @@ export function GetSyncStatus() {
 
 export function GetThemes() {
   return window['go']['core']['App']['GetThemes']();
+}
+
+export function GetThumbnail(arg1) {
+  return window['go']['core']['App']['GetThumbnail'](arg1);
 }
 
 export function GetUIState() {
@@ -176,6 +192,10 @@ export function ImportClientCert() {
 
 export function ImportSettings(arg1, arg2) {
   return window['go']['core']['App']['ImportSettings'](arg1, arg2);
+}
+
+export function InitLogs() {
+  return window['go']['core']['App']['InitLogs']();
 }
 
 export function InspectSettings(arg1) {
@@ -332,6 +352,10 @@ export function SendReport(arg1) {
 
 export function SendTyping(arg1, arg2, arg3) {
   return window['go']['core']['App']['SendTyping'](arg1, arg2, arg3);
+}
+
+export function SessionStart() {
+  return window['go']['core']['App']['SessionStart']();
 }
 
 export function SetActive(arg1, arg2) {
