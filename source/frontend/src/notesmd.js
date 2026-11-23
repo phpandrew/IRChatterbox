@@ -36,8 +36,16 @@ function inline(raw) {
   return s;
 }
 
+// GitHub's generated notes carry an HTML comment. Removing one can leave another behind
+// ("<!<!---->--"), so repeat until none is left. (Everything is escaped later regardless.)
+function stripComments(s) {
+  let prev;
+  do { prev = s; s = s.replace(/<!--[\s\S]*?-->/g, ""); } while (s !== prev);
+  return s;
+}
+
 export function notesToHtml(md) {
-  const lines = String(md || "").replace(/\r\n?/g, "\n").replace(/<!--[\s\S]*?-->/g, "").split("\n");
+  const lines = stripComments(String(md || "").replace(/\r\n?/g, "\n")).split("\n");
   const out = [];
   let para = [];
   let lists = []; // open list tags, innermost last: { tag, indent }
